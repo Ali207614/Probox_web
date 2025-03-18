@@ -36,18 +36,30 @@ class b1HANA {
         if (user.length > 1) {
             return next(ApiError.BadRequest('Найдено несколько пользователей с указанными учетными данными. Проверьте введенные данные.'));
         }
-        const token = tokenService.generateJwt(user[0])
+
+        const token = tokenService.generateJwt(user[0]);
+
+        // Cookie'ga token joylash
+        res.cookie('token', token, {
+            httpOnly: true,  // JavaScript orqali ko‘rinmaydi
+            secure: process.env.NODE_ENV === 'production', // faqat HTTPSda ishlaydi
+            sameSite: 'strict', // CSRF hujumlarga qarshi
+            maxAge: 24 * 60 * 60 * 1000 // 1 kun
+        });
+
         return res.status(201).json({
-            token, data: {
-                SlpCode: get(user, '[0].SlpCode'),
-                SlpName: get(user, '[0].SlpName'),
-                U_role: get(user, '[0].U_role')
+            message: 'Login successful',
+            data: {
+                SlpCode: user[0].SlpCode,
+                SlpName: user[0].SlpName,
+                U_role: user[0].U_role
             }
-        })
+        });
     };
 
+
     invoice = async (req, res, next) => {
-        let { startDate, endDate, page = 1, limit = 20, slpCode, paymentStatus } = req.query
+        let { startDate, endDate, page = 1, limit = 20, slpCode, paymentStatus, cardCode, serial, phone } = req.query
 
         page = parseInt(page, 10);
         limit = parseInt(limit, 10);
@@ -65,6 +77,10 @@ class b1HANA {
 
             filter.slpCode = slpCode;
 
+            if (cardCode) {
+                filter.CardCode = cardCode
+            }
+
             if (paymentStatus) {
                 if (paymentStatus === "paid") {
                     filter.$expr = { $eq: ["$InsTotal", "$PaidToDate"] };
@@ -80,6 +96,19 @@ class b1HANA {
                 }
             }
 
+
+            if (phone) {
+                if (!filter.$or) filter.$or = [];
+                filter.$or.push(
+                    { Phone1: { $regex: phone, $options: 'i' } },
+                    { Phone2: { $regex: phone, $options: 'i' } }
+                );
+            }
+
+            if (serial) {
+                filter.IntrSerial = { $regex: serial, $options: 'i' };
+            }
+
             const invoices = await InvoiceModel.find(filter)
                 .skip(skip)
                 .limit(limit)
@@ -87,13 +116,14 @@ class b1HANA {
 
             const total = await InvoiceModel.countDocuments(filter);
 
-            res.json({
+            return res.status(200).json({
                 total,
                 page,
                 limit,
                 totalPages: Math.ceil(total / limit),
                 data: invoices
             });
+
         }
         const now = new Date();
         const year = now.getFullYear();
@@ -107,10 +137,9 @@ class b1HANA {
             endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
         }
 
-        const query = await DataRepositories.getInvoice({ startDate, endDate, limit, offset: skip, paymentStatus });
+        const query = await DataRepositories.getInvoice({ startDate, endDate, limit, offset: skip, paymentStatus, cardCode, serial, phone });
         let invoices = await this.execute(query);
         let total = get(invoices, '[0].Count', 0) || 0
-
 
         return res.status(200).json({
             total,
@@ -120,6 +149,9 @@ class b1HANA {
             data: invoices
         });
     };
+
+
+
 }
 
 module.exports = new b1HANA();
