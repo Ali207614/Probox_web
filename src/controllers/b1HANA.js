@@ -57,7 +57,6 @@ class b1HANA {
         });
     };
 
-
     invoice = async (req, res, next) => {
         let { startDate, endDate, page = 1, limit = 20, slpCode, paymentStatus, cardCode, serial, phone } = req.query
 
@@ -150,6 +149,114 @@ class b1HANA {
         });
     };
 
+    search = async (req, res, next) => {
+        let { startDate, endDate, page = 1, limit = 50, slpCode, paymentStatus, search, phone } = req.query
+
+        page = parseInt(page, 10);
+        limit = parseInt(limit, 10);
+
+        const skip = (page - 1) * limit;
+
+        if (Number(slpCode)) {
+            const filter = {};
+
+            if (startDate || endDate) {
+                filter.DocDate = {};
+                if (startDate) filter.DocDate.$gte = new Date(startDate);
+                if (endDate) filter.DocDate.$lte = new Date(endDate);
+            }
+
+            filter.slpCode = slpCode;
+
+            if (paymentStatus) {
+                if (paymentStatus === "paid") {
+                    filter.$expr = { $eq: ["$InsTotal", "$PaidToDate"] };
+                } else if (paymentStatus === "unpaid") {
+                    filter.$expr = { $eq: ["$PaidToDate", 0] };
+                } else if (paymentStatus === "partial") {
+                    filter.$expr = {
+                        $and: [
+                            { $gt: ["$PaidToDate", 0] },
+                            { $lt: ["$PaidToDate", "$InsTotal"] }
+                        ]
+                    };
+                }
+            }
+
+            if (search) {
+                if (!filter.$or) filter.$or = [];
+                filter.$or.push(
+                    { IntrSerial: { $regex: search, $options: 'i' } },
+                    { CardName: { $regex: search, $options: 'i' } }
+                );
+            }
+
+            if (phone) {
+                if (!filter.$or) filter.$or = [];
+                filter.$or.push(
+                    { Phone1: { $regex: search, $options: 'i' } },
+                    { Phone2: { $regex: search, $options: 'i' } }
+                );
+            }
+
+
+            const invoices = await InvoiceModel.find(filter)
+                .skip(skip)
+                .limit(limit)
+                .sort({ DocDate: -1 });
+
+            const total = await InvoiceModel.countDocuments(filter);
+
+            return res.status(200).json({
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+                data: invoices.map(el => ({ CardCode: el.CardCode, CardName: el.CardName, Phone1: el.Phone1, Phone2: el.Phone2, IntrSerial: el.IntrSerial }))
+            });
+
+        }
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+
+        if (!startDate) {
+            startDate = new Date(year, month, 1).toISOString().split('T')[0];
+        }
+
+        if (!endDate) {
+            endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
+        }
+
+        const query = await DataRepositories.getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset: skip, paymentStatus, search, phone });
+        let invoices = await this.execute(query);
+        let total = get(invoices, '[0].Count', 0) || 0
+
+        return res.status(200).json({
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            data: invoices
+        });
+    };
+
+    executors = async (req, res, next) => {
+        const query = await DataRepositories.getSalesPersons();
+        let data = await this.execute(query);
+        let total = data.length
+
+        return res.status(200).json({
+            total,
+            data
+        });
+    };
+
+    getRate = async (req, res, next) => {
+        const query = await DataRepositories.getRate(req.query)
+        let data = await this.execute(query)
+        return res.status(200).json({ ...data[0] })
+    }
 
 
 }

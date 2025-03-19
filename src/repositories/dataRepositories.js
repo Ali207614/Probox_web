@@ -63,6 +63,7 @@ class DataRepositories {
         return `
         SELECT 
             (${count}) AS "Count",
+            null as "SlpCode",
             T2."CardCode", 
             T2."CardName", 
             T3."Dscription", 
@@ -74,7 +75,7 @@ class DataRepositories {
             T0."PaidToDate",
             T1."Installmnt", T0."InstlmntID",
             T0."DocEntry" AS "DocEntry",
-            MAX(T0."DueDate") AS "Последняя дата оплаты",
+            MAX(T0."DueDate") AS "DueDate",
             MAX(T0."InsTotal") AS "InsTotal",
             STRING_AGG(TOSRI."IntrSerial",', ') AS "IntrSerial"
         FROM 
@@ -112,6 +113,107 @@ class DataRepositories {
             T0."InstlmntID"
         LIMIT ${limit} OFFSET ${offset}
         `;
+    }
+
+    getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset, paymentStatus, search, phone }) {
+        let statusCondition = '';
+        if (paymentStatus === 'paid') {
+            statusCondition = `AND T0."PaidToDate" = T0."InsTotal"`;
+        } else if (paymentStatus === 'unpaid') {
+            statusCondition = `AND T0."PaidToDate" = 0`;
+        } else if (paymentStatus === 'partial') {
+            statusCondition = `AND T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"`;
+        }
+
+        const INVOICE_TYPE = 13;
+
+        let searchCondition = '';
+        if (search) {
+            searchCondition = `
+            AND (
+                LOWER(TOSRI."IntrSerial") LIKE LOWER('%${search}%') OR
+                LOWER(T2."CardName") LIKE LOWER('%${search}%')
+            )
+            `;
+        }
+
+        if (phone) {
+            searchCondition += `
+                AND (
+                    T2."Phone1" LIKE '%${phone}%' OR
+                    T2."Phone2" LIKE '%${phone}%'
+                )
+            `;
+        }
+
+        let count = `
+            SELECT COUNT(*) AS total
+            FROM ${this.db}.INV6 T0
+            INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+            INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+            INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+            LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
+                AND TSRI1."BaseType" = ${INVOICE_TYPE}
+                AND TSRI1."BaseLinNum" = T3."LineNum"
+            LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+                AND TOSRI."ItemCode" = TSRI1."ItemCode"
+            WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+            AND T1."CANCELED" = 'N'
+            ${statusCondition}
+            ${searchCondition}
+        `;
+
+        return `
+            SELECT 
+                (${count}) AS "Count",
+                T2."CardCode", 
+                T2."CardName", 
+                T2."Phone1", 
+                T2."Phone2",
+                STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial"
+            FROM 
+                ${this.db}.INV6 T0
+            INNER JOIN 
+                ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+            INNER JOIN 
+                ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+            INNER JOIN 
+                ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+            LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
+                AND TSRI1."BaseType" = ${INVOICE_TYPE}
+                AND TSRI1."BaseLinNum" = T3."LineNum"
+            LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+                AND TOSRI."ItemCode" = TSRI1."ItemCode"
+            WHERE 
+                T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+                AND T1."CANCELED" = 'N'
+                ${statusCondition}
+                ${searchCondition}
+            GROUP BY 
+                T2."CardCode", 
+                T2."CardName", 
+                T2."Phone1", 
+                T2."Phone2"
+            LIMIT ${limit} OFFSET ${offset}
+        `;
+    }
+
+
+    getSalesPersons() {
+        let sql = `
+        SELECT T0."SlpCode", T0."SlpName", T0."U_login", T0."U_role" FROM ${this.db}.OSLP T0  WHERE T0."U_role" IS NOT NULL
+        `
+        return sql
+    }
+
+    getRate({ currency = 'UZS', date = '' }) {
+        let sql = `
+            SELECT T0."RateDate", T0."Currency", T0."Rate"
+            FROM ${this.db}.ORTT T0
+            WHERE T0."Currency" = '${currency}'
+            AND T0."RateDate" = ${date ? `'${date}'` : 'CURRENT_DATE'}
+        `;
+        return sql;
     }
 
 }
