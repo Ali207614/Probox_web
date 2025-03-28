@@ -39,16 +39,8 @@ class b1HANA {
 
         const token = tokenService.generateJwt(user[0]);
 
-        // Cookie'ga token joylash
-        res.cookie('token', token, {
-            httpOnly: true,  // JavaScript orqali ko‘rinmaydi
-            secure: process.env.NODE_ENV === 'production', // faqat HTTPSda ishlaydi
-            sameSite: 'strict', // CSRF hujumlarga qarshi
-            maxAge: 24 * 60 * 60 * 1000 // 1 kun
-        });
-
         return res.status(201).json({
-            message: 'Login successful',
+            token,
             data: {
                 SlpCode: user[0].SlpCode,
                 SlpName: user[0].SlpName,
@@ -257,6 +249,27 @@ class b1HANA {
         let data = await this.execute(query)
         return res.status(200).json({ ...data[0] })
     }
+
+
+    getPayList = async (req, res, next) => {
+        const { id } = req.params
+        const query = await DataRepositories.getPayList({ docEntry: id })
+
+        let data = await this.execute(query)
+        let InstIdList = [...new Set(data.map(el => el.InstlmntID))]
+        let result = InstIdList.map(el => {
+            let list = data.filter(item => item.InstlmntID == el)
+            return {
+                DueDate: get(list, `[0].DueDate`, 0),
+                InstlmntID: el,
+                PaidToDate: get(list, `[0].PaidToDate`, 0),
+                InsTotal: get(list, `[0].InsTotal`, 0),
+                PaysList: list.map(item => ({ SumApplied: item.SumApplied, AcctName: item.AcctName, DocDate: item.DocDate, CashAcct: item.CashAcct, CheckAcct: item.CheckAcct }))
+            }
+        })
+        return res.status(200).json(result)
+    }
+
 
 
 }

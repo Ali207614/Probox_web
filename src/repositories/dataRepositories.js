@@ -216,6 +216,35 @@ class DataRepositories {
         return sql;
     }
 
+    getPayList({ docEntry }) {
+        let sql = `SELECT 
+      T1."Canceled", 
+      T0."DocNum", 
+      T0."DocEntry", 
+      T0."SumApplied", 
+      T0."InstId", 
+      T1."CashAcct", 
+      T1."DocDate", 
+      T1."CheckAcct", 
+      T2."InstlmntID", 
+      T2."DueDate", 
+      T2."PaidToDate", 
+      T2."InsTotal" ,
+      T3."AcctName"
+  FROM 
+      ${this.db}.RCT2 T0  
+  INNER JOIN 
+      ${this.db}.ORCT T1 ON T0."DocNum" = T1."DocEntry" 
+  FULL JOIN 
+      ${this.db}.INV6 T2 ON T2."DocEntry" = T0."DocEntry" AND T2."InstlmntID" = T0."InstId" 
+  FULL JOIN 
+      ${this.db}.OACT T3 ON T3."AcctCode" = COALESCE(T1."CashAcct", T1."CheckAcct") 
+  WHERE 
+   T2."DocEntry" = '${docEntry}' and T1."Canceled"= 'N'
+  ORDER BY 
+      T2."InstlmntID" ASC`
+        return sql
+    }
 }
 
 module.exports = new DataRepositories(db);

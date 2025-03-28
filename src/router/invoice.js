@@ -6,6 +6,7 @@ const router = new Router();
 
 
 router.get('/', authMiddleware, b1HANA.invoice);
+router.get('/:id', authMiddleware, b1HANA.getPayList);
 
 
 router.get('/search', authMiddleware, b1HANA.search);

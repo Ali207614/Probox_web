@@ -6,7 +6,6 @@ const router = new Router();
 
 const invoiceRouter = require("./invoice")
 
-
 router.post('/login', b1HANA.login);
 
 router.get('/executors', authMiddleware, b1HANA.executors)
