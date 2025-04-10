@@ -3,9 +3,8 @@ const tokenService = require('../services/tokenService');
 
 module.exports = async function (req, res, next) {
     try {
-        // Cookie ichidan tokenni olish
-        const accessToken = req.cookies?.token;
-        console.log(req.cookies?.token)
+        const accessToken = req.headers?.authorization;
+
         if (!accessToken) {
             return next(ApiError.UnauthorizedError());
         }

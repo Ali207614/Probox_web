@@ -11,5 +11,7 @@ router.get('/:id', authMiddleware, b1HANA.getPayList);
 
 router.get('/search', authMiddleware, b1HANA.search);
 
+router.put('/distribution', authMiddleware, b1HANA.distribution);
+
 
 module.exports = router

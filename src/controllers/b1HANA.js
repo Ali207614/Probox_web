@@ -7,6 +7,7 @@ let dbService = require('../services/dbService')
 const DataRepositories = require("../repositories/dataRepositories");
 const ApiError = require("../exceptions/api-error");
 const InvoiceModel = require("../models/invoice-model");
+const { convertToISOFormat, shuffleArray } = require("../helpers");
 
 require('dotenv').config();
 
@@ -22,252 +23,278 @@ class b1HANA {
     };
 
     login = async (req, res, next) => {
-        const { login, password } = req.body;
-        if (!login || !password) {
-            return next(ApiError.BadRequest('Некорректный login или password'));
-        }
-
-        const query = await DataRepositories.getSalesManager({ login, password });
-        let user = await this.execute(query);
-        if (user.length == 0) {
-            return next(ApiError.BadRequest('Пользователь не найден'));
-        }
-
-        if (user.length > 1) {
-            return next(ApiError.BadRequest('Найдено несколько пользователей с указанными учетными данными. Проверьте введенные данные.'));
-        }
-
-        const token = tokenService.generateJwt(user[0]);
-
-        return res.status(201).json({
-            token,
-            data: {
-                SlpCode: user[0].SlpCode,
-                SlpName: user[0].SlpName,
-                U_role: user[0].U_role
+        try {
+            const { login, password } = req.body;
+            if (!login || !password) {
+                return next(ApiError.BadRequest('Некорректный login или password'));
             }
-        });
+
+            const query = await DataRepositories.getSalesManager({ login, password });
+            let user = await this.execute(query);
+            if (user.length == 0) {
+                return next(ApiError.BadRequest('Пользователь не найден'));
+            }
+
+            if (user.length > 1) {
+                return next(ApiError.BadRequest('Найдено несколько пользователей с указанными учетными данными. Проверьте введенные данные.'));
+            }
+
+            const token = tokenService.generateJwt(user[0]);
+
+            return res.status(201).json({
+                token,
+                data: {
+                    SlpCode: user[0].SlpCode,
+                    SlpName: user[0].SlpName,
+                    U_role: user[0].U_role
+                }
+            });
+        }
+        catch (e) {
+            next(e)
+        }
     };
 
     invoice = async (req, res, next) => {
-        let { startDate, endDate, page = 1, limit = 20, slpCode, paymentStatus, cardCode, serial, phone } = req.query
+        try {
+            let { startDate, endDate, page = 1, limit = 20, slpCode, paymentStatus, cardCode, serial, phone } = req.query
 
-        page = parseInt(page, 10);
-        limit = parseInt(limit, 10);
+            page = parseInt(page, 10);
+            limit = parseInt(limit, 10);
 
-        const skip = (page - 1) * limit;
+            const skip = (page - 1) * limit;
 
-        if (Number(slpCode)) {
-            const filter = {};
-
-            if (startDate || endDate) {
-                filter.DocDate = {};
-                if (startDate) filter.DocDate.$gte = new Date(startDate);
-                if (endDate) filter.DocDate.$lte = new Date(endDate);
+            if (!startDate || !endDate) {
+                return res.status(404).json({ error: 'startDate and endDate are required' });
             }
 
-            filter.slpCode = slpCode;
+            if (Number(slpCode)) {
+                const invoicesModel = await InvoiceModel.find({
+                    SlpCode: slpCode,
+                    DueDate: {
+                        $gte: new Date(startDate),
+                        $lte: new Date(endDate),
+                    }
+                });
 
-            if (cardCode) {
-                filter.CardCode = cardCode
-            }
 
-            if (paymentStatus) {
-                if (paymentStatus === "paid") {
-                    filter.$expr = { $eq: ["$InsTotal", "$PaidToDate"] };
-                } else if (paymentStatus === "unpaid") {
-                    filter.$expr = { $eq: ["$PaidToDate", 0] };
-                } else if (paymentStatus === "partial") {
-                    filter.$expr = {
-                        $and: [
-                            { $gt: ["$PaidToDate", 0] },
-                            { $lt: ["$PaidToDate", "$InsTotal"] }
-                        ]
-                    };
+                if (invoicesModel.length == 0) {
+                    return res.status(200).json({
+                        total: 0,
+                        page,
+                        limit,
+                        totalPages: Math.ceil(0 / limit),
+                        data: []
+                    });
                 }
+
+                const query = await DataRepositories.getDistributionInvoice({ startDate, endDate, limit, offset: skip, paymentStatus, cardCode, serial, phone, invoices: invoicesModel });
+
+                let invoices = await this.execute(query);
+                let total = get(invoices, '[0].Count', 0) || 0
+
+                return res.status(200).json({
+                    total,
+                    page,
+                    limit,
+                    totalPages: Math.ceil(total / limit),
+                    data: invoices.map(el => {
+                        return { ...el, SlpCode: slpCode }
+                    })
+                });
             }
 
+            const query = await DataRepositories.getInvoice({ startDate, endDate, limit, offset: skip, paymentStatus, cardCode, serial, phone });
+            let invoices = await this.execute(query);
 
-            if (phone) {
-                if (!filter.$or) filter.$or = [];
-                filter.$or.push(
-                    { Phone1: { $regex: phone, $options: 'i' } },
-                    { Phone2: { $regex: phone, $options: 'i' } }
-                );
-            }
+            const invoicesModel = await InvoiceModel.find({
+                DocEntry: {
+                    $in: [...new Set(invoices.map(el => el.DocEntry))],
+                }
+            });
 
-            if (serial) {
-                filter.IntrSerial = { $regex: serial, $options: 'i' };
-            }
-
-            const invoices = await InvoiceModel.find(filter)
-                .skip(skip)
-                .limit(limit)
-                .sort({ DocDate: -1 });
-
-            const total = await InvoiceModel.countDocuments(filter);
+            let total = get(invoices, '[0].Count', 0) || 0
 
             return res.status(200).json({
                 total,
                 page,
                 limit,
                 totalPages: Math.ceil(total / limit),
-                data: invoices
+                data: invoices.map(el => {
+                    return { ...el, SlpCode: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.SlpCode || null }
+                })
             });
-
         }
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth();
-
-        if (!startDate) {
-            startDate = new Date(year, month, 1).toISOString().split('T')[0];
+        catch (e) {
+            next(e)
         }
-
-        if (!endDate) {
-            endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
-        }
-
-        const query = await DataRepositories.getInvoice({ startDate, endDate, limit, offset: skip, paymentStatus, cardCode, serial, phone });
-        let invoices = await this.execute(query);
-        let total = get(invoices, '[0].Count', 0) || 0
-
-        return res.status(200).json({
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-            data: invoices
-        });
     };
 
     search = async (req, res, next) => {
-        let { startDate, endDate, page = 1, limit = 50, slpCode, paymentStatus, search, phone } = req.query
+        try {
+            let { startDate, endDate, page = 1, limit = 50, slpCode, paymentStatus, search, phone } = req.query
 
-        page = parseInt(page, 10);
-        limit = parseInt(limit, 10);
+            page = parseInt(page, 10);
+            limit = parseInt(limit, 10);
 
-        const skip = (page - 1) * limit;
+            const skip = (page - 1) * limit;
 
-        if (Number(slpCode)) {
-            const filter = {};
+            if (Number(slpCode)) {
 
-            if (startDate || endDate) {
-                filter.DocDate = {};
-                if (startDate) filter.DocDate.$gte = new Date(startDate);
-                if (endDate) filter.DocDate.$lte = new Date(endDate);
-            }
+                const invoicesModel = await InvoiceModel.find({
+                    SlpCode: slpCode,
+                    DueDate: {
+                        $gte: new Date(startDate),
+                        $lte: new Date(endDate),
+                    }
+                });
 
-            filter.slpCode = slpCode;
 
-            if (paymentStatus) {
-                if (paymentStatus === "paid") {
-                    filter.$expr = { $eq: ["$InsTotal", "$PaidToDate"] };
-                } else if (paymentStatus === "unpaid") {
-                    filter.$expr = { $eq: ["$PaidToDate", 0] };
-                } else if (paymentStatus === "partial") {
-                    filter.$expr = {
-                        $and: [
-                            { $gt: ["$PaidToDate", 0] },
-                            { $lt: ["$PaidToDate", "$InsTotal"] }
-                        ]
-                    };
+                if (invoicesModel.length == 0) {
+                    return res.status(200).json({
+                        total: 0,
+                        page,
+                        limit,
+                        totalPages: Math.ceil(0 / limit),
+                        data: []
+                    });
                 }
+
+                const query = await DataRepositories.getInvoiceSearchBPorSeriaDistribution({ startDate, endDate, limit, offset: skip, paymentStatus, search, phone, invoices: invoicesModel });
+
+                let invoices = await this.execute(query);
+                let total = get(invoices, '[0].Count', 0) || 0
+
+                return res.status(200).json({
+                    total,
+                    page,
+                    limit,
+                    totalPages: Math.ceil(total / limit),
+                    data: invoices.map(el => {
+                        return { ...el, SlpCode: slpCode }
+                    })
+                });
             }
 
-            if (search) {
-                if (!filter.$or) filter.$or = [];
-                filter.$or.push(
-                    { IntrSerial: { $regex: search, $options: 'i' } },
-                    { CardName: { $regex: search, $options: 'i' } }
-                );
+            if (!startDate || !endDate) {
+                return res.status(404).json({ error: 'startDate and endDate are required' });
             }
 
-            if (phone) {
-                if (!filter.$or) filter.$or = [];
-                filter.$or.push(
-                    { Phone1: { $regex: search, $options: 'i' } },
-                    { Phone2: { $regex: search, $options: 'i' } }
-                );
-            }
+            const query = await DataRepositories.getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset: skip, paymentStatus, search, phone });
 
+            let invoices = await this.execute(query);
 
-            const invoices = await InvoiceModel.find(filter)
-                .skip(skip)
-                .limit(limit)
-                .sort({ DocDate: -1 });
+            const invoicesModel = await InvoiceModel.find({
+                DocEntry: {
+                    $in: [...new Set(invoices.map(el => el.DocEntry))],
+                }
+            });
 
-            const total = await InvoiceModel.countDocuments(filter);
+            let total = get(invoices, '[0].Count', 0) || 0
 
             return res.status(200).json({
                 total,
                 page,
                 limit,
                 totalPages: Math.ceil(total / limit),
-                data: invoices.map(el => ({ CardCode: el.CardCode, CardName: el.CardName, Phone1: el.Phone1, Phone2: el.Phone2, IntrSerial: el.IntrSerial }))
+                data: invoices.map(el => {
+                    return { ...el, SlpCode: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.SlpCode || null }
+                })
             });
 
+        } catch (e) {
+            next(e)
         }
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth();
-
-        if (!startDate) {
-            startDate = new Date(year, month, 1).toISOString().split('T')[0];
-        }
-
-        if (!endDate) {
-            endDate = new Date(year, month + 1, 0).toISOString().split('T')[0];
-        }
-
-        const query = await DataRepositories.getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset: skip, paymentStatus, search, phone });
-        let invoices = await this.execute(query);
-        let total = get(invoices, '[0].Count', 0) || 0
-
-        return res.status(200).json({
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-            data: invoices
-        });
     };
 
     executors = async (req, res, next) => {
-        const query = await DataRepositories.getSalesPersons();
-        let data = await this.execute(query);
-        let total = data.length
+        try {
+            const query = await DataRepositories.getSalesPersons();
+            let data = await this.execute(query);
+            let total = data.length
 
-        return res.status(200).json({
-            total,
-            data
-        });
+            return res.status(200).json({
+                total,
+                data
+            });
+        }
+        catch (e) {
+            next(e)
+        }
+    };
+
+    distribution = async (req, res, next) => {
+        try {
+            let { startDate, endDate } = req.query;
+
+            if (!startDate || !endDate) {
+                return res.status(404).json({ error: 'startDate and endDate are required' });
+            }
+
+            const executorsQuery = await DataRepositories.getSalesPersons();
+            let executorList = await this.execute(executorsQuery);
+
+            let SalesList = executorList.filter(el => el.U_role == 'Assistant')
+
+            const query = await DataRepositories.getDistribution({ startDate, endDate })
+            let data = await this.execute(query)
+            let docEntries = [...new Set(data.map(el => el.DocEntry))]
+            const invoices = await InvoiceModel.find({ DocEntry: { $in: docEntries } });
+            let newResult = []
+            let count = 0
+            for (let i = 0; i < data.length; i++) {
+                let existInvoice = invoices.filter(el => el.DocEntry == data[i].DocEntry)
+                if (existInvoice?.length) {
+                    let existShuffle = existInvoice.find(el => el.InstlmntID == data[i].InstlmntID)
+                    if (!existShuffle) {
+                        let nonExistList = shuffleArray(SalesList.filter(item => !existInvoice.map(item => item.SlpCode).includes(item.SlpCode)))
+                        let first = nonExistList.length ? nonExistList[0] : shuffleArray(SalesList)[0]
+                        newResult.push({ DueDate: data[i].DueDate, SlpName: first.SlpName, InstlmntID: data[i].InstlmntID, DocEntry: data[i].DocEntry, SlpCode: first.SlpCode, CardCode: data[i].CardCode, ItemName: data[i].Dscription })
+                    }
+                }
+                else {
+                    let first = SalesList[count]
+                    newResult.push({ DueDate: data[i].DueDate, SlpName: first?.SlpName, InstlmntID: data[i].InstlmntID, DocEntry: data[i].DocEntry, SlpCode: first?.SlpCode, CardCode: data[i].CardCode, ItemName: data[i].Dscription })
+                }
+                count = (count == (SalesList.length - 1)) ? 0 : count += 1
+            }
+            await InvoiceModel.create(newResult)
+            return res.status(200).json({ message: 'success' });
+        }
+        catch (e) {
+            next(e)
+        }
     };
 
     getRate = async (req, res, next) => {
         const query = await DataRepositories.getRate(req.query)
         let data = await this.execute(query)
-        return res.status(200).json({ ...data[0] })
+        return res.status(200).json(data[0] || {})
     }
 
 
     getPayList = async (req, res, next) => {
-        const { id } = req.params
-        const query = await DataRepositories.getPayList({ docEntry: id })
+        try {
+            const { id } = req.params
+            const query = await DataRepositories.getPayList({ docEntry: id })
 
-        let data = await this.execute(query)
-        let InstIdList = [...new Set(data.map(el => el.InstlmntID))]
-        let result = InstIdList.map(el => {
-            let list = data.filter(item => item.InstlmntID == el)
-            return {
-                DueDate: get(list, `[0].DueDate`, 0),
-                InstlmntID: el,
-                PaidToDate: get(list, `[0].PaidToDate`, 0),
-                InsTotal: get(list, `[0].InsTotal`, 0),
-                PaysList: list.map(item => ({ SumApplied: item.SumApplied, AcctName: item.AcctName, DocDate: item.DocDate, CashAcct: item.CashAcct, CheckAcct: item.CheckAcct }))
-            }
-        })
-        return res.status(200).json(result)
+            let data = await this.execute(query)
+            let InstIdList = [...new Set(data.map(el => el.InstlmntID))]
+            let result = InstIdList.map(el => {
+                let list = data.filter(item => item.InstlmntID == el)
+                return {
+                    DueDate: get(list, `[0].DueDate`, 0),
+                    InstlmntID: el,
+                    PaidToDate: list?.length ? list.reduce((a, b) => a + Number(b?.SumApplied || 0), 0) : 0,
+                    InsTotal: get(list, `[0].InsTotal`, 0),
+                    PaysList: list.map(item => ({ SumApplied: item.SumApplied, AcctName: item.AcctName, DocDate: item.DocDate, CashAcct: item.CashAcct, CheckAcct: item.CheckAcct }))
+                }
+            })
+            return res.status(200).json(result)
+        }
+        catch (e) {
+            next(e)
+        }
     }
 
 

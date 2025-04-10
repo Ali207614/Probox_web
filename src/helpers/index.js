@@ -18,6 +18,14 @@ function formatterCurrency(
     });
 }
 
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]]; // Elementlarni joylarini almashtirish
+    }
+    return array;
+}
+
 function saveSession(cookie) {
     fs.writeFileSync(
         path.join(process.cwd(), "database", "session.json"),
@@ -33,6 +41,10 @@ function getSession() {
     return docs
 }
 
+function convertToISOFormat(dateString) {
+    const date = new Date(dateString);
+    return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+}
 
 
 
@@ -41,4 +53,6 @@ module.exports = {
     saveSession,
     getSession,
     formatterCurrency,
+    convertToISOFormat,
+    shuffleArray
 }
