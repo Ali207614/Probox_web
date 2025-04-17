@@ -11,6 +11,7 @@ const InvoiceSchema = new Schema(
         DueDate: { type: Date, required: false },
         IntrSerial: { type: String, required: false },
         InstlmntID: { type: Number, required: false },
+        images: [Schema.Types.Mixed],
     },
     {
         timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }

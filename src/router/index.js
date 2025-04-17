@@ -14,5 +14,7 @@ router.get('/rate', authMiddleware, b1HANA.getRate)
 
 router.use('/invoice', invoiceRouter);
 
+router.get('/search', authMiddleware, b1HANA.search);
+
 
 module.exports = router

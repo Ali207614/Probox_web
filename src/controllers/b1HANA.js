@@ -1,13 +1,14 @@
 const { get } = require("lodash");
 const tokenService = require('../services/tokenService');
 const { v4: uuidv4, validate } = require('uuid');
+const path = require('path')
+const fs = require('fs')
 let dbService = require('../services/dbService')
-
 
 const DataRepositories = require("../repositories/dataRepositories");
 const ApiError = require("../exceptions/api-error");
 const InvoiceModel = require("../models/invoice-model");
-const { convertToISOFormat, shuffleArray } = require("../helpers");
+const { convertToISOFormat, shuffleArray, checkFileType } = require("../helpers");
 
 require('dotenv').config();
 
@@ -69,14 +70,18 @@ class b1HANA {
             }
 
             if (Number(slpCode)) {
-                const invoicesModel = await InvoiceModel.find({
+
+                const filter = {
                     SlpCode: slpCode,
                     DueDate: {
                         $gte: new Date(startDate),
                         $lte: new Date(endDate),
                     }
-                });
+                };
 
+                const invoicesModel = await InvoiceModel.find(filter)
+                    .skip(skip)
+                    .limit(limit)
 
                 if (invoicesModel.length == 0) {
                     return res.status(200).json({
@@ -99,7 +104,7 @@ class b1HANA {
                     limit,
                     totalPages: Math.ceil(total / limit),
                     data: invoices.map(el => {
-                        return { ...el, SlpCode: slpCode }
+                        return { ...el, SlpCode: slpCode, Images: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.images || [] }
                     })
                 });
             }
@@ -121,7 +126,11 @@ class b1HANA {
                 limit,
                 totalPages: Math.ceil(total / limit),
                 data: invoices.map(el => {
-                    return { ...el, SlpCode: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.SlpCode || null }
+                    return {
+                        ...el,
+                        SlpCode: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.SlpCode || null,
+                        Images: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.images || []
+                    }
                 })
             });
         }
@@ -299,6 +308,93 @@ class b1HANA {
 
 
 
+
+    uploadImage = async (req, res, next) => {
+        try {
+            const { DocEntry, InstlmntID } = req.params;
+            const file = req.file;
+            if (!file) {
+                return res.status(400).send('Error: No file uploaded.');
+            }
+
+            const imageEntry = {
+                _id: uuidv4(),
+                image: file.filename // multer filename avtomatik qaytadi
+            };
+
+            let invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
+
+            if (invoice) {
+                if (!Array.isArray(invoice.images)) {
+                    invoice.images = [];
+                }
+                invoice.images.push(imageEntry);
+                await invoice.save();
+            } else {
+                invoice = await InvoiceModel.create({
+                    DocEntry,
+                    InstlmntID,
+                    images: [imageEntry]
+                });
+            }
+
+            return res.status(201).send({
+                image: file.filename,
+                DocEntry,
+                InstlmntID,
+                oldName: file.originalname,
+                _id: get(imageEntry, '_id', 1)
+            });
+        } catch (e) {
+            next(e);
+        }
+    };
+
+
+    deleteImage = async (req, res, next) => {
+        try {
+            const { DocEntry, InstlmntID, ImageId } = req.params;
+
+            const invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
+
+            if (!invoice) {
+                return res.status(404).send('Invoice not found');
+            }
+
+            if (!Array.isArray(invoice.images)) {
+                return res.status(400).send('No images found for this invoice');
+            }
+
+            // Rasmni topamiz
+            const imageIndex = invoice.images.findIndex(img => String(img._id) === String(ImageId));
+            console.log(imageIndex)
+            if (imageIndex === -1) {
+                return res.status(404).send('Image not found');
+            }
+
+            const imageFileName = invoice.images[imageIndex].image;
+
+            // MongoDB'dan rasmni o‘chiramiz
+            invoice.images.splice(imageIndex, 1);
+            await invoice.save();
+
+            // Fayl tizimidan rasmni o‘chiramiz
+            const filePath = path.join(process.cwd(), 'uploads', imageFileName);
+            fs.unlink(filePath, (err) => {
+                if (err && err.code !== 'ENOENT') {
+                    console.error('File deletion error:', err);
+                }
+            });
+
+            return res.status(200).send({
+                message: 'Image deleted successfully',
+                imageId: ImageId,
+                fileName: imageFileName
+            });
+        } catch (e) {
+            next(e);
+        }
+    };
 }
 
 module.exports = new b1HANA();

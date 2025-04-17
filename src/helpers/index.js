@@ -45,7 +45,12 @@ function convertToISOFormat(dateString) {
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
 }
-
+// Kengaytmani tekshirish funksiyasi
+function checkFileType(file) {
+    const extname = allowedFileTypes.test(path.extname(file.name).toLowerCase());
+    const mimetype = allowedFileTypes.test(file.mimetype);
+    return extname && mimetype;
+}
 
 
 
@@ -54,5 +59,6 @@ module.exports = {
     getSession,
     formatterCurrency,
     convertToISOFormat,
-    shuffleArray
+    shuffleArray,
+    checkFileType
 }

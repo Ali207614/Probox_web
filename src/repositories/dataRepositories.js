@@ -124,12 +124,22 @@ class DataRepositories {
         let phoneCondition = ''
         let salesCondition = `and (T1."DocEntry", T0."InstlmntID") IN (${invoices.map(item => `('${item.DocEntry}', '${item.InstlmntID}')`).join(", ")}) `
 
-        if (paymentStatus === 'paid') {
-            statusCondition = `AND T0."PaidToDate" = T0."InsTotal"`;
-        } else if (paymentStatus === 'unpaid') {
-            statusCondition = `AND T0."PaidToDate" = 0`;
-        } else if (paymentStatus === 'partial') {
-            statusCondition = `AND T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"`;
+        if (paymentStatus) {
+            const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
+            const conditions = [];
+            if (statuses.includes('paid')) {
+                conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+            }
+            if (statuses.includes('unpaid')) {
+                conditions.push(`(T0."PaidToDate" = 0)`);
+            }
+            if (statuses.includes('partial')) {
+                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+            }
+
+            if (conditions.length > 0) {
+                statusCondition = `AND (${conditions.join(' OR ')})`;
+            }
         }
 
         if (cardCode) {
@@ -227,14 +237,23 @@ class DataRepositories {
 
     getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset, paymentStatus, search, phone }) {
         let statusCondition = '';
-        if (paymentStatus === 'paid') {
-            statusCondition = `AND T0."PaidToDate" = T0."InsTotal"`;
-        } else if (paymentStatus === 'unpaid') {
-            statusCondition = `AND T0."PaidToDate" = 0`;
-        } else if (paymentStatus === 'partial') {
-            statusCondition = `AND T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"`;
-        }
+        if (paymentStatus) {
+            const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
+            const conditions = [];
+            if (statuses.includes('paid')) {
+                conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+            }
+            if (statuses.includes('unpaid')) {
+                conditions.push(`(T0."PaidToDate" = 0)`);
+            }
+            if (statuses.includes('partial')) {
+                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+            }
 
+            if (conditions.length > 0) {
+                statusCondition = `AND (${conditions.join(' OR ')})`;
+            }
+        }
         const INVOICE_TYPE = 13;
 
         let searchCondition = '';
@@ -312,12 +331,23 @@ class DataRepositories {
     getInvoiceSearchBPorSeriaDistribution({ startDate, endDate, limit, offset, paymentStatus, search, phone, invoices }) {
         let statusCondition = '';
         let salesCondition = `and (T1."DocEntry", T0."InstlmntID") IN (${invoices.map(item => `('${item.DocEntry}', '${item.InstlmntID}')`).join(", ")}) `
-        if (paymentStatus === 'paid') {
-            statusCondition = `AND T0."PaidToDate" = T0."InsTotal"`;
-        } else if (paymentStatus === 'unpaid') {
-            statusCondition = `AND T0."PaidToDate" = 0`;
-        } else if (paymentStatus === 'partial') {
-            statusCondition = `AND T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"`;
+
+        if (paymentStatus) {
+            const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
+            const conditions = [];
+            if (statuses.includes('paid')) {
+                conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+            }
+            if (statuses.includes('unpaid')) {
+                conditions.push(`(T0."PaidToDate" = 0)`);
+            }
+            if (statuses.includes('partial')) {
+                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+            }
+
+            if (conditions.length > 0) {
+                statusCondition = `AND (${conditions.join(' OR ')})`;
+            }
         }
 
         const INVOICE_TYPE = 13;
