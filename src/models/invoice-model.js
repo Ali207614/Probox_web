@@ -6,7 +6,7 @@ const InvoiceSchema = new Schema(
         CardCode: { type: String, required: false }, // Mijoz kodi
         CardName: { type: String, required: false }, // Mijoz nomi
         Dscription: { type: String, required: false }, // Tavsif
-        SlpName: { type: String, required: false },
+        SlpName: { type: String, required: false, default: '' },
         SlpCode: { type: Number, required: false },
         DueDate: { type: Date, required: false },
         IntrSerial: { type: String, required: false },

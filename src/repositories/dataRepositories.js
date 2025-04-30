@@ -11,6 +11,8 @@ class DataRepositories {
         SELECT T0."SlpCode", T0."SlpName", T0."GroupCode", T0."Telephone", T0."U_login", T0."U_password",T0."U_role" FROM ${this.db}.OSLP T0 where T0."U_login"= '${login}' and T0."U_password"='${password}'`;
     }
 
+
+
     getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone }) {
 
         let statusCondition = '';
@@ -18,12 +20,22 @@ class DataRepositories {
         let seriesCondition = ''
         let phoneCondition = ''
 
-        if (paymentStatus === 'paid') {
-            statusCondition = `AND T0."PaidToDate" = T0."InsTotal"`;
-        } else if (paymentStatus === 'unpaid') {
-            statusCondition = `AND T0."PaidToDate" = 0`;
-        } else if (paymentStatus === 'partial') {
-            statusCondition = `AND T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"`;
+        if (paymentStatus) {
+            const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
+            const conditions = [];
+            if (statuses.includes('paid')) {
+                conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+            }
+            if (statuses.includes('unpaid')) {
+                conditions.push(`(T0."PaidToDate" = 0)`);
+            }
+            if (statuses.includes('partial')) {
+                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+            }
+
+            if (conditions.length > 0) {
+                statusCondition = `AND (${conditions.join(' OR ')})`;
+            }
         }
 
         if (cardCode) {
@@ -35,49 +47,59 @@ class DataRepositories {
             seriesCondition = `AND UPPER("IntrSerial") LIKE '%${serialPatched}%'`
         }
 
-        if (phone) {
-            phoneCondition = `AND (T2."Phone1" LIKE '%${phone}%' OR T2."Phone2" LIKE '%${phone}%')`
+        if (phone && phone !== '998') {
+            // Agar telefon raqam 998 bilan boshlansa, uni kesib tashlaymiz
+            const trimmedPhone = phone.startsWith('998') ? phone.slice(3) : phone;
+
+            phoneCondition = `AND (T2."Phone1" LIKE '%${trimmedPhone}%' OR T2."Phone2" LIKE '%${trimmedPhone}%')`;
         }
 
         const INVOICE_TYPE = 13;
 
-        let count = `
-        SELECT COUNT(*) AS total 
-        FROM ${this.db}.INV6 T0
-        INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-        INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
-        INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
-        LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
-            AND TSRI1."BaseType" = ${INVOICE_TYPE}
-            AND TSRI1."BaseLinNum" = T3."LineNum"
-        LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
-            AND TOSRI."ItemCode" = TSRI1."ItemCode"
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-        AND T1."CANCELED" = 'N'
-        ${statusCondition}  
-        ${businessPartnerCondition}
-        ${seriesCondition}
-        ${phoneCondition}
-        `;
+        const count = `
+        SELECT COUNT(*) FROM (
+            SELECT 
+                T0."DocEntry", 
+                T0."InstlmntID"
+            FROM ${this.db}.INV6 T0
+            INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+            INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+            INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+            LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
+                AND TSRI1."BaseType" = ${INVOICE_TYPE}
+                AND TSRI1."BaseLinNum" = T3."LineNum"
+            LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+                AND TOSRI."ItemCode" = TSRI1."ItemCode"
+            WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+            AND T1."CANCELED" = 'N'
+            ${statusCondition}
+            ${businessPartnerCondition}
+            ${seriesCondition}
+            ${phoneCondition}
+            GROUP BY T0."DocEntry", T0."InstlmntID"
+        ) AS count_query
+    `;
+
 
         return `
         SELECT 
-            (${count}) AS "Count",
-            null as "SlpCode",
-            T2."CardCode", 
-            T2."CardName", 
-            T3."Dscription", 
-            T2."Balance", 
-            T2."Phone1", 
-            T2."Phone2", 
-            T1."DocTotal", 
-            T1."PaidToDate" as "TotalPaidToDate", 
-            T0."PaidToDate",
-            T1."Installmnt", T0."InstlmntID",
+            (${count}) AS "TOTAL",
+            NULL as "SlpCode",
+            MAX(T2."CardCode") AS "CardCode", 
+            MAX(T2."CardName") AS "CardName", 
+            MAX(T3."Dscription") AS "Dscription", 
+            MAX(T2."Balance") AS "Balance", 
+            MAX(T2."Phone1") AS "Phone1", 
+            MAX(T2."Phone2") AS "Phone2", 
+            MAX(T1."DocTotal") AS "DocTotal", 
+            MAX(T1."PaidToDate") AS "TotalPaidToDate", 
+            MAX(T0."PaidToDate") AS "PaidToDate",
+            MAX(T1."Installmnt") AS "Installmnt", 
+            T0."InstlmntID",
             T0."DocEntry" AS "DocEntry",
             MAX(T0."DueDate") AS "DueDate",
             MAX(T0."InsTotal") AS "InsTotal",
-            STRING_AGG(TOSRI."IntrSerial",', ') AS "IntrSerial"
+            STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial"
         FROM 
             ${this.db}.INV6 T0
         INNER JOIN 
@@ -116,14 +138,146 @@ class DataRepositories {
     }
 
 
-    getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices }) {
+    //     getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices }) {
 
+    //         let statusCondition = '';
+    //         let businessPartnerCondition = '';
+    //         let seriesCondition = ''
+    //         let phoneCondition = ''
+    //         // let salesCondition = `and (T1."DocEntry", T0."InstlmntID",T2."CardCode") IN (${invoices.map(item => `('${item.DocEntry}', '${item.InstlmntID}', '${item.CardCode}')`).join(", ")}) `
+
+    //         const salesCondition = `
+    // AND EXISTS (
+    //   SELECT 1 FROM DUMMY
+    //   WHERE (
+    //     ${invoices.map(item => 
+    //       `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}' AND T2."CardCode" = '${item.CardCode}')`
+    //     ).join(' OR ')}
+    //   )
+    // )
+    // `;
+
+    //         if (paymentStatus) {
+    //             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
+    //             const conditions = [];
+    //             if (statuses.includes('paid')) {
+    //                 conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+    //             }
+    //             if (statuses.includes('unpaid')) {
+    //                 conditions.push(`(T0."PaidToDate" = 0)`);
+    //             }
+    //             if (statuses.includes('partial')) {
+    //                 conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+    //             }
+
+    //             if (conditions.length > 0) {
+    //                 statusCondition = `AND (${conditions.join(' OR ')})`;
+    //             }
+    //         }
+
+    //         if (cardCode) {
+    //             businessPartnerCondition = `AND T2."CardCode" =  '${cardCode}' `
+    //         }
+
+    //         if (serial) {
+    //             let serialPatched = serial && serial.toUpperCase().replace(/'/g, "")
+    //             seriesCondition = `AND UPPER("IntrSerial") LIKE '%${serialPatched}%'`
+    //         }
+
+    //      if (phone && phone !== '998') {
+    //     // Agar telefon raqam 998 bilan boshlansa, uni kesib tashlaymiz
+    //     const trimmedPhone = phone.startsWith('998') ? phone.slice(3) : phone;
+
+    //     phoneCondition = `AND (T2."Phone1" LIKE '%${trimmedPhone}%' OR T2."Phone2" LIKE '%${trimmedPhone}%')`;
+    //     }
+
+    //         const INVOICE_TYPE = 13;
+
+    //         let count = `
+    //         SELECT COUNT(*) 
+    //         FROM ${this.db}.INV6 T0
+    //         INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+    //         INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+    //         INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+    //         LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
+    //             AND TSRI1."BaseType" = ${INVOICE_TYPE}
+    //             AND TSRI1."BaseLinNum" = T3."LineNum"
+    //         LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+    //             AND TOSRI."ItemCode" = TSRI1."ItemCode"
+    //         WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+    //         AND T1."CANCELED" = 'N'
+    //         ${statusCondition}  
+    //         ${businessPartnerCondition}
+    //         ${seriesCondition}
+    //         ${phoneCondition}
+    //         ${salesCondition}
+    //         `;
+
+    //         return `
+    //         SELECT 
+    //             (${count}) AS "TOTAL",
+    //             null as "SlpCode",
+    //             T2."CardCode", 
+    //             T2."CardName", 
+    //             T3."Dscription", 
+    //             T2."Balance", 
+    //             T2."Phone1", 
+    //             T2."Phone2", 
+    //             T1."DocTotal", 
+    //             T1."PaidToDate" as "TotalPaidToDate", 
+    //             T0."PaidToDate",
+    //             T1."Installmnt", T0."InstlmntID",
+    //             T0."DocEntry" AS "DocEntry",
+    //             MAX(T0."DueDate") AS "DueDate",
+    //             MAX(T0."InsTotal") AS "InsTotal",
+    //             STRING_AGG(TOSRI."IntrSerial",', ') AS "IntrSerial"
+    //         FROM 
+    //             ${this.db}.INV6 T0
+    //         INNER JOIN 
+    //             ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+    //         INNER JOIN 
+    //             ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+    //         INNER JOIN 
+    //             ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+    //         LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
+    //             AND TSRI1."BaseType" = ${INVOICE_TYPE}
+    //             AND TSRI1."BaseLinNum" = T3."LineNum"
+    //         LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+    //             AND TOSRI."ItemCode" = TSRI1."ItemCode"
+    //         WHERE 
+    //             T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+    //             AND T1."CANCELED" = 'N'
+    //             ${statusCondition}  
+    //             ${businessPartnerCondition}
+    //             ${seriesCondition}
+    //             ${phoneCondition}
+    //             ${salesCondition}
+    //         GROUP BY 
+    //             T2."CardCode", 
+    //             T2."CardName", 
+    //             T3."Dscription", 
+    //             T2."Balance", 
+    //             T2."Phone1", 
+    //             T2."Phone2", 
+    //             T1."DocTotal", 
+    //             T1."PaidToDate", 
+    //             T1."Installmnt", 
+    //             T0."DocEntry",
+    //             T0."PaidToDate",
+    //             T0."InstlmntID",
+    //         LIMIT ${limit} OFFSET ${offset}
+    //         `;
+    //     }
+
+
+    getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices }) {
         let statusCondition = '';
         let businessPartnerCondition = '';
-        let seriesCondition = ''
-        let phoneCondition = ''
-        let salesCondition = `and (T1."DocEntry", T0."InstlmntID") IN (${invoices.map(item => `('${item.DocEntry}', '${item.InstlmntID}')`).join(", ")}) `
+        let seriesCondition = '';
+        let phoneCondition = '';
+        let salesCondition = '';
 
+        // 1. PAYMENT STATUS filter
         if (paymentStatus) {
             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
             const conditions = [];
@@ -136,29 +290,49 @@ class DataRepositories {
             if (statuses.includes('partial')) {
                 conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
             }
-
             if (conditions.length > 0) {
                 statusCondition = `AND (${conditions.join(' OR ')})`;
             }
         }
 
+        // 2. CARD CODE filter
         if (cardCode) {
-            businessPartnerCondition = `AND T2."CardCode" =  '${cardCode}' `
+            businessPartnerCondition = `AND T2."CardCode" = '${cardCode}'`;
         }
 
+        // 3. SERIAL filter
         if (serial) {
-            let serialPatched = serial && serial.toUpperCase().replace(/'/g, "")
-            seriesCondition = `AND UPPER("IntrSerial") LIKE '%${serialPatched}%'`
+            const serialPatched = serial.toUpperCase().replace(/'/g, "");
+            seriesCondition = `AND UPPER(TOSRI."IntrSerial") LIKE '%${serialPatched}%'`;
         }
 
-        if (phone) {
-            phoneCondition = `AND (T2."Phone1" LIKE '%${phone}%' OR T2."Phone2" LIKE '%${phone}%')`
+        // 4. PHONE filter
+        if (phone && phone !== '998') {
+            const trimmedPhone = phone.startsWith('998') ? phone.slice(3) : phone;
+            phoneCondition = `AND (T2."Phone1" LIKE '%${trimmedPhone}%' OR T2."Phone2" LIKE '%${trimmedPhone}%')`;
+        }
+
+        // 5. SALES CONDITION (EXISTS bilan)
+        if (invoices.length > 0) {
+            salesCondition = `
+        AND EXISTS (
+            SELECT 1 FROM DUMMY
+            WHERE (
+                ${invoices.map(item =>
+                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}' AND T2."CardCode" = '${item.CardCode}')`
+            ).join(' OR ')}
+            )
+        )`;
         }
 
         const INVOICE_TYPE = 13;
 
-        let count = `
-        SELECT COUNT(*) AS total 
+        // 6. COUNT QUERY
+        const count = `
+    SELECT COUNT(*) FROM (
+        SELECT 
+            T0."DocEntry", 
+            T0."InstlmntID"
         FROM ${this.db}.INV6 T0
         INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
         INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
@@ -170,39 +344,40 @@ class DataRepositories {
             AND TOSRI."ItemCode" = TSRI1."ItemCode"
         WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
         AND T1."CANCELED" = 'N'
-        ${statusCondition}  
+        ${statusCondition}
         ${businessPartnerCondition}
         ${seriesCondition}
         ${phoneCondition}
         ${salesCondition}
-        `;
+        GROUP BY T0."DocEntry", T0."InstlmntID"
+    ) AS count_query
+`;
 
+
+        // 7. MAIN QUERY
         return `
         SELECT 
-            (${count}) AS "Count",
-            null as "SlpCode",
-            T2."CardCode", 
-            T2."CardName", 
-            T3."Dscription", 
-            T2."Balance", 
-            T2."Phone1", 
-            T2."Phone2", 
-            T1."DocTotal", 
-            T1."PaidToDate" as "TotalPaidToDate", 
-            T0."PaidToDate",
-            T1."Installmnt", T0."InstlmntID",
+            (${count}) AS "TOTAL",
+            NULL as "SlpCode",
+            MAX(T2."CardCode") AS "CardCode", 
+            MAX(T2."CardName") AS "CardName", 
+            MAX(T3."Dscription") AS "Dscription", 
+            MAX(T2."Balance") AS "Balance", 
+            MAX(T2."Phone1") AS "Phone1", 
+            MAX(T2."Phone2") AS "Phone2", 
+            MAX(T1."DocTotal") AS "DocTotal", 
+            MAX(T1."PaidToDate") AS "TotalPaidToDate", 
+            MAX(T0."PaidToDate") AS "PaidToDate",
+            MAX(T1."Installmnt") AS "Installmnt", 
+            T0."InstlmntID",
             T0."DocEntry" AS "DocEntry",
             MAX(T0."DueDate") AS "DueDate",
             MAX(T0."InsTotal") AS "InsTotal",
-            STRING_AGG(TOSRI."IntrSerial",', ') AS "IntrSerial"
-        FROM 
-            ${this.db}.INV6 T0
-        INNER JOIN 
-            ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-        INNER JOIN 
-            ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
-        INNER JOIN 
-            ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+            STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial"
+        FROM ${this.db}.INV6 T0
+        INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+        INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+        INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
         LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
             AND TSRI1."BaseType" = ${INVOICE_TYPE}
             AND TSRI1."BaseLinNum" = T3."LineNum"
@@ -211,26 +386,16 @@ class DataRepositories {
         WHERE 
             T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
             AND T1."CANCELED" = 'N'
-            ${statusCondition}  
+            ${statusCondition}
             ${businessPartnerCondition}
             ${seriesCondition}
             ${phoneCondition}
             ${salesCondition}
         GROUP BY 
-            T2."CardCode", 
-            T2."CardName", 
-            T3."Dscription", 
-            T2."Balance", 
-            T2."Phone1", 
-            T2."Phone2", 
-            T1."DocTotal", 
-            T1."PaidToDate", 
-            T1."Installmnt", 
             T0."DocEntry",
-            T0."PaidToDate",
             T0."InstlmntID"
         LIMIT ${limit} OFFSET ${offset}
-        `;
+    `;
     }
 
 
@@ -254,6 +419,7 @@ class DataRepositories {
                 statusCondition = `AND (${conditions.join(' OR ')})`;
             }
         }
+
         const INVOICE_TYPE = 13;
 
         let searchCondition = '';
@@ -266,17 +432,22 @@ class DataRepositories {
             `;
         }
 
-        if (phone) {
+        if (phone && phone !== '998') {
+            const trimmedPhone = phone.startsWith('998') ? phone.slice(3) : phone;
+
             searchCondition += `
                 AND (
-                    T2."Phone1" LIKE '%${phone}%' OR
-                    T2."Phone2" LIKE '%${phone}%'
+                    T2."Phone1" LIKE '%${trimmedPhone}%' OR
+                    T2."Phone2" LIKE '%${trimmedPhone}%'
                 )
             `;
         }
 
+
+
+
         let count = `
-            SELECT COUNT(*) AS total
+            SELECT COUNT(*) 
             FROM ${this.db}.INV6 T0
             INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
             INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
@@ -294,7 +465,7 @@ class DataRepositories {
 
         return `
             SELECT 
-                (${count}) AS "Count",
+                (${count}) AS "TOTAL",
                 T2."CardCode", 
                 T2."CardName", 
                 T2."Phone1", 
@@ -362,17 +533,20 @@ class DataRepositories {
             `;
         }
 
-        if (phone) {
+        if (phone && phone !== '998') {
+            const trimmedPhone = phone.startsWith('998') ? phone.slice(3) : phone;
+
             searchCondition += `
                 AND (
-                    T2."Phone1" LIKE '%${phone}%' OR
-                    T2."Phone2" LIKE '%${phone}%'
+                    T2."Phone1" LIKE '%${trimmedPhone}%' OR
+                    T2."Phone2" LIKE '%${trimmedPhone}%'
                 )
             `;
         }
 
+
         let count = `
-            SELECT COUNT(*) AS total
+            SELECT COUNT(*) 
             FROM ${this.db}.INV6 T0
             INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
             INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
@@ -391,7 +565,7 @@ class DataRepositories {
 
         return `
             SELECT 
-                (${count}) AS "Count",
+                (${count}) AS "Total",
                 T2."CardCode", 
                 T2."CardName", 
                 T2."Phone1", 
@@ -468,63 +642,63 @@ class DataRepositories {
       LEFT JOIN 
           ${this.db}.OACT T3 ON T3."AcctCode" = COALESCE(T1."CashAcct", T1."CheckAcct") 
       WHERE 
-       T2."DocEntry" = '${docEntry}'
+       T2."DocEntry" = '${docEntry}' and T1."Canceled" = 'N'
       ORDER BY 
           T2."InstlmntID" ASC`
         return sql
     }
 
+
+
+
+
+
+
     getDistribution({ startDate, endDate, }) {
-        let statusCondition = '';
-        statusCondition = `AND T0."PaidToDate" <> T0."InsTotal"`;
+        let statusCondition = 'AND ((T0."PaidToDate" = 0) OR (T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"))';
+        // (T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")
+        // statusCondition = `AND (T0."PaidToDate" = 0)  `;
+        // if (statuses.includes('unpaid')) {
+        //     conditions.push(``);
+        // }
+        // if (statuses.includes('partial')) {
+        //     conditions.push(``);
+        // }
         const INVOICE_TYPE = 13;
         return `
             SELECT 
                 null as "SlpCode",
-                T2."CardCode", 
-                T2."CardName", 
-                T3."Dscription", 
-                T2."Balance", 
-                T2."Phone1", 
-                T2."Phone2", 
-                T1."DocTotal", 
-                T1."PaidToDate" as "TotalPaidToDate", 
-                T0."PaidToDate",
-                T1."Installmnt", T0."InstlmntID",
-                T0."DocEntry" AS "DocEntry",
-                MAX(T0."DueDate") AS "DueDate",
-                MAX(T0."InsTotal") AS "InsTotal",
-                STRING_AGG(TOSRI."IntrSerial",', ') AS "IntrSerial"
-            FROM 
-                ${this.db}.INV6 T0
-            INNER JOIN 
-                ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-            INNER JOIN 
-                ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
-            INNER JOIN 
-                ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
-            LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
-                AND TSRI1."BaseType" = ${INVOICE_TYPE}
-                AND TSRI1."BaseLinNum" = T3."LineNum"
-            LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
-                AND TOSRI."ItemCode" = TSRI1."ItemCode"
-            WHERE 
-                T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-                AND T1."CANCELED" = 'N'
-                ${statusCondition}  
-            GROUP BY 
-                T2."CardCode", 
-                T2."CardName", 
-                T3."Dscription", 
-                T2."Balance", 
-                T2."Phone1", 
-                T2."Phone2", 
-                T1."DocTotal", 
-                T1."PaidToDate", 
-                T1."Installmnt", 
-                T0."DocEntry",
-                T0."PaidToDate",
-                T0."InstlmntID"
+            MAX(T2."CardCode") AS "CardCode", 
+            MAX(T2."CardName") AS "CardName", 
+            MAX(T3."Dscription") AS "Dscription", 
+            MAX(T2."Balance") AS "Balance", 
+            MAX(T2."Phone1") AS "Phone1", 
+            MAX(T2."Phone2") AS "Phone2", 
+            MAX(T1."DocTotal") AS "DocTotal", 
+            MAX(T1."PaidToDate") AS "TotalPaidToDate", 
+            MAX(T0."PaidToDate") AS "PaidToDate",
+            MAX(T1."Installmnt") AS "Installmnt", 
+            T0."InstlmntID",
+            T0."DocEntry" AS "DocEntry",
+            MAX(T0."DueDate") AS "DueDate",
+            MAX(T0."InsTotal") AS "InsTotal",
+            STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial"
+        FROM ${this.db}.INV6 T0
+        INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+        INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+        INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+        LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
+            AND TSRI1."BaseType" = ${INVOICE_TYPE}
+            AND TSRI1."BaseLinNum" = T3."LineNum"
+        LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+            AND TOSRI."ItemCode" = TSRI1."ItemCode"
+        WHERE 
+            T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+            AND T1."CANCELED" = 'N'
+            ${statusCondition}
+        GROUP BY 
+            T0."DocEntry",
+            T0."InstlmntID"
             `;
 
     }

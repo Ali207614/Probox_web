@@ -4,12 +4,12 @@ const { v4: uuidv4, validate } = require('uuid');
 const path = require('path')
 const fs = require('fs')
 let dbService = require('../services/dbService')
-
 const DataRepositories = require("../repositories/dataRepositories");
 const ApiError = require("../exceptions/api-error");
 const InvoiceModel = require("../models/invoice-model");
+const CommentModel = require("../models/comment-model")
 const { convertToISOFormat, shuffleArray, checkFileType } = require("../helpers");
-
+const moment = require('moment')
 require('dotenv').config();
 
 
@@ -69,6 +69,16 @@ class b1HANA {
                 return res.status(404).json({ error: 'startDate and endDate are required' });
             }
 
+            const now = moment();
+
+            if (!moment(startDate, 'YYYY.MM.DD', true).isValid()) {
+                startDate = moment(now).startOf('month').format('YYYY.MM.DD');
+            }
+
+            if (!moment(endDate, 'YYYY.MM.DD', true).isValid()) {
+                endDate = moment(now).endOf('month').format('YYYY.MM.DD');
+            }
+
             if (Number(slpCode)) {
 
                 const filter = {
@@ -78,11 +88,19 @@ class b1HANA {
                         $lte: new Date(endDate),
                     }
                 };
+                // 1157
+                // 1098
 
+                // 1158
+                // 1098
+
+                // 1157
+                // 1095
+
+                // 1157
+                // 1108
                 const invoicesModel = await InvoiceModel.find(filter)
-                    .skip(skip)
-                    .limit(limit)
-
+                console.log(invoicesModel.length)
                 if (invoicesModel.length == 0) {
                     return res.status(200).json({
                         total: 0,
@@ -94,9 +112,11 @@ class b1HANA {
                 }
 
                 const query = await DataRepositories.getDistributionInvoice({ startDate, endDate, limit, offset: skip, paymentStatus, cardCode, serial, phone, invoices: invoicesModel });
-
                 let invoices = await this.execute(query);
-                let total = get(invoices, '[0].Count', 0) || 0
+
+
+                let total = get(invoices, '[0].TOTAL', 0) || 0
+                console.log(total)
 
                 return res.status(200).json({
                     total,
@@ -118,7 +138,7 @@ class b1HANA {
                 }
             });
 
-            let total = get(invoices, '[0].Count', 0) || 0
+            let total = get(invoices, '[0].TOTAL', 0) || 0
 
             return res.status(200).json({
                 total,
@@ -148,6 +168,21 @@ class b1HANA {
 
             const skip = (page - 1) * limit;
 
+
+            if (!startDate || !endDate) {
+                return res.status(404).json({ error: 'startDate and endDate are required' });
+            }
+
+            const now = moment();
+
+            if (!moment(startDate, 'YYYY.MM.DD', true).isValid()) {
+                startDate = moment(now).startOf('month').format('YYYY.MM.DD');
+            }
+
+            if (!moment(endDate, 'YYYY.MM.DD', true).isValid()) {
+                endDate = moment(now).endOf('month').format('YYYY.MM.DD');
+            }
+
             if (Number(slpCode)) {
 
                 const invoicesModel = await InvoiceModel.find({
@@ -172,7 +207,7 @@ class b1HANA {
                 const query = await DataRepositories.getInvoiceSearchBPorSeriaDistribution({ startDate, endDate, limit, offset: skip, paymentStatus, search, phone, invoices: invoicesModel });
 
                 let invoices = await this.execute(query);
-                let total = get(invoices, '[0].Count', 0) || 0
+                let total = get(invoices, '[0].TOTAL', 0) || 0
 
                 return res.status(200).json({
                     total,
@@ -185,9 +220,7 @@ class b1HANA {
                 });
             }
 
-            if (!startDate || !endDate) {
-                return res.status(404).json({ error: 'startDate and endDate are required' });
-            }
+
 
             const query = await DataRepositories.getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset: skip, paymentStatus, search, phone });
 
@@ -199,7 +232,7 @@ class b1HANA {
                 }
             });
 
-            let total = get(invoices, '[0].Count', 0) || 0
+            let total = get(invoices, '[0].TOTAL', 0) || 0
 
             return res.status(200).json({
                 total,
@@ -280,7 +313,7 @@ class b1HANA {
         let data = await this.execute(query)
         return res.status(200).json(data[0] || {})
     }
-
+    // 
 
     getPayList = async (req, res, next) => {
         try {
@@ -296,7 +329,14 @@ class b1HANA {
                     InstlmntID: el,
                     PaidToDate: list?.length ? list.reduce((a, b) => a + Number(b?.SumApplied || 0), 0) : 0,
                     InsTotal: get(list, `[0].InsTotal`, 0),
-                    PaysList: list.map(item => ({ SumApplied: item.SumApplied, AcctName: item.AcctName, DocDate: item.DocDate, CashAcct: item.CashAcct, CheckAcct: item.CheckAcct }))
+                    PaysList: list.map(item => ({
+                        SumApplied: item.SumApplied,
+                        AcctName: item.AcctName,
+                        DocDate: item.DocDate,
+                        CashAcct: item.CashAcct,
+                        CheckAcct: item.CheckAcct,
+                        Canceled: item.Canceled
+                    }))
                 }
             })
             return res.status(200).json(result)
@@ -307,20 +347,125 @@ class b1HANA {
     }
 
 
+    createComment = async (req, res, next) => {
+        try {
+            const { DocEntry, InstlmntID, Comments } = req.body;
+            const { SlpCode } = req.user;
+            if (!Comments || Comments.length == 0) {
+                return res.status(400).json({
+                    message: 'Comment not found',
+                });
+            }
+            if (Comments.length > 300) {
+                return res.status(400).json({
+                    message: 'Comment long',
+                });
+            }
+            const newComment = new CommentModel({
+                DocEntry,
+                InstlmntID,
+                Comments,
+                SlpCode,
+                DocDate: new Date()
+            });
+
+            await newComment.save();
+
+            return res.status(201).json({
+                message: 'Comment created successfully',
+                data: newComment
+            });
+        } catch (e) {
+            next(e);
+        }
+    };
+
+
+    getComments = async (req, res, next) => {
+        try {
+            const { DocEntry, InstlmntID } = req.query;
+
+            const filter = {};
+            if (DocEntry) filter.DocEntry = DocEntry;
+            if (InstlmntID) filter.InstlmntID = Number(InstlmntID);
+
+            const comments = await CommentModel.find(filter).sort({ created_at: -1 });
+
+            return res.status(200).json(comments);
+        } catch (e) {
+            next(e);
+        }
+    };
+
+
+    updateComment = async (req, res, next) => {
+        try {
+            const { id } = req.params;
+            const { Comments } = req.body;
+
+            if (!Comments || Comments.length == 0) {
+                return res.status(400).json({
+                    message: 'Comment not found',
+                });
+            }
+            if (Comments.length > 300) {
+                return res.status(400).json({
+                    message: 'Comment long',
+                });
+            }
+            const updated = await CommentModel.findByIdAndUpdate(
+                id,
+                { Comments, updatedAt: new Date() },
+                { new: true }
+            );
+
+            if (!updated) {
+                return res.status(404).json({ message: 'Comment not found' });
+            }
+
+            return res.status(200).json({
+                message: 'Comment updated successfully',
+                data: updated
+            });
+        } catch (e) {
+            next(e);
+        }
+    };
+
+    deleteComment = async (req, res, next) => {
+        try {
+            const { id } = req.params;
+
+            const deleted = await CommentModel.findByIdAndDelete(id);
+
+            if (!deleted) {
+                return res.status(404).json({ message: 'Comment not found' });
+            }
+
+            return res.status(200).json({
+                message: 'Comment deleted successfully'
+            });
+        } catch (e) {
+            next(e);
+        }
+    };
+
+
 
 
     uploadImage = async (req, res, next) => {
         try {
             const { DocEntry, InstlmntID } = req.params;
-            const file = req.file;
-            if (!file) {
-                return res.status(400).send('Error: No file uploaded.');
+            const files = req.files;
+
+            if (!files || files.length === 0) {
+                return res.status(400).send('Error: No files uploaded.');
             }
 
-            const imageEntry = {
+            const imageEntries = files.map(file => ({
                 _id: uuidv4(),
                 image: file.filename // multer filename avtomatik qaytadi
-            };
+            }));
 
             let invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
 
@@ -328,22 +473,23 @@ class b1HANA {
                 if (!Array.isArray(invoice.images)) {
                     invoice.images = [];
                 }
-                invoice.images.push(imageEntry);
+                invoice.images.push(...imageEntries);
                 await invoice.save();
             } else {
                 invoice = await InvoiceModel.create({
                     DocEntry,
                     InstlmntID,
-                    images: [imageEntry]
+                    images: imageEntries
                 });
             }
 
             return res.status(201).send({
-                image: file.filename,
+                images: imageEntries.map(e => ({
+                    _id: e._id,
+                    image: e.image
+                })),
                 DocEntry,
-                InstlmntID,
-                oldName: file.originalname,
-                _id: get(imageEntry, '_id', 1)
+                InstlmntID
             });
         } catch (e) {
             next(e);
@@ -354,31 +500,22 @@ class b1HANA {
     deleteImage = async (req, res, next) => {
         try {
             const { DocEntry, InstlmntID, ImageId } = req.params;
-
             const invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
+            if (!invoice) return res.status(404).send('Invoice not found');
 
-            if (!invoice) {
-                return res.status(404).send('Invoice not found');
-            }
+            const image = invoice.images.find(img => String(img._id) === String(ImageId));
+            if (!image) return res.status(404).send('Image not found');
 
-            if (!Array.isArray(invoice.images)) {
-                return res.status(400).send('No images found for this invoice');
-            }
+            // Fayl nomini ajratib olamiz
+            const imageFileName = image.image;
 
-            // Rasmni topamiz
-            const imageIndex = invoice.images.findIndex(img => String(img._id) === String(ImageId));
-            console.log(imageIndex)
-            if (imageIndex === -1) {
-                return res.status(404).send('Image not found');
-            }
+            // DB'dan rasmni o‘chiramiz
+            await InvoiceModel.updateOne(
+                { DocEntry, InstlmntID },
+                { $pull: { images: { _id: ImageId } } }
+            );
 
-            const imageFileName = invoice.images[imageIndex].image;
-
-            // MongoDB'dan rasmni o‘chiramiz
-            invoice.images.splice(imageIndex, 1);
-            await invoice.save();
-
-            // Fayl tizimidan rasmni o‘chiramiz
+            // Fayl tizimidan ham o‘chiramiz
             const filePath = path.join(process.cwd(), 'uploads', imageFileName);
             fs.unlink(filePath, (err) => {
                 if (err && err.code !== 'ENOENT') {
@@ -390,6 +527,45 @@ class b1HANA {
                 message: 'Image deleted successfully',
                 imageId: ImageId,
                 fileName: imageFileName
+            });
+        } catch (e) {
+            console.log(e)
+            next(e);
+        }
+    };
+
+
+    updateExecutor = async (req, res, next) => {
+        try {
+            const { DocEntry, InstlmntID } = req.params;
+            const { slpCode, DueDate } = req.body;
+
+            if (!slpCode || !DueDate) {
+                return res.status(400).send({
+                    message: "Missing required fields: slpCode and/or DueDate"
+                });
+            }
+
+            let invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
+
+            if (invoice) {
+                invoice.SlpCode = slpCode;
+                await invoice.save();
+            } else {
+                invoice = await InvoiceModel.create({
+                    DocEntry,
+                    InstlmntID,
+                    SlpCode: slpCode,
+                    DueDate
+                });
+            }
+
+            return res.status(200).send({
+                message: invoice ? "Invoice updated successfully." : "Invoice created successfully.",
+                DocEntry,
+                InstlmntID,
+                slpCode,
+                _id: invoice._id,
             });
         } catch (e) {
             next(e);

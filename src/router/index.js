@@ -16,5 +16,7 @@ router.use('/invoice', invoiceRouter);
 
 router.get('/search', authMiddleware, b1HANA.search);
 
+router.post('/incomingPayment', authMiddleware, b1SL.postIncomingPayment);
+
 
 module.exports = router

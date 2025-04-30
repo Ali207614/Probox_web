@@ -8,7 +8,15 @@ const router = new Router();
 
 router.get('/', authMiddleware, b1HANA.invoice);
 router.get('/:id', authMiddleware, b1HANA.getPayList);
-router.put('/upload/:DocEntry/:InstlmntID', authMiddleware, upload.single('file'), b1HANA.uploadImage);
+router.put('/executor/:DocEntry/:InstlmntID', authMiddleware, b1HANA.updateExecutor);
+
+router.get('/comments/:DocEntry/:InstlmntID', authMiddleware, b1HANA.getComments);
+router.post('/comments/:DocEntry/:InstlmntID', authMiddleware, b1HANA.createComment);
+
+router.put('/comments/:id', authMiddleware, b1HANA.updateComment);
+router.delete('/comments/:id', authMiddleware, b1HANA.deleteComment);
+
+router.put('/upload/:DocEntry/:InstlmntID', authMiddleware, upload.array('files'), b1HANA.uploadImage);
 router.delete('/upload/:DocEntry/:InstlmntID/:ImageId', authMiddleware, b1HANA.deleteImage);
 
 
