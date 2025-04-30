@@ -88,19 +88,8 @@ class b1HANA {
                         $lte: new Date(endDate),
                     }
                 };
-                // 1157
-                // 1098
 
-                // 1158
-                // 1098
-
-                // 1157
-                // 1095
-
-                // 1157
-                // 1108
                 const invoicesModel = await InvoiceModel.find(filter)
-                console.log(invoicesModel.length)
                 if (invoicesModel.length == 0) {
                     return res.status(200).json({
                         total: 0,
@@ -257,7 +246,7 @@ class b1HANA {
 
             return res.status(200).json({
                 total,
-                data
+                data: data.sort((a, b) => b.SlpName.localeCompare(a.SlpName))
             });
         }
         catch (e) {
@@ -313,7 +302,7 @@ class b1HANA {
         let data = await this.execute(query)
         return res.status(200).json(data[0] || {})
     }
-    // 
+
 
     getPayList = async (req, res, next) => {
         try {
@@ -389,7 +378,7 @@ class b1HANA {
             if (DocEntry) filter.DocEntry = DocEntry;
             if (InstlmntID) filter.InstlmntID = Number(InstlmntID);
 
-            const comments = await CommentModel.find(filter).sort({ created_at: -1 });
+            const comments = await CommentModel.find(filter).sort({ created_at: 1 });
 
             return res.status(200).json(comments);
         } catch (e) {
