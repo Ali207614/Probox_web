@@ -158,7 +158,7 @@ class b1HANA {
     search = async (req, res, next) => {
         try {
             let { startDate, endDate, page = 1, limit = 50, slpCode, paymentStatus, search, phone } = req.query
-
+            search = search.replace(/'/g, '');
             page = parseInt(page, 10);
             limit = parseInt(limit, 10);
 
