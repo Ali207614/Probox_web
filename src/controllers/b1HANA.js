@@ -105,7 +105,6 @@ class b1HANA {
 
 
                 let total = get(invoices, '[0].TOTAL', 0) || 0
-                console.log(total)
 
                 return res.status(200).json({
                     total,
@@ -113,7 +112,13 @@ class b1HANA {
                     limit,
                     totalPages: Math.ceil(total / limit),
                     data: invoices.map(el => {
-                        return { ...el, SlpCode: slpCode, Images: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.images || [] }
+                        let inv = invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)
+                        return {
+                            ...el,
+                            SlpCode: slpCode,
+                            Images: inv?.images || [],
+                            NewDueDate: inv?.newDueDate || ''
+                        }
                     })
                 });
             }
@@ -135,10 +140,12 @@ class b1HANA {
                 limit,
                 totalPages: Math.ceil(total / limit),
                 data: invoices.map(el => {
+                    let inv = invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)
                     return {
                         ...el,
-                        SlpCode: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.SlpCode || null,
-                        Images: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.images || []
+                        SlpCode: inv?.SlpCode || null,
+                        Images: inv?.images || [],
+                        NewDueDate: inv?.newDueDate || ''
                     }
                 })
             });
@@ -335,10 +342,79 @@ class b1HANA {
         }
     }
 
+    getAnalytics = async (req, res, next) => {
+        try {
+            let { startDate, endDate, slpCode } = req.query
+
+            if (!startDate || !endDate) {
+                return res.status(404).json({ error: 'startDate and endDate are required' });
+            }
+
+            const now = moment();
+
+            if (!moment(startDate, 'YYYY.MM.DD', true).isValid()) {
+                startDate = moment(now).startOf('month').format('YYYY.MM.DD');
+            }
+
+            if (!moment(endDate, 'YYYY.MM.DD', true).isValid()) {
+                endDate = moment(now).endOf('month').format('YYYY.MM.DD');
+            }
+
+            if (Number(slpCode)) {
+
+                const filter = {
+                    SlpCode: slpCode,
+                    DueDate: {
+                        $gte: new Date(startDate),
+                        $lte: new Date(endDate),
+                    }
+                };
+
+                const invoicesModel = await InvoiceModel.find(filter)
+                if (invoicesModel.length == 0) {
+                    return res.status(200).json({
+                        SumApplied: 0,
+                        InsTotal: 0,
+                        PaidToDate: 0
+                    });
+                }
+
+                const query = await DataRepositories.getDistributionInvoice({ startDate, endDate, invoices: invoicesModel });
+                console.log(query)
+                let data = await this.execute(query);
+
+
+
+                return res.status(200).json(data.length ? data[0] :
+                    {
+                        SumApplied: 0,
+                        InsTotal: 0,
+                        PaidToDate: 0
+                    }
+                )
+            }
+
+            const query = await DataRepositories.getAnalytics({ startDate, endDate })
+            let data = await this.execute(query)
+
+            return res.status(200).json(data.length ? data[0] :
+                {
+                    SumApplied: 0,
+                    InsTotal: 0,
+                    PaidToDate: 0
+                }
+            )
+        }
+        catch (e) {
+            next(e)
+        }
+    }
+
 
     createComment = async (req, res, next) => {
         try {
-            const { DocEntry, InstlmntID, Comments } = req.body;
+            const { Comments } = req.body;
+            const { DocEntry, InstlmntID } = req.params
             const { SlpCode } = req.user;
             if (!Comments || Comments.length == 0) {
                 return res.status(400).json({
@@ -372,7 +448,7 @@ class b1HANA {
 
     getComments = async (req, res, next) => {
         try {
-            const { DocEntry, InstlmntID } = req.query;
+            const { DocEntry, InstlmntID } = req.params;
 
             const filter = {};
             if (DocEntry) filter.DocEntry = DocEntry;
@@ -527,11 +603,11 @@ class b1HANA {
     updateExecutor = async (req, res, next) => {
         try {
             const { DocEntry, InstlmntID } = req.params;
-            const { slpCode, DueDate } = req.body;
+            const { slpCode, DueDate, newDueDate = '' } = req.body;
 
-            if (!slpCode || !DueDate) {
+            if (!slpCode || !DueDate || !newDueDate) {
                 return res.status(400).send({
-                    message: "Missing required fields: slpCode and/or DueDate"
+                    message: "Missing required fields: slpCode and/or DueDate and/or newDueDate"
                 });
             }
 
@@ -539,12 +615,14 @@ class b1HANA {
 
             if (invoice) {
                 invoice.SlpCode = slpCode;
+                invoice.newDueDate = newDueDate;
                 await invoice.save();
             } else {
                 invoice = await InvoiceModel.create({
                     DocEntry,
                     InstlmntID,
-                    SlpCode: slpCode,
+                    SlpCode: (slpCode || ''),
+                    newDueDate,
                     DueDate
                 });
             }

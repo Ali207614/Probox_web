@@ -9,6 +9,7 @@ const InvoiceSchema = new Schema(
         SlpName: { type: String, required: false, default: '' },
         SlpCode: { type: Number, required: false },
         DueDate: { type: Date, required: false },
+        newDueDate: { type: Date, required: false },
         IntrSerial: { type: String, required: false },
         InstlmntID: { type: Number, required: false },
         images: [Schema.Types.Mixed],

@@ -557,6 +557,35 @@ Sum(T1."PaidToDate") AS "TotalPaidToDate" FROM (
     }
 
 
+    getAnalytics({ startDate, endDate, invoices = [] }) {
+        let salesCondition = ''
+        if (invoices.length > 0) {
+            salesCondition = `
+        AND EXISTS (
+            SELECT 1 FROM DUMMY
+            WHERE (
+                ${invoices.map(item =>
+                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}' AND T1."CardCode" = '${item.CardCode}')`
+            ).join(' OR ')}
+            )
+        )`;
+
+        }
+        let sql = `SELECT 
+            SUM(T2."SumApplied") as "SumApplied",  
+            SUM(T0."InsTotal") as "InsTotal", 
+            SUM(T0."PaidToDate") as "PaidToDate"
+        FROM 
+        ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
+        LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
+        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN '${startDate}' and '${endDate}' and T3."Canceled" = 'N' 
+        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'
+        ${salesCondition}
+        `
+        return sql
+    }
+
+
 
 
 
@@ -615,3 +644,9 @@ Sum(T1."PaidToDate") AS "TotalPaidToDate" FROM (
 module.exports = new DataRepositories(db);
 
 
+// SELECT T0."DueDate", T0."InsTotal", T0."PaidToDate" FROM INV6 T0  INNER JOIN OINV T1 ON T0."DocEntry" = T1."DocEntry"
+//  LEFT JOIN
+//       RCT2 T0  ON T2."DocEntry" = T0."DocEntry"  and T2."InstlmntID" = T0."InstId"
+//       LEFT JOIN
+//           ORCT T1 ON T0."DocNum" = T1."DocEntry"
+//  WHERE T1."DocNum" = 21779 and T0."DueDate" BETWEEN '01.05.2025' AND '31.05.2025'
