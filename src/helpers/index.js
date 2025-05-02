@@ -3,6 +3,10 @@ const { get } = require("lodash");
 const path = require("path");
 const moment = require('moment');
 
+function parseLocalDateString(str) {
+    const [year, month, day] = str.split('.').map(Number);
+    return new Date(Date.UTC(year, month - 1, day, 0, 0, 0)); // UTC 00:00
+}
 
 
 function formatterCurrency(
@@ -60,5 +64,6 @@ module.exports = {
     formatterCurrency,
     convertToISOFormat,
     shuffleArray,
-    checkFileType
+    checkFileType,
+    parseLocalDateString
 }

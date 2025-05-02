@@ -8,7 +8,7 @@ const DataRepositories = require("../repositories/dataRepositories");
 const ApiError = require("../exceptions/api-error");
 const InvoiceModel = require("../models/invoice-model");
 const CommentModel = require("../models/comment-model")
-const { convertToISOFormat, shuffleArray, checkFileType } = require("../helpers");
+const { convertToISOFormat, shuffleArray, checkFileType, parseLocalDateString } = require("../helpers");
 const moment = require('moment')
 require('dotenv').config();
 
@@ -84,12 +84,13 @@ class b1HANA {
                 const filter = {
                     SlpCode: slpCode,
                     DueDate: {
-                        $gte: new Date(startDate),
-                        $lte: new Date(endDate),
+                        $gte: parseLocalDateString(startDate),
+                        $lte: parseLocalDateString(endDate),
                     }
                 };
 
                 const invoicesModel = await InvoiceModel.find(filter)
+
                 if (invoicesModel.length == 0) {
                     return res.status(200).json({
                         total: 0,
@@ -184,8 +185,8 @@ class b1HANA {
                 const invoicesModel = await InvoiceModel.find({
                     SlpCode: slpCode,
                     DueDate: {
-                        $gte: new Date(startDate),
-                        $lte: new Date(endDate),
+                        $gte: parseLocalDateString(startDate),
+                        $lte: parseLocalDateString(endDate),
                     }
                 });
 
@@ -264,7 +265,6 @@ class b1HANA {
     distribution = async (req, res, next) => {
         try {
             let { startDate, endDate } = req.query;
-
             if (!startDate || !endDate) {
                 return res.status(404).json({ error: 'startDate and endDate are required' });
             }
@@ -287,12 +287,29 @@ class b1HANA {
                     if (!existShuffle) {
                         let nonExistList = shuffleArray(SalesList.filter(item => !existInvoice.map(item => item.SlpCode).includes(item.SlpCode)))
                         let first = nonExistList.length ? nonExistList[0] : shuffleArray(SalesList)[0]
-                        newResult.push({ DueDate: data[i].DueDate, SlpName: first.SlpName, InstlmntID: data[i].InstlmntID, DocEntry: data[i].DocEntry, SlpCode: first.SlpCode, CardCode: data[i].CardCode, ItemName: data[i].Dscription })
+                        newResult.push({
+                            DueDate: parseLocalDateString(moment(data[i].DueDate).format('YYYY.MM.DD')),
+                            SlpName: first.SlpName,
+                            InstlmntID: data[i].InstlmntID,
+                            DocEntry: data[i].DocEntry,
+                            SlpCode: first.SlpCode,
+                            CardCode: data[i].CardCode,
+                            ItemName: data[i].Dscription
+                        })
                     }
                 }
                 else {
                     let first = SalesList[count]
-                    newResult.push({ DueDate: data[i].DueDate, SlpName: first?.SlpName, InstlmntID: data[i].InstlmntID, DocEntry: data[i].DocEntry, SlpCode: first?.SlpCode, CardCode: data[i].CardCode, ItemName: data[i].Dscription })
+
+                    newResult.push({
+                        DueDate: parseLocalDateString(moment(data[i].DueDate).format('YYYY.MM.DD')),
+                        SlpName: first?.SlpName,
+                        InstlmntID: data[i].InstlmntID,
+                        DocEntry: data[i].DocEntry,
+                        SlpCode: first?.SlpCode,
+                        CardCode: data[i].CardCode,
+                        ItemName: data[i].Dscription
+                    })
                 }
                 count = (count == (SalesList.length - 1)) ? 0 : count += 1
             }
@@ -365,8 +382,8 @@ class b1HANA {
                 const filter = {
                     SlpCode: slpCode,
                     DueDate: {
-                        $gte: new Date(startDate),
-                        $lte: new Date(endDate),
+                        $gte: parseLocalDateString(startDate),
+                        $lte: parseLocalDateString(endDate),
                     }
                 };
 
@@ -379,8 +396,7 @@ class b1HANA {
                     });
                 }
 
-                const query = await DataRepositories.getDistributionInvoice({ startDate, endDate, invoices: invoicesModel });
-                console.log(query)
+                const query = await DataRepositories.getAnalytics({ startDate, endDate, invoices: invoicesModel });
                 let data = await this.execute(query);
 
 
@@ -604,8 +620,7 @@ class b1HANA {
         try {
             const { DocEntry, InstlmntID } = req.params;
             const { slpCode, DueDate, newDueDate = '' } = req.body;
-
-            if (!slpCode || !DueDate || !newDueDate) {
+            if (!DueDate) {
                 return res.status(400).send({
                     message: "Missing required fields: slpCode and/or DueDate and/or newDueDate"
                 });
@@ -614,17 +629,27 @@ class b1HANA {
             let invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
 
             if (invoice) {
-                invoice.SlpCode = slpCode;
-                invoice.newDueDate = newDueDate;
+                if (slpCode) {
+                    invoice.SlpCode = slpCode;
+                }
+
+                if (newDueDate) {
+                    const parsedDate = parseLocalDateString(newDueDate);
+                    invoice.newDueDate = parsedDate;
+                }
+
+
                 await invoice.save();
             } else {
+
                 invoice = await InvoiceModel.create({
                     DocEntry,
                     InstlmntID,
                     SlpCode: (slpCode || ''),
-                    newDueDate,
-                    DueDate
+                    newDueDate: newDueDate ? parseLocalDateString(newDueDate) : '',
+                    DueDate: parseLocalDateString(DueDate)
                 });
+
             }
 
             return res.status(200).send({

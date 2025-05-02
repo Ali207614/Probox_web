@@ -274,7 +274,6 @@ Sum(T1."PaidToDate") AS "TotalPaidToDate" FROM (
                 ${salesCondition}
             GROUP BY T0."DocEntry", T0."InstlmntID" ,T1."DocTotal", 
             T1."PaidToDate"
-
         )
         
         SELECT 
@@ -282,7 +281,7 @@ Sum(T1."PaidToDate") AS "TotalPaidToDate" FROM (
             (SELECT SUM("InsTotal") FROM base_data) AS "DocTotal",
             (SELECT SUM("InstallmentPaidToDate") FROM base_data) AS "TotalPaidToDate",
             NULL AS "SlpCode",
-            Max("Cellular") as "Cellular"
+            Max("Cellular") as "Cellular",
             MAX("CardCode") AS "CardCode",
             MAX("CardName") AS "CardName",
             MAX("Dscription") AS "Dscription",
