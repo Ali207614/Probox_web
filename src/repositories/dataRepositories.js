@@ -13,12 +13,22 @@ class DataRepositories {
 
 
 
-    getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone }) {
+    getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, search }) {
 
         let statusCondition = '';
         let businessPartnerCondition = '';
         let seriesCondition = ''
         let phoneCondition = ''
+
+        let searchCondition = '';
+        if (search) {
+            searchCondition = `
+            AND (
+                LOWER(TOSRI."IntrSerial") LIKE LOWER('%${search}%') OR
+                LOWER(T2."CardName") LIKE LOWER('%${search}%')
+            )
+            `;
+        }
 
         if (paymentStatus) {
             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
@@ -89,6 +99,7 @@ class DataRepositories {
                 ${businessPartnerCondition}
                 ${seriesCondition}
                 ${phoneCondition}
+                ${searchCondition}
             GROUP BY T0."DocEntry", T0."InstlmntID" ,T1."DocTotal", 
             T1."PaidToDate"
 
@@ -116,9 +127,9 @@ class DataRepositories {
             MAX("InsTotal") AS "InsTotal",
             STRING_AGG("IntrSerial", ', ') AS "IntrSerial"
         FROM base_data
-        GROUP BY "DocEntry", "InstlmntID" , "DueDate" ,"DocTotal", 
+        GROUP BY "DocEntry", "InstlmntID"  ,"DocTotal", 
         "PaidToDate"
-        ORDER BY "DueDate" ASC
+        ORDER BY "DueDate" ASC, "DocEntry" ASC, "InstlmntID" ASC
         LIMIT ${limit} OFFSET ${offset};
                 `;
     }
@@ -126,12 +137,23 @@ class DataRepositories {
 
 
 
-    getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices }) {
+    getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices, search }) {
         let statusCondition = '';
         let businessPartnerCondition = '';
         let seriesCondition = '';
         let phoneCondition = '';
         let salesCondition = '';
+
+
+        let searchCondition = '';
+        if (search) {
+            searchCondition = `
+            AND (
+                LOWER(TOSRI."IntrSerial") LIKE LOWER('%${search}%') OR
+                LOWER(T2."CardName") LIKE LOWER('%${search}%')
+            )
+            `;
+        }
 
         // 1. PAYMENT STATUS filter
         if (paymentStatus) {
@@ -183,58 +205,6 @@ class DataRepositories {
 
         const INVOICE_TYPE = 13;
 
-        // 6. COUNT QUERY
-        const count = `
-    SELECT COUNT(*) FROM (
-        SELECT 
-            T0."DocEntry", 
-            T0."InstlmntID"
-        FROM ${this.db}.INV6 T0
-        INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-        INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
-        INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
-        LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
-            AND TSRI1."BaseType" = ${INVOICE_TYPE}
-            AND TSRI1."BaseLinNum" = T3."LineNum"
-        LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
-            AND TOSRI."ItemCode" = TSRI1."ItemCode"
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-        AND T1."CANCELED" = 'N'
-        ${statusCondition}
-        ${businessPartnerCondition}
-        ${seriesCondition}
-        ${phoneCondition}
-        ${salesCondition}
-        GROUP BY T0."DocEntry", T0."InstlmntID"
-    ) AS count_query
-`;
-
-        const pay = `
-SELECT   Sum(T1."DocTotal") AS "DocTotal", 
-Sum(T1."PaidToDate") AS "TotalPaidToDate" FROM (
-    SELECT 
-    T1."DocTotal", 
-    T1."PaidToDate"
-    FROM ${this.db}.INV6 T0
-    INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-    INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
-    INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
-    LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
-        AND TSRI1."BaseType" = ${INVOICE_TYPE}
-        AND TSRI1."BaseLinNum" = T3."LineNum"
-    LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
-        AND TOSRI."ItemCode" = TSRI1."ItemCode"
-    WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-    AND T1."CANCELED" = 'N'
-    ${statusCondition}
-    ${businessPartnerCondition}
-    ${seriesCondition}
-    ${phoneCondition}
-    ${salesCondition}
-    GROUP BY T0."DocEntry", T0."InstlmntID"
-) AS count_query
-`;
-
 
         return `
         WITH base_data AS (
@@ -272,6 +242,7 @@ Sum(T1."PaidToDate") AS "TotalPaidToDate" FROM (
                 ${seriesCondition}
                 ${phoneCondition}
                 ${salesCondition}
+                ${searchCondition}
             GROUP BY T0."DocEntry", T0."InstlmntID" ,T1."DocTotal", 
             T1."PaidToDate"
         )
@@ -298,9 +269,9 @@ Sum(T1."PaidToDate") AS "TotalPaidToDate" FROM (
             MAX("InsTotal") AS "InsTotal",
             STRING_AGG("IntrSerial", ', ') AS "IntrSerial"
         FROM base_data
-        GROUP BY "DocEntry", "InstlmntID" , "DueDate" ,"DocTotal", 
+        GROUP BY "DocEntry", "InstlmntID" ,"DocTotal", 
         "PaidToDate"
-        ORDER BY "DueDate" ASC
+        ORDER BY "DueDate" ASC, "DocEntry" ASC, "InstlmntID" ASC
         LIMIT ${limit} OFFSET ${offset};
                 `;
     }
@@ -549,7 +520,7 @@ Sum(T1."PaidToDate") AS "TotalPaidToDate" FROM (
       LEFT JOIN 
           ${this.db}.OACT T3 ON T3."AcctCode" = COALESCE(T1."CashAcct", T1."CheckAcct") 
       WHERE 
-       T2."DocEntry" = '${docEntry}' and T1."Canceled" = 'N'
+       T2."DocEntry" = '${docEntry}' 
       ORDER BY 
           T2."InstlmntID" ASC`
         return sql

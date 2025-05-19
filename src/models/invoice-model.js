@@ -19,4 +19,7 @@ const InvoiceSchema = new Schema(
     }
 );
 
+// 👉 Bu yerda indexni qo‘shamiz
+InvoiceSchema.index({ SlpCode: 1, DueDate: 1 });
+
 module.exports = model('Invoice', InvoiceSchema);

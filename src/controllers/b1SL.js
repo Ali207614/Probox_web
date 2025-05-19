@@ -6,7 +6,6 @@ let dbService = require('../services/dbService')
 const moment = require('moment');
 const { getSession, saveSession } = require("../helpers");
 const { api_params, api } = require("../config");
-const b1HANA = require("./b1HANA");
 
 require('dotenv').config();
 
@@ -70,6 +69,47 @@ class b1SL {
                     return res.status(get(err, 'response.status', 400) || 400).json({ status: false, message: token.message })
                 } else {
                     return res.status(get(err, 'response.status', 400) || 400).json({ status: false, message: get(err, 'response.data.error.message.value') })
+                }
+            });
+    }
+
+    updateBusinessPartner = async ({ Phone1, Phone2, CardCode }) => {
+
+        let body = {}
+
+        if (Phone1) {
+            body = { Phone1 }
+        }
+
+        if (Phone2) {
+            body = { ...body, Phone1 }
+        }
+
+        const axios = Axios.create({
+            baseURL: `${this.api}`,
+            timeout: 30000,
+            headers: {
+                'Cookie': get(getSession(), 'Cookie[0]', '') + get(getSession(), 'Cookie[1]', ''),
+                'SessionId': get(getSession(), 'SessionId', '')
+            },
+            httpsAgent: new https.Agent({
+                rejectUnauthorized: false,
+            }),
+        });
+        return axios
+            .patch(`/BusinessPartners('${CardCode}')`, body)
+            .then(async ({ data }) => {
+                return data
+            })
+            .catch(async (err) => {
+                if (get(err, 'response.status') == 401) {
+                    let token = await this.auth()
+                    if (token.status) {
+                        return await this.updateBusinessPartner({ Phone1, Phone2, CardCode })
+                    }
+                    return { status: false, message: token.message }
+                } else {
+                    return { status: false, message: get(err, 'response.data.error.message.value') }
                 }
             });
     }

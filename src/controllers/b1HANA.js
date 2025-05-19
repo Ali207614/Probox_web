@@ -8,6 +8,7 @@ const DataRepositories = require("../repositories/dataRepositories");
 const ApiError = require("../exceptions/api-error");
 const InvoiceModel = require("../models/invoice-model");
 const CommentModel = require("../models/comment-model")
+const b1Sl = require('./b1SL')
 const { convertToISOFormat, shuffleArray, checkFileType, parseLocalDateString } = require("../helpers");
 const moment = require('moment')
 require('dotenv').config();
@@ -58,10 +59,10 @@ class b1HANA {
 
     invoice = async (req, res, next) => {
         try {
-            let { startDate, endDate, page = 1, limit = 20, slpCode, paymentStatus, cardCode, serial, phone } = req.query
+            let { startDate, endDate, page = 1, limit = 20, slpCode, paymentStatus, cardCode, serial, phone, search } = req.query
 
-            page = parseInt(page, 10);
-            limit = parseInt(limit, 10);
+            page = Number(page);
+            limit = Number(limit);
 
             const skip = (page - 1) * limit;
 
@@ -79,33 +80,64 @@ class b1HANA {
                 endDate = moment(now).endOf('month').format('YYYY.MM.DD');
             }
 
-            if (Number(slpCode)) {
+            const slpCodeRaw = req.query.slpCode; // "1,4,5"
+            const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
 
+            if (Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
                 const filter = {
-                    SlpCode: slpCode,
+                    SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: parseLocalDateString(startDate),
-                        $lte: parseLocalDateString(endDate),
+                        $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment(endDate, 'YYYY.MM.DD').add(1, 'days').endOf('day').toDate(),
                     }
                 };
 
-                const invoicesModel = await InvoiceModel.find(filter)
+                const invoicesModel = await InvoiceModel.find(filter,
+                    { DocEntry: 1, InstlmntID: 1, SlpCode: 1, images: 1, newDueDate: 1, CardCode: 1 }
+                ).sort({ DueDate: 1 })
+                    .hint({ SlpCode: 1, DueDate: 1 }).lean()
 
-                if (invoicesModel.length == 0) {
+                if (invoicesModel.length === 0) {
                     return res.status(200).json({
                         total: 0,
                         page,
                         limit,
-                        totalPages: Math.ceil(0 / limit),
+                        totalPages: 0,
                         data: []
                     });
                 }
 
-                const query = await DataRepositories.getDistributionInvoice({ startDate, endDate, limit, offset: skip, paymentStatus, cardCode, serial, phone, invoices: invoicesModel });
+                const query = await DataRepositories.getDistributionInvoice({
+                    startDate,
+                    endDate,
+                    limit,
+                    offset: skip,
+                    paymentStatus,
+                    cardCode,
+                    serial,
+                    phone,
+                    invoices: invoicesModel,
+                    search
+                });
+
                 let invoices = await this.execute(query);
+                let total = get(invoices, '[0].TOTAL', 0) || 0;
 
+                const commentFilter = invoices.map(el => ({
+                    DocEntry: el.DocEntry,
+                    InstlmntID: el.InstlmntID
+                }));
 
-                let total = get(invoices, '[0].TOTAL', 0) || 0
+                const comments = await CommentModel.find({
+                    $or: commentFilter
+                }).sort({ created_at: 1 });
+
+                const commentMap = {};
+                comments.forEach(c => {
+                    const key = `${c.DocEntry}_${c.InstlmntID}`;
+                    if (!commentMap[key]) commentMap[key] = [];
+                    commentMap[key].push(c);
+                });
 
                 return res.status(200).json({
                     total,
@@ -113,20 +145,39 @@ class b1HANA {
                     limit,
                     totalPages: Math.ceil(total / limit),
                     data: invoices.map(el => {
-                        let inv = invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)
+                        const key = `${el.DocEntry}_${el.InstlmntID}`;
+                        const inv = invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID);
                         return {
                             ...el,
-                            SlpCode: slpCode,
+                            SlpCode: inv?.SlpCode || null,
                             Images: inv?.images || [],
-                            NewDueDate: inv?.newDueDate || ''
-                        }
+                            NewDueDate: inv?.newDueDate || '',
+                            Comments: commentMap[key] || []
+                        };
                     })
                 });
             }
 
-            const query = await DataRepositories.getInvoice({ startDate, endDate, limit, offset: skip, paymentStatus, cardCode, serial, phone });
+            const query = await DataRepositories.getInvoice({ startDate, endDate, limit, offset: skip, paymentStatus, cardCode, serial, phone, search });
             let invoices = await this.execute(query);
 
+            const commentFilter = invoices.map(el => ({
+                DocEntry: el.DocEntry,
+                InstlmntID: el.InstlmntID
+            }));
+
+            // $or orqali barcha kerakli commentlarni olib kelamiz
+            const comments = await CommentModel.find({
+                $or: commentFilter
+            }).sort({ created_at: 1 });
+
+            // commentlarni qulay qidirish uchun guruhlab olamiz
+            const commentMap = {};
+            comments.forEach(c => {
+                const key = `${c.DocEntry}_${c.InstlmntID}`;
+                if (!commentMap[key]) commentMap[key] = [];
+                commentMap[key].push(c);
+            });
             const invoicesModel = await InvoiceModel.find({
                 DocEntry: {
                     $in: [...new Set(invoices.map(el => el.DocEntry))],
@@ -142,16 +193,21 @@ class b1HANA {
                 totalPages: Math.ceil(total / limit),
                 data: invoices.map(el => {
                     let inv = invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)
+
+                    const key = `${el.DocEntry}_${el.InstlmntID}`;
+
                     return {
                         ...el,
                         SlpCode: inv?.SlpCode || null,
                         Images: inv?.images || [],
-                        NewDueDate: inv?.newDueDate || ''
+                        NewDueDate: inv?.newDueDate || '',
+                        Comments: commentMap[key] || []
                     }
                 })
             });
         }
         catch (e) {
+            console.log(e, ' bu e')
             next(e)
         }
     };
@@ -180,16 +236,22 @@ class b1HANA {
                 endDate = moment(now).endOf('month').format('YYYY.MM.DD');
             }
 
-            if (Number(slpCode)) {
+            const slpCodeRaw = req.query.slpCode; // "1,4,5"
+            const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
 
-                const invoicesModel = await InvoiceModel.find({
-                    SlpCode: slpCode,
+            if (Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
+                const filter = {
+                    SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: parseLocalDateString(startDate),
-                        $lte: parseLocalDateString(endDate),
+                        $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment(endDate, 'YYYY.MM.DD').add(1, 'days').endOf('day').toDate(),
                     }
-                });
+                };
 
+                const invoicesModel = await InvoiceModel.find(filter,
+                    { DocEntry: 1, InstlmntID: 1, SlpCode: 1, images: 1, newDueDate: 1, CardCode: 1 }
+                ).sort({ DueDate: 1 })
+                    .hint({ SlpCode: 1, DueDate: 1 }).lean()
 
                 if (invoicesModel.length == 0) {
                     return res.status(200).json({
@@ -237,7 +299,10 @@ class b1HANA {
                 limit,
                 totalPages: Math.ceil(total / limit),
                 data: invoices.map(el => {
-                    return { ...el, SlpCode: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.SlpCode || null }
+                    return {
+                        ...el,
+                        SlpCode: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.SlpCode || null
+                    }
                 })
             });
 
@@ -337,12 +402,13 @@ class b1HANA {
             let InstIdList = [...new Set(data.map(el => el.InstlmntID))]
             let result = InstIdList.map(el => {
                 let list = data.filter(item => item.InstlmntID == el)
+
                 return {
                     DueDate: get(list, `[0].DueDate`, 0),
                     InstlmntID: el,
-                    PaidToDate: list?.length ? list.reduce((a, b) => a + Number(b?.SumApplied || 0), 0) : 0,
+                    PaidToDate: list?.length ? list.filter(item => (item.Canceled === null || item.Canceled === 'N')).reduce((a, b) => a + Number(b?.SumApplied || 0), 0) : 0,
                     InsTotal: get(list, `[0].InsTotal`, 0),
-                    PaysList: list.map(item => ({
+                    PaysList: list.filter(i => i.DocDate && (i.Canceled === null || i.Canceled === 'N')).map(item => ({
                         SumApplied: item.SumApplied,
                         AcctName: item.AcctName,
                         DocDate: item.DocDate,
@@ -377,17 +443,23 @@ class b1HANA {
                 endDate = moment(now).endOf('month').format('YYYY.MM.DD');
             }
 
-            if (Number(slpCode)) {
+            const slpCodeRaw = req.query.slpCode; // "1,4,5"
+            const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
 
+            if (Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
                 const filter = {
-                    SlpCode: slpCode,
+                    SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: parseLocalDateString(startDate),
-                        $lte: parseLocalDateString(endDate),
+                        $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment(endDate, 'YYYY.MM.DD').add(1, 'days').endOf('day').toDate(),
                     }
                 };
 
-                const invoicesModel = await InvoiceModel.find(filter)
+                const invoicesModel = await InvoiceModel.find(filter,
+                    { DocEntry: 1, InstlmntID: 1, SlpCode: 1, images: 1, newDueDate: 1, CardCode: 1 }
+                ).sort({ DueDate: 1 })
+                    .hint({ SlpCode: 1, DueDate: 1 }).lean()
+
                 if (invoicesModel.length == 0) {
                     return res.status(200).json({
                         SumApplied: 0,
@@ -468,7 +540,6 @@ class b1HANA {
 
             const filter = {};
             if (DocEntry) filter.DocEntry = DocEntry;
-            if (InstlmntID) filter.InstlmntID = Number(InstlmntID);
 
             const comments = await CommentModel.find(filter).sort({ created_at: 1 });
 
@@ -619,7 +690,7 @@ class b1HANA {
     updateExecutor = async (req, res, next) => {
         try {
             const { DocEntry, InstlmntID } = req.params;
-            const { slpCode, DueDate, newDueDate = '' } = req.body;
+            const { slpCode, DueDate, newDueDate = '', Phone1, Phone2, CardCode = '' } = req.body;
             if (!DueDate) {
                 return res.status(400).send({
                     message: "Missing required fields: slpCode and/or DueDate and/or newDueDate"
@@ -638,10 +709,8 @@ class b1HANA {
                     invoice.newDueDate = parsedDate;
                 }
 
-
                 await invoice.save();
             } else {
-
                 invoice = await InvoiceModel.create({
                     DocEntry,
                     InstlmntID,
@@ -649,8 +718,22 @@ class b1HANA {
                     newDueDate: newDueDate ? parseLocalDateString(newDueDate) : '',
                     DueDate: parseLocalDateString(DueDate)
                 });
-
             }
+
+            if (CardCode && (Phone1 || Phone2)) {
+                let data = await b1Sl.updateBusinessPartner({ Phone1, Phone2, CardCode })
+                if (data) {
+                    return res.status(200).send({
+                        message: invoice ? "Invoice updated successfully." : "Invoice created successfully.",
+                        Phone1,
+                        Phone2,
+                        CardCode,
+                        DueDate,
+                        newDueDate
+                    });
+                }
+            }
+
 
             return res.status(200).send({
                 message: invoice ? "Invoice updated successfully." : "Invoice created successfully.",
