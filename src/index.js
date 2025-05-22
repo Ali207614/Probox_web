@@ -12,10 +12,12 @@ const { PORT, DB_URL, CLIENT_URL, conn_params } = require('./config')
 const app = express()
 
 
-app.use(cors({
-    credentials: true,
-    origin: [CLIENT_URL, 'http://localhost:3000', "http://localhost:5646", "http://83.69.136.98:5646"]
-}));
+// app.use(cors({
+//     credentials: true,
+//     origin: [CLIENT_URL, 'http://localhost:3000', "http://localhost:5646", "http://83.69.136.98:5646"]
+// }));
+
+app.use(cors());
 
 app.use(cookieParser());
 app.use(express.json());

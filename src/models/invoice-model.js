@@ -12,6 +12,8 @@ const InvoiceSchema = new Schema(
         newDueDate: { type: Date, required: false },
         IntrSerial: { type: String, required: false },
         InstlmntID: { type: Number, required: false },
+        InsTotal: { type: Number, required: false },
+        phoneConfiscated: { type: Boolean, default: false },
         images: [Schema.Types.Mixed],
     },
     {

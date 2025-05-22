@@ -10,6 +10,7 @@ router.get('/', authMiddleware, b1HANA.invoice);
 router.get('/report', authMiddleware, b1HANA.getAnalytics)
 router.get('/:id', authMiddleware, b1HANA.getPayList);
 router.put('/executor/:DocEntry/:InstlmntID', authMiddleware, b1HANA.updateExecutor);
+router.put('/confiscating/:DocEntry/:InstlmntID', authMiddleware, b1HANA.confiscating);
 
 router.get('/comments/:DocEntry/:InstlmntID', authMiddleware, b1HANA.getComments);
 router.post('/comments/:DocEntry/:InstlmntID', authMiddleware, b1HANA.createComment);

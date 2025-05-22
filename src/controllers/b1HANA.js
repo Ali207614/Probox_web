@@ -10,7 +10,7 @@ const InvoiceModel = require("../models/invoice-model");
 const CommentModel = require("../models/comment-model")
 const b1Sl = require('./b1SL')
 const { convertToISOFormat, shuffleArray, checkFileType, parseLocalDateString } = require("../helpers");
-const moment = require('moment')
+const moment = require('moment-timezone')
 require('dotenv').config();
 
 
@@ -27,6 +27,7 @@ class b1HANA {
     login = async (req, res, next) => {
         try {
             const { login, password } = req.body;
+
             if (!login || !password) {
                 return next(ApiError.BadRequest('Некорректный login или password'));
             }
@@ -59,52 +60,70 @@ class b1HANA {
 
     invoice = async (req, res, next) => {
         try {
-            let { startDate, endDate, page = 1, limit = 20, slpCode, paymentStatus, cardCode, serial, phone, search } = req.query
+            let {
+                startDate,
+                endDate,
+                page = 1,
+                limit = 20,
+                slpCode,
+                paymentStatus,
+                cardCode,
+                serial,
+                phone,
+                search,
+                phoneConfiscated
+            } = req.query;
 
             page = Number(page);
             limit = Number(limit);
-
             const skip = (page - 1) * limit;
 
             if (!startDate || !endDate) {
-                return res.status(404).json({ error: 'startDate and endDate are required' });
+                return res.status(400).json({ error: 'startDate and endDate are required' });
             }
 
             const now = moment();
-
             if (!moment(startDate, 'YYYY.MM.DD', true).isValid()) {
                 startDate = moment(now).startOf('month').format('YYYY.MM.DD');
             }
-
             if (!moment(endDate, 'YYYY.MM.DD', true).isValid()) {
                 endDate = moment(now).endOf('month').format('YYYY.MM.DD');
             }
 
-            const slpCodeRaw = req.query.slpCode; // "1,4,5"
+            if (search) {
+                search = search.replace(/'/g, '');
+            }
+
+            const slpCodeRaw = req.query.slpCode;
             const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
 
-            if (Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
-                const filter = {
+            let invoicesModel = [];
+
+            if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
+                let filter = {
                     SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                        $lte: moment(endDate, 'YYYY.MM.DD').add(1, 'days').endOf('day').toDate(),
+                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
                     }
                 };
 
-                const invoicesModel = await InvoiceModel.find(filter,
-                    { DocEntry: 1, InstlmntID: 1, SlpCode: 1, images: 1, newDueDate: 1, CardCode: 1 }
-                ).sort({ DueDate: 1 })
-                    .hint({ SlpCode: 1, DueDate: 1 }).lean()
+                if (['true'].includes(phoneConfiscated)) {
+                    filter.phoneConfiscated = phoneConfiscated === 'true';
+                }
+
+                invoicesModel = await InvoiceModel.find(filter, {
+                    phoneConfiscated: 1,
+                    DocEntry: 1,
+                    InstlmntID: 1,
+                    SlpCode: 1,
+                    images: 1,
+                    newDueDate: 1,
+                    CardCode: 1
+                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
 
                 if (invoicesModel.length === 0) {
-                    return res.status(200).json({
-                        total: 0,
-                        page,
-                        limit,
-                        totalPages: 0,
-                        data: []
-                    });
+                    return res.status(200).json({ total: 0, page, limit, totalPages: 0, data: [] });
                 }
 
                 const query = await DataRepositories.getDistributionInvoice({
@@ -120,23 +139,40 @@ class b1HANA {
                     search
                 });
 
-                let invoices = await this.execute(query);
-                let total = get(invoices, '[0].TOTAL', 0) || 0;
+                const invoices = await this.execute(query);
+                const total = get(invoices, '[0].TOTAL', 0) || 0;
+
+                // Map invoiceModel for fast lookup
+                const invoiceMap = new Map();
+                for (const inv of invoicesModel) {
+                    invoiceMap.set(`${inv.DocEntry}_${inv.InstlmntID}`, inv);
+                }
 
                 const commentFilter = invoices.map(el => ({
                     DocEntry: el.DocEntry,
                     InstlmntID: el.InstlmntID
                 }));
 
-                const comments = await CommentModel.find({
-                    $or: commentFilter
-                }).sort({ created_at: 1 });
+                const comments = await CommentModel.find({ $or: commentFilter }).sort({ created_at: 1 });
 
                 const commentMap = {};
-                comments.forEach(c => {
+                for (const c of comments) {
                     const key = `${c.DocEntry}_${c.InstlmntID}`;
                     if (!commentMap[key]) commentMap[key] = [];
                     commentMap[key].push(c);
+                }
+
+                const data = invoices.map(el => {
+                    const key = `${el.DocEntry}_${el.InstlmntID}`;
+                    const inv = invoiceMap.get(key);
+                    return {
+                        ...el,
+                        SlpCode: inv?.SlpCode || null,
+                        Images: inv?.images || [],
+                        NewDueDate: inv?.newDueDate || '',
+                        Comments: commentMap[key] || [],
+                        phoneConfiscated: inv?.phoneConfiscated || false
+                    };
                 });
 
                 return res.status(200).json({
@@ -144,90 +180,140 @@ class b1HANA {
                     page,
                     limit,
                     totalPages: Math.ceil(total / limit),
-                    data: invoices.map(el => {
-                        const key = `${el.DocEntry}_${el.InstlmntID}`;
-                        const inv = invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID);
-                        return {
-                            ...el,
-                            SlpCode: inv?.SlpCode || null,
-                            Images: inv?.images || [],
-                            NewDueDate: inv?.newDueDate || '',
-                            Comments: commentMap[key] || []
-                        };
-                    })
+                    data
                 });
             }
 
-            const query = await DataRepositories.getInvoice({ startDate, endDate, limit, offset: skip, paymentStatus, cardCode, serial, phone, search });
-            let invoices = await this.execute(query);
+            // slpCode bo'lmagan holat
+            let baseFilter = {
+                DueDate: {
+                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                }
+            };
+            let invoiceConfiscated = [];
+
+            if (phoneConfiscated === 'true') {
+                baseFilter.phoneConfiscated = phoneConfiscated === 'true';
+                invoiceConfiscated = await InvoiceModel.find(baseFilter, {
+                    phoneConfiscated: 1,
+                    DocEntry: 1,
+                    InstlmntID: 1,
+                    SlpCode: 1,
+                    images: 1,
+                    newDueDate: 1,
+                    CardCode: 1
+                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+                if (invoiceConfiscated.length == 0) {
+                    return res.status(200).json({
+                        total: 0,
+                        page: 0,
+                        limit: 0,
+                        totalPages: 0,
+                        data: []
+                    });
+                }
+            }
+            let inInv = []
+            if (phoneConfiscated === 'true') {
+                inInv = invoiceConfiscated
+            }
+
+            const query = await DataRepositories.getInvoice({
+                startDate,
+                endDate,
+                limit,
+                offset: skip,
+                paymentStatus,
+                cardCode,
+                serial,
+                phone,
+                search,
+                inInv,
+                phoneConfiscated
+            });
+
+            const invoices = await this.execute(query);
+            const total = get(invoices, '[0].TOTAL', 0) || 0;
 
             const commentFilter = invoices.map(el => ({
                 DocEntry: el.DocEntry,
                 InstlmntID: el.InstlmntID
             }));
 
-            // $or orqali barcha kerakli commentlarni olib kelamiz
-            const comments = await CommentModel.find({
-                $or: commentFilter
-            }).sort({ created_at: 1 });
+            const comments = await CommentModel.find({ $or: commentFilter }).sort({ created_at: 1 });
 
-            // commentlarni qulay qidirish uchun guruhlab olamiz
             const commentMap = {};
-            comments.forEach(c => {
+            for (const c of comments) {
                 const key = `${c.DocEntry}_${c.InstlmntID}`;
                 if (!commentMap[key]) commentMap[key] = [];
                 commentMap[key].push(c);
-            });
-            const invoicesModel = await InvoiceModel.find({
-                DocEntry: {
-                    $in: [...new Set(invoices.map(el => el.DocEntry))],
-                }
+            }
+
+            const docEntrySet = [...new Set(invoices.map(el => el.DocEntry))];
+            invoicesModel = await InvoiceModel.find({
+                DocEntry: { $in: docEntrySet }
             });
 
-            let total = get(invoices, '[0].TOTAL', 0) || 0
+            const invoiceMap = new Map();
+            for (const inv of invoicesModel) {
+                invoiceMap.set(`${inv.DocEntry}_${inv.InstlmntID}`, inv);
+            }
+
+            const data = invoices.map(el => {
+                const key = `${el.DocEntry}_${el.InstlmntID}`;
+                const inv = invoiceMap.get(key);
+                return {
+                    ...el,
+                    SlpCode: inv?.SlpCode || null,
+                    Images: inv?.images || [],
+                    NewDueDate: inv?.newDueDate || '',
+                    Comments: commentMap[key] || [],
+                    phoneConfiscated: inv?.phoneConfiscated || false
+                };
+            });
 
             return res.status(200).json({
                 total,
                 page,
                 limit,
                 totalPages: Math.ceil(total / limit),
-                data: invoices.map(el => {
-                    let inv = invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)
-
-                    const key = `${el.DocEntry}_${el.InstlmntID}`;
-
-                    return {
-                        ...el,
-                        SlpCode: inv?.SlpCode || null,
-                        Images: inv?.images || [],
-                        NewDueDate: inv?.newDueDate || '',
-                        Comments: commentMap[key] || []
-                    }
-                })
+                data
             });
-        }
-        catch (e) {
-            console.log(e, ' bu e')
-            next(e)
+
+        } catch (e) {
+            next(e);
         }
     };
 
+
     search = async (req, res, next) => {
         try {
-            let { startDate, endDate, page = 1, limit = 50, slpCode, paymentStatus, search, phone } = req.query
-            search = search.replace(/'/g, '');
+            let {
+                startDate,
+                endDate,
+                page = 1,
+                limit = 50,
+                slpCode,
+                paymentStatus,
+                search,
+                phone,
+                phoneConfiscated
+            } = req.query;
+
+            if (search) {
+                search = search.replace(/'/g, '');
+            }
+
             page = parseInt(page, 10);
             limit = parseInt(limit, 10);
-
             const skip = (page - 1) * limit;
 
-
             if (!startDate || !endDate) {
-                return res.status(404).json({ error: 'startDate and endDate are required' });
+                return res.status(400).json({ error: 'startDate and endDate are required' });
             }
 
             const now = moment();
-
             if (!moment(startDate, 'YYYY.MM.DD', true).isValid()) {
                 startDate = moment(now).startOf('month').format('YYYY.MM.DD');
             }
@@ -236,78 +322,135 @@ class b1HANA {
                 endDate = moment(now).endOf('month').format('YYYY.MM.DD');
             }
 
-            const slpCodeRaw = req.query.slpCode; // "1,4,5"
+            const slpCodeRaw = req.query.slpCode;
             const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
 
-            if (Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
-                const filter = {
+            // 📦 BIRINCHI CASE: slpCode mavjud bo‘lsa
+            if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
+                let filter = {
                     SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                        $lte: moment(endDate, 'YYYY.MM.DD').add(1, 'days').endOf('day').toDate(),
+                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate(),
                     }
                 };
 
-                const invoicesModel = await InvoiceModel.find(filter,
-                    { DocEntry: 1, InstlmntID: 1, SlpCode: 1, images: 1, newDueDate: 1, CardCode: 1 }
-                ).sort({ DueDate: 1 })
-                    .hint({ SlpCode: 1, DueDate: 1 }).lean()
+                if (['true'].includes(phoneConfiscated)) {
+                    filter.phoneConfiscated = phoneConfiscated === 'true';
+                }
 
-                if (invoicesModel.length == 0) {
+                const invoicesModel = await InvoiceModel.find(filter, {
+                    DocEntry: 1, InstlmntID: 1, SlpCode: 1, images: 1, newDueDate: 1, CardCode: 1
+                })
+                    .sort({ DueDate: 1 })
+                    .hint({ SlpCode: 1, DueDate: 1 })
+                    .lean();
+
+                if (invoicesModel.length === 0) {
                     return res.status(200).json({
                         total: 0,
                         page,
                         limit,
-                        totalPages: Math.ceil(0 / limit),
+                        totalPages: 0,
                         data: []
                     });
                 }
 
-                const query = await DataRepositories.getInvoiceSearchBPorSeriaDistribution({ startDate, endDate, limit, offset: skip, paymentStatus, search, phone, invoices: invoicesModel });
+                const query = await DataRepositories.getInvoiceSearchBPorSeriaDistribution({
+                    startDate,
+                    endDate,
+                    limit,
+                    offset: skip,
+                    paymentStatus,
+                    search,
+                    phone,
+                    invoices: invoicesModel
+                });
 
-                let invoices = await this.execute(query);
-                let total = get(invoices, '[0].TOTAL', 0) || 0
+                const invoices = await this.execute(query);
+                const total = get(invoices, '[0].TOTAL', 0) || 0;
 
                 return res.status(200).json({
                     total,
                     page,
                     limit,
                     totalPages: Math.ceil(total / limit),
-                    data: invoices.map(el => {
-                        return { ...el, SlpCode: slpCode }
-                    })
+                    data: invoices
                 });
             }
-
-
-
-            const query = await DataRepositories.getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset: skip, paymentStatus, search, phone });
-
-            let invoices = await this.execute(query);
-
-            const invoicesModel = await InvoiceModel.find({
-                DocEntry: {
-                    $in: [...new Set(invoices.map(el => el.DocEntry))],
+            let baseFilter = {
+                DueDate: {
+                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
                 }
+            };
+            let invoiceConfiscated = [];
+
+            if (phoneConfiscated === 'true') {
+                baseFilter.phoneConfiscated = phoneConfiscated === 'true';
+                invoiceConfiscated = await InvoiceModel.find(baseFilter, {
+                    phoneConfiscated: 1,
+                    DocEntry: 1,
+                    InstlmntID: 1,
+                    SlpCode: 1,
+                    images: 1,
+                    newDueDate: 1,
+                    CardCode: 1
+                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+
+                if (invoiceConfiscated.length == 0) {
+                    return res.status(200).json({
+                        total: 0,
+                        page: 0,
+                        limit: 0,
+                        totalPages: 0,
+                        data: []
+                    });
+                }
+            }
+            let inInv = []
+            if (phoneConfiscated === 'true') {
+                inInv = invoiceConfiscated
+            }
+            const query = await DataRepositories.getInvoiceSearchBPorSeria({
+                startDate,
+                endDate,
+                limit,
+                offset: skip,
+                paymentStatus,
+                search,
+                phone,
+                inInv,
+                phoneConfiscated
             });
 
-            let total = get(invoices, '[0].TOTAL', 0) || 0
+            const invoices = await this.execute(query);
+
+            const docEntrySet = [...new Set(invoices.map(el => el.DocEntry))];
+            const invoicesModel = await InvoiceModel.find({
+                DocEntry: { $in: docEntrySet }
+            });
+
+            const slpCodeMap = new Map();
+            for (const item of invoicesModel) {
+                slpCodeMap.set(`${item.DocEntry}_${item.InstlmntID}`, item.SlpCode);
+            }
+
+            const total = get(invoices, '[0].TOTAL', 0) || 0;
 
             return res.status(200).json({
                 total,
                 page,
                 limit,
                 totalPages: Math.ceil(total / limit),
-                data: invoices.map(el => {
-                    return {
-                        ...el,
-                        SlpCode: invoicesModel.find(item => item.DocEntry == el.DocEntry && item.InstlmntID == el.InstlmntID)?.SlpCode || null
-                    }
-                })
+                data: invoices.map(el => ({
+                    ...el,
+                    SlpCode: slpCodeMap.get(`${el.DocEntry}_${el.InstlmntID}`) || null
+                }))
             });
 
         } catch (e) {
-            next(e)
+            next(e);
         }
     };
 
@@ -392,7 +535,6 @@ class b1HANA {
         return res.status(200).json(data[0] || {})
     }
 
-
     getPayList = async (req, res, next) => {
         try {
             const { id } = req.params
@@ -427,7 +569,8 @@ class b1HANA {
 
     getAnalytics = async (req, res, next) => {
         try {
-            let { startDate, endDate, slpCode } = req.query
+
+            let { startDate, endDate, slpCode, phoneConfiscated } = req.query
 
             if (!startDate || !endDate) {
                 return res.status(404).json({ error: 'startDate and endDate are required' });
@@ -445,59 +588,109 @@ class b1HANA {
 
             const slpCodeRaw = req.query.slpCode; // "1,4,5"
             const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
-
-            if (Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
-                const filter = {
+            const tz = 'Asia/Tashkent'
+            if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
+                let filter = {
                     SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                        $lte: moment(endDate, 'YYYY.MM.DD').add(1, 'days').endOf('day').toDate(),
+                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate(),
                     }
                 };
 
-                const invoicesModel = await InvoiceModel.find(filter,
-                    { DocEntry: 1, InstlmntID: 1, SlpCode: 1, images: 1, newDueDate: 1, CardCode: 1 }
-                ).sort({ DueDate: 1 })
-                    .hint({ SlpCode: 1, DueDate: 1 }).lean()
-
-                if (invoicesModel.length == 0) {
+                let invoicesModel = await InvoiceModel.find(filter, {
+                    phoneConfiscated: 1,
+                    DocEntry: 1,
+                    InstlmntID: 1,
+                    SlpCode: 1,
+                    images: 1,
+                    newDueDate: 1,
+                    CardCode: 1,
+                    InsTotal: 1
+                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+                if (invoicesModel.length === 0) {
                     return res.status(200).json({
                         SumApplied: 0,
                         InsTotal: 0,
                         PaidToDate: 0
                     });
                 }
+                let phoneConfisList = invoicesModel.filter(item => !item?.phoneConfiscated)
+                let confiscatedTotal = invoicesModel.filter(item => item?.phoneConfiscated)?.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) || 0
 
-                const query = await DataRepositories.getAnalytics({ startDate, endDate, invoices: invoicesModel });
+                if (phoneConfisList.length === 0) {
+                    let obj = {
+                        SumApplied: confiscatedTotal,
+                        InsTotal: confiscatedTotal,
+                        PaidToDate: confiscatedTotal
+                    };
+                    return res.status(200).json(obj);
+                }
+
+                const query = await DataRepositories.getAnalytics({
+                    startDate,
+                    endDate,
+                    invoices: phoneConfisList,
+                    phoneConfiscated: 'false'
+                });
                 let data = await this.execute(query);
-
-
-
-                return res.status(200).json(data.length ? data[0] :
-                    {
-                        SumApplied: 0,
-                        InsTotal: 0,
-                        PaidToDate: 0
-                    }
-                )
-            }
-
-            const query = await DataRepositories.getAnalytics({ startDate, endDate })
-            let data = await this.execute(query)
-
-            return res.status(200).json(data.length ? data[0] :
-                {
+                const result = data.length ? data[0] : {
                     SumApplied: 0,
                     InsTotal: 0,
                     PaidToDate: 0
+                };
+                result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
+                result.InsTotal = Number(result.InsTotal) + confiscatedTotal;
+                result.PaidToDate = Number(result.PaidToDate) + confiscatedTotal;
+
+                return res.status(200).json(result);
+            }
+
+            let baseFilter = {
+                DueDate: {
+                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
                 }
-            )
+            };
+            let invoiceConfiscated = [];
+
+            baseFilter.phoneConfiscated = true;
+            invoiceConfiscated = await InvoiceModel.find(baseFilter, {
+                phoneConfiscated: 1,
+                DocEntry: 1,
+                InstlmntID: 1,
+                SlpCode: 1,
+                images: 1,
+                newDueDate: 1,
+                CardCode: 1,
+                InsTotal: 1
+            }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+
+
+            let confiscatedTotal = invoiceConfiscated.length ? invoiceConfiscated.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) : 0
+
+            const query = await DataRepositories.getAnalytics({ startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
+            let data = await this.execute(query)
+            let result = data.length ? {
+                SumApplied: Number(data[0].SumApplied ?? 0),
+                InsTotal: Number(data[0].InsTotal ?? 0),
+                PaidToDate: Number(data[0].PaidToDate ?? 0),
+            } : {
+                SumApplied: 0,
+                InsTotal: 0,
+                PaidToDate: 0
+            };
+
+            result.SumApplied += confiscatedTotal;
+            result.InsTotal += confiscatedTotal;
+            result.PaidToDate += confiscatedTotal;
+
+            return res.status(200).json(result);
         }
         catch (e) {
             next(e)
         }
     }
-
 
     createComment = async (req, res, next) => {
         try {
@@ -533,7 +726,6 @@ class b1HANA {
         }
     };
 
-
     getComments = async (req, res, next) => {
         try {
             const { DocEntry, InstlmntID } = req.params;
@@ -548,7 +740,6 @@ class b1HANA {
             next(e);
         }
     };
-
 
     updateComment = async (req, res, next) => {
         try {
@@ -602,9 +793,6 @@ class b1HANA {
         }
     };
 
-
-
-
     uploadImage = async (req, res, next) => {
         try {
             const { DocEntry, InstlmntID } = req.params;
@@ -648,7 +836,6 @@ class b1HANA {
         }
     };
 
-
     deleteImage = async (req, res, next) => {
         try {
             const { DocEntry, InstlmntID, ImageId } = req.params;
@@ -681,11 +868,9 @@ class b1HANA {
                 fileName: imageFileName
             });
         } catch (e) {
-            console.log(e)
             next(e);
         }
     };
-
 
     updateExecutor = async (req, res, next) => {
         try {
@@ -740,6 +925,50 @@ class b1HANA {
                 DocEntry,
                 InstlmntID,
                 slpCode,
+                _id: invoice._id,
+            });
+        } catch (e) {
+            next(e);
+        }
+    };
+
+    confiscating = async (req, res, next) => {
+        try {
+            const { DocEntry, InstlmntID } = req.params;
+            const { phoneConfiscated, DueDate } = req.body;
+
+            if (!DueDate) {
+                return res.status(400).send({
+                    message: "Missing required fields: DueDate "
+                });
+            }
+
+            let invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
+
+            if (invoice) {
+                const query = await DataRepositories.getInvoiceById({ DocEntry, InstlmntID })
+                let data = await this.execute(query)
+                invoice.phoneConfiscated = phoneConfiscated ? true : false;
+                invoice.InsTotal = data.length ? Number(data[0]?.InsTotal || 0) : 0
+                await invoice.save();
+
+            } else {
+                const query = await DataRepositories.getInvoiceById({ DocEntry, InstlmntID })
+                let data = await this.execute(query)
+                invoice = await InvoiceModel.create({
+                    DocEntry,
+                    InstlmntID,
+                    DueDate: parseLocalDateString(DueDate),
+                    phoneConfiscated: phoneConfiscated ? true : false,
+                    InsTotal: (data.length ? Number(data[0]?.InsTotal || 0) : 0)
+                });
+            }
+
+            return res.status(200).send({
+                message: invoice ? "Invoice updated successfully." : "Invoice created successfully.",
+                DocEntry,
+                InstlmntID,
+                phoneConfiscated: invoice.phoneConfiscated,
                 _id: invoice._id,
             });
         } catch (e) {
