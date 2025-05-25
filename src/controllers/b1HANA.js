@@ -108,7 +108,7 @@ class b1HANA {
                     }
                 };
 
-                if (['true'].includes(phoneConfiscated)) {
+                if (['true', 'false'].includes(phoneConfiscated)) {
                     filter.phoneConfiscated = phoneConfiscated === 'true';
                 }
 
@@ -193,7 +193,7 @@ class b1HANA {
             };
             let invoiceConfiscated = [];
 
-            if (phoneConfiscated === 'true') {
+            if (phoneConfiscated === 'true' || phoneConfiscated === 'false') {
                 baseFilter.phoneConfiscated = phoneConfiscated === 'true';
                 invoiceConfiscated = await InvoiceModel.find(baseFilter, {
                     phoneConfiscated: 1,
@@ -215,8 +215,12 @@ class b1HANA {
                 }
             }
             let inInv = []
+            let notInv = []
             if (phoneConfiscated === 'true') {
                 inInv = invoiceConfiscated
+            }
+            else if (phoneConfiscated === 'false') {
+                notInv = invoiceConfiscated
             }
 
             const query = await DataRepositories.getInvoice({
@@ -230,6 +234,7 @@ class b1HANA {
                 phone,
                 search,
                 inInv,
+                notInv,
                 phoneConfiscated
             });
 
@@ -273,6 +278,7 @@ class b1HANA {
                 };
             });
 
+
             return res.status(200).json({
                 total,
                 page,
@@ -285,7 +291,6 @@ class b1HANA {
             next(e);
         }
     };
-
 
     search = async (req, res, next) => {
         try {
@@ -335,7 +340,7 @@ class b1HANA {
                     }
                 };
 
-                if (['true'].includes(phoneConfiscated)) {
+                if (['true', 'false'].includes(phoneConfiscated)) {
                     filter.phoneConfiscated = phoneConfiscated === 'true';
                 }
 
@@ -386,7 +391,7 @@ class b1HANA {
             };
             let invoiceConfiscated = [];
 
-            if (phoneConfiscated === 'true') {
+            if (phoneConfiscated === 'true' || phoneConfiscated === 'false') {
                 baseFilter.phoneConfiscated = phoneConfiscated === 'true';
                 invoiceConfiscated = await InvoiceModel.find(baseFilter, {
                     phoneConfiscated: 1,
@@ -409,9 +414,14 @@ class b1HANA {
                 }
             }
             let inInv = []
+            let notInv = []
             if (phoneConfiscated === 'true') {
                 inInv = invoiceConfiscated
             }
+            if (phoneConfiscated === 'false') {
+                notInv = invoiceConfiscated
+            }
+
             const query = await DataRepositories.getInvoiceSearchBPorSeria({
                 startDate,
                 endDate,
@@ -421,6 +431,7 @@ class b1HANA {
                 search,
                 phone,
                 inInv,
+                notInv,
                 phoneConfiscated
             });
 
@@ -668,8 +679,8 @@ class b1HANA {
 
 
             let confiscatedTotal = invoiceConfiscated.length ? invoiceConfiscated.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) : 0
-
             const query = await DataRepositories.getAnalytics({ startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
+
             let data = await this.execute(query)
             let result = data.length ? {
                 SumApplied: Number(data[0].SumApplied ?? 0),
@@ -684,6 +695,112 @@ class b1HANA {
             result.SumApplied += confiscatedTotal;
             result.InsTotal += confiscatedTotal;
             result.PaidToDate += confiscatedTotal;
+
+            return res.status(200).json(result);
+        }
+        catch (e) {
+            next(e)
+        }
+    }
+
+    getAnalyticsByDay = async (req, res, next) => {
+        try {
+
+            let { startDate, endDate, slpCode, phoneConfiscated } = req.query
+
+            if (!startDate || !endDate) {
+                return res.status(404).json({ error: 'startDate and endDate are required' });
+            }
+
+            const now = moment();
+
+            if (!moment(startDate, 'YYYY.MM.DD', true).isValid()) {
+                startDate = moment(now).startOf('month').format('YYYY.MM.DD');
+            }
+
+            if (!moment(endDate, 'YYYY.MM.DD', true).isValid()) {
+                endDate = moment(now).endOf('month').format('YYYY.MM.DD');
+            }
+
+            const slpCodeRaw = req.query.slpCode; // "1,4,5"
+            const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
+            const tz = 'Asia/Tashkent'
+            if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
+                let filter = {
+                    SlpCode: { $in: slpCodeArray },
+                    DueDate: {
+                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate(),
+                    }
+                };
+
+                let invoicesModel = await InvoiceModel.find(filter, {
+                    phoneConfiscated: 1,
+                    DocEntry: 1,
+                    InstlmntID: 1,
+                    SlpCode: 1,
+                    images: 1,
+                    newDueDate: 1,
+                    CardCode: 1,
+                    InsTotal: 1
+                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+                if (invoicesModel.length === 0) {
+                    return res.status(200).json([]);
+                }
+                let phoneConfisList = invoicesModel.filter(item => !item?.phoneConfiscated)
+                let confiscatedTotal = invoicesModel.filter(item => item?.phoneConfiscated)?.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) || 0
+
+                if (phoneConfisList.length === 0) {
+
+                    return res.status(200).json([]);
+                }
+
+                const query = await DataRepositories.getAnalyticsByDay({
+                    startDate,
+                    endDate,
+                    invoices: phoneConfisList,
+                    phoneConfiscated: 'false'
+                });
+                let data = await this.execute(query);
+                const result = data;
+                // result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
+                // result.InsTotal = Number(result.InsTotal) + confiscatedTotal;
+                // result.PaidToDate = Number(result.PaidToDate) + confiscatedTotal;
+
+                return res.status(200).json(result);
+            }
+
+            let baseFilter = {
+                DueDate: {
+                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                }
+            };
+            let invoiceConfiscated = [];
+
+            baseFilter.phoneConfiscated = true;
+            invoiceConfiscated = await InvoiceModel.find(baseFilter, {
+                phoneConfiscated: 1,
+                DocEntry: 1,
+                InstlmntID: 1,
+                SlpCode: 1,
+                images: 1,
+                newDueDate: 1,
+                CardCode: 1,
+                InsTotal: 1
+            }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+
+
+            let confiscatedTotal = invoiceConfiscated.length ? invoiceConfiscated.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) : 0
+
+            const query = await DataRepositories.getAnalyticsByDay({ startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
+            let data = await this.execute(query)
+            let result = data;
+
+
+            // result.SumApplied += confiscatedTotal;
+            // result.InsTotal += confiscatedTotal;
+            // result.PaidToDate += confiscatedTotal;
 
             return res.status(200).json(result);
         }

@@ -13,7 +13,7 @@ class DataRepositories {
 
 
 
-    getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, search, inInv = [], phoneConfiscated }) {
+    getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, search, inInv = [], notInv = [], phoneConfiscated }) {
 
         let statusCondition = '';
         let businessPartnerCondition = '';
@@ -28,6 +28,13 @@ class DataRepositories {
             ).join(' OR ');
 
             salesCondition = `AND (${inConditions})`;
+        }
+        else if (notInv.length && phoneConfiscated === 'false') {
+            const inConditions = inInv.map(item =>
+                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
+            ).join(' OR ');
+
+            salesCondition = `AND NOT (${inConditions})`;
         }
 
         let searchCondition = '';
@@ -298,7 +305,7 @@ class DataRepositories {
 
 
 
-    getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset, paymentStatus, search, phone, inInv = [], phoneConfiscated }) {
+    getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset, paymentStatus, search, phone, inInv = [], notInv = [], phoneConfiscated }) {
         let statusCondition = '';
         let salesCondition = ''
 
@@ -308,6 +315,13 @@ class DataRepositories {
             ).join(' OR ');
 
             salesCondition = `AND (${inConditions})`;
+        }
+        else if (notInv.length && phoneConfiscated === 'false') {
+            const inConditions = inInv.map(item =>
+                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
+            ).join(' OR ');
+
+            salesCondition = `AND NOT (${inConditions})`;
         }
 
 
@@ -577,10 +591,15 @@ class DataRepositories {
         }
 
         const sql = `
+        SELECT
+            SUM("SumApplied") AS "SumApplied",
+            SUM("InsTotal") AS "InsTotal",
+            SUM("PaidToDate") AS "PaidToDate"
+        FROM (
             SELECT 
-                SUM(T2."SumApplied") as "SumApplied",  
-                SUM(T0."InsTotal") as "InsTotal", 
-                SUM(T0."PaidToDate") as "PaidToDate"
+                MAX(T2."SumApplied") AS "SumApplied",
+                MAX(T0."InsTotal") AS "InsTotal",
+                MAX(T0."PaidToDate") AS "PaidToDate"
             FROM 
                 ${this.db}.INV6 T0
                 INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
@@ -592,11 +611,64 @@ class DataRepositories {
                 T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
                 AND T1."CANCELED" = 'N'
                 ${salesCondition}
-        `;
+            GROUP BY T0."DocEntry", T0."InstlmntID"
+        ) AS fixed
+    `;
 
         return sql;
     }
 
+
+
+    getAnalyticsByDay({ startDate, endDate, invoices = [], phoneConfiscated }) {
+        let salesCondition = '';
+
+        if (invoices.length > 0) {
+            const condition = invoices.map(item =>
+                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}' AND T1."CardCode" = '${item.CardCode}')`
+            ).join(' OR ');
+
+            salesCondition = `
+                ${phoneConfiscated === 'true' ? 'AND NOT EXISTS' : 'AND EXISTS'} (
+                    SELECT 1 FROM DUMMY
+                    WHERE ${condition}
+                )
+            `;
+        }
+        const sql = `
+        SELECT
+        "DueDate",
+        SUM("SumApplied") AS "SumApplied",
+        SUM("InsTotal") AS "InsTotal",
+        SUM("PaidToDate") AS "PaidToDate"
+    FROM (
+        SELECT 
+            TO_VARCHAR(T0."DueDate", 'YYYY.MM.DD') AS "DueDate",
+            MAX(T2."SumApplied") AS "SumApplied",
+            MAX(T0."InsTotal") AS "InsTotal",
+            MAX(T0."PaidToDate") AS "PaidToDate"
+        FROM 
+            ${this.db}.INV6 T0
+            INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+            LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry" AND T0."InstlmntID" = T2."InstId"
+            LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"
+                AND T3."DocDate" BETWEEN '${startDate}' AND '${endDate}'
+                AND T3."Canceled" = 'N'
+        WHERE
+            T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+            AND T1."CANCELED" = 'N'
+            ${salesCondition}
+        GROUP BY 
+            T0."DocEntry", T0."InstlmntID", TO_VARCHAR(T0."DueDate", 'YYYY.MM.DD')
+    ) AS fixed
+    GROUP BY "DueDate"
+    ORDER BY "DueDate"
+    
+    `;
+
+
+        return sql;
+    }
 
 
 
