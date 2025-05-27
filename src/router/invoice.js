@@ -9,6 +9,8 @@ const router = new Router();
 router.get('/', authMiddleware, b1HANA.invoice);
 router.get('/report', authMiddleware, b1HANA.getAnalytics)
 router.get('/report-days', authMiddleware, b1HANA.getAnalyticsByDay)
+router.get('/report-sales-person', authMiddleware, b1HANA.getAnalyticsBySlpCode)
+
 router.get('/:id', authMiddleware, b1HANA.getPayList);
 router.put('/executor/:DocEntry/:InstlmntID', authMiddleware, b1HANA.updateExecutor);
 router.put('/confiscating/:DocEntry/:InstlmntID', authMiddleware, b1HANA.confiscating);
