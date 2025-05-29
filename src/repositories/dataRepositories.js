@@ -13,7 +13,7 @@ class DataRepositories {
 
 
 
-    getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, search, inInv = [], notInv = [], phoneConfiscated }) {
+    getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, search, inInv = [], notInv = [], phoneConfiscated, partial }) {
 
         let statusCondition = '';
         let businessPartnerCondition = '';
@@ -44,19 +44,59 @@ class DataRepositories {
             )
             `;
         }
-        console.log(searchCondition)
+
+        // if (paymentStatus) {
+        //     const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
+        //     const conditions = [];
+        //     if (statuses.includes('paid')) {
+        //         conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+        //     }
+        //     if (statuses.includes('unpaid')) {
+        //         conditions.push(`(T0."PaidToDate" = 0)`);
+        //     }
+        //     if (statuses.includes('partial')) {
+        //         conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+        //     }
+
+        //     if (conditions.length > 0) {
+        //         statusCondition = `AND (${conditions.join(' OR ')})`;
+        //     }
+        // }
 
         if (paymentStatus) {
             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
             const conditions = [];
+
             if (statuses.includes('paid')) {
-                conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+                // To‘liq to‘langanlar va partial listdagi to‘lanmaganlar (lekin qisman bo‘lganlar)
+                let partialCondition = '';
+                if (partial?.length > 0) {
+                    const partialFilter = partial.map(p =>
+                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                    ).join(' OR ');
+
+                    partialCondition = `OR (${partialFilter})`;
+                }
+
+                conditions.push(`(T0."PaidToDate" = T0."InsTotal" ${partial?.length > 0 ? partialCondition : ''})`);
             }
+
             if (statuses.includes('unpaid')) {
                 conditions.push(`(T0."PaidToDate" = 0)`);
             }
+
             if (statuses.includes('partial')) {
-                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+                let excludePartials = '';
+
+                if (partial?.length > 0) {
+                    const partialFilter = partial.map(p =>
+                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                    ).join(' AND '); // <-- AND ishlatamiz, chunki har bir kombinatsiyani inkor qilish kerak
+
+                    excludePartials = `AND (${partialFilter})`;
+                }
+
+                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal" ${excludePartials})`);
             }
 
             if (conditions.length > 0) {
@@ -163,7 +203,7 @@ class DataRepositories {
 
 
 
-    getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices, search }) {
+    getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices, search, partial }) {
         let statusCondition = '';
         let businessPartnerCondition = '';
         let seriesCondition = '';
@@ -182,23 +222,65 @@ class DataRepositories {
         }
 
         // 1. PAYMENT STATUS filter
+        // if (paymentStatus) {
+        //     const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
+        //     const conditions = [];
+        //     if (statuses.includes('paid')) {
+        //         conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+        //     }
+        //     if (statuses.includes('unpaid')) {
+        //         conditions.push(`(T0."PaidToDate" = 0)`);
+        //     }
+        //     if (statuses.includes('partial')) {
+        //         conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+        //     }
+        //     if (conditions.length > 0) {
+        //         statusCondition = `AND (${conditions.join(' OR ')})`;
+        //     }
+        // }
+
         if (paymentStatus) {
             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
             const conditions = [];
+
             if (statuses.includes('paid')) {
-                conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+                // To‘liq to‘langanlar va partial listdagi to‘lanmaganlar (lekin qisman bo‘lganlar)
+                let partialCondition = '';
+                if (partial?.length > 0) {
+                    const partialFilter = partial.map(p =>
+                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                    ).join(' OR ');
+
+                    partialCondition = `OR (${partialFilter})`;
+                }
+
+                conditions.push(`(T0."PaidToDate" = T0."InsTotal" ${partial?.length > 0 ? partialCondition : ''})`);
             }
+
             if (statuses.includes('unpaid')) {
                 conditions.push(`(T0."PaidToDate" = 0)`);
             }
+
             if (statuses.includes('partial')) {
-                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+                let excludePartials = '';
+
+                if (partial?.length > 0) {
+                    const partialFilter = partial.map(p =>
+                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                    ).join(' AND '); // <-- AND ishlatamiz, chunki har bir kombinatsiyani inkor qilish kerak
+
+                    excludePartials = `AND (${partialFilter})`;
+                }
+
+                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal" ${excludePartials})`);
             }
+
             if (conditions.length > 0) {
                 statusCondition = `AND (${conditions.join(' OR ')})`;
             }
         }
 
+        console.log(statusCondition)
         // 2. CARD CODE filter
         if (cardCode) {
             businessPartnerCondition = `AND T2."CardCode" = '${cardCode}'`;
@@ -304,7 +386,7 @@ class DataRepositories {
 
 
 
-    getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset, paymentStatus, search, phone, inInv = [], notInv = [], phoneConfiscated }) {
+    getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset, paymentStatus, search, phone, inInv = [], notInv = [], phoneConfiscated, partial }) {
         let statusCondition = '';
         let salesCondition = ''
 
@@ -324,17 +406,58 @@ class DataRepositories {
         }
 
 
+        // if (paymentStatus) {
+        //     const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
+        //     const conditions = [];
+        //     if (statuses.includes('paid')) {
+        //         conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+        //     }
+        //     if (statuses.includes('unpaid')) {
+        //         conditions.push(`(T0."PaidToDate" = 0)`);
+        //     }
+        //     if (statuses.includes('partial')) {
+        //         conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+        //     }
+
+        //     if (conditions.length > 0) {
+        //         statusCondition = `AND (${conditions.join(' OR ')})`;
+        //     }
+        // }
+
         if (paymentStatus) {
             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
             const conditions = [];
+
             if (statuses.includes('paid')) {
-                conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+                // To‘liq to‘langanlar va partial listdagi to‘lanmaganlar (lekin qisman bo‘lganlar)
+                let partialCondition = '';
+                if (partial?.length > 0) {
+                    const partialFilter = partial.map(p =>
+                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                    ).join(' OR ');
+
+                    partialCondition = `OR (${partialFilter})`;
+                }
+
+                conditions.push(`(T0."PaidToDate" = T0."InsTotal" ${partial?.length > 0 ? partialCondition : ''})`);
             }
+
             if (statuses.includes('unpaid')) {
                 conditions.push(`(T0."PaidToDate" = 0)`);
             }
+
             if (statuses.includes('partial')) {
-                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+                let excludePartials = '';
+
+                if (partial?.length > 0) {
+                    const partialFilter = partial.map(p =>
+                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                    ).join(' AND '); // <-- AND ishlatamiz, chunki har bir kombinatsiyani inkor qilish kerak
+
+                    excludePartials = `AND (${partialFilter})`;
+                }
+
+                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal" ${excludePartials})`);
             }
 
             if (conditions.length > 0) {
@@ -423,21 +546,62 @@ class DataRepositories {
     }
 
 
-    getInvoiceSearchBPorSeriaDistribution({ startDate, endDate, limit, offset, paymentStatus, search, phone, invoices }) {
+    getInvoiceSearchBPorSeriaDistribution({ startDate, endDate, limit, offset, paymentStatus, search, phone, invoices, partial }) {
         let statusCondition = '';
         let salesCondition = `and (T1."DocEntry", T0."InstlmntID") IN (${invoices.map(item => `('${item.DocEntry}', '${item.InstlmntID}')`).join(", ")}) `
+
+        // if (paymentStatus) {
+        //     const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
+        //     const conditions = [];
+        //     if (statuses.includes('paid')) {
+        //         conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+        //     }
+        //     if (statuses.includes('unpaid')) {
+        //         conditions.push(`(T0."PaidToDate" = 0)`);
+        //     }
+        //     if (statuses.includes('partial')) {
+        //         conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+        //     }
+
+        //     if (conditions.length > 0) {
+        //         statusCondition = `AND (${conditions.join(' OR ')})`;
+        //     }
+        // }
 
         if (paymentStatus) {
             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
             const conditions = [];
+
             if (statuses.includes('paid')) {
-                conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
+                // To‘liq to‘langanlar va partial listdagi to‘lanmaganlar (lekin qisman bo‘lganlar)
+                let partialCondition = '';
+                if (partial?.length > 0) {
+                    const partialFilter = partial.map(p =>
+                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                    ).join(' OR ');
+
+                    partialCondition = `OR (${partialFilter})`;
+                }
+
+                conditions.push(`(T0."PaidToDate" = T0."InsTotal" ${partial?.length > 0 ? partialCondition : ''})`);
             }
+
             if (statuses.includes('unpaid')) {
                 conditions.push(`(T0."PaidToDate" = 0)`);
             }
+
             if (statuses.includes('partial')) {
-                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
+                let excludePartials = '';
+
+                if (partial?.length > 0) {
+                    const partialFilter = partial.map(p =>
+                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                    ).join(' AND '); // <-- AND ishlatamiz, chunki har bir kombinatsiyani inkor qilish kerak
+
+                    excludePartials = `AND (${partialFilter})`;
+                }
+
+                conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal" ${excludePartials})`);
             }
 
             if (conditions.length > 0) {

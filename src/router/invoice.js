@@ -14,6 +14,7 @@ router.get('/report-sales-person', authMiddleware, b1HANA.getAnalyticsBySlpCode)
 router.get('/:id', authMiddleware, b1HANA.getPayList);
 router.put('/executor/:DocEntry/:InstlmntID', authMiddleware, b1HANA.updateExecutor);
 router.put('/confiscating/:DocEntry/:InstlmntID', authMiddleware, b1HANA.confiscating);
+router.put('/partial/:DocEntry/:InstlmntID', authMiddleware, b1HANA.partial);
 
 router.get('/comments/:DocEntry/:InstlmntID', authMiddleware, b1HANA.getComments);
 router.post('/comments/:DocEntry/:InstlmntID', authMiddleware, b1HANA.createComment);

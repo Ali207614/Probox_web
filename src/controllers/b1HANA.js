@@ -107,6 +107,13 @@ class b1HANA {
                         $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
                     }
                 };
+                let filterPartial = {
+                    SlpCode: { $in: slpCodeArray },
+                    DueDate: {
+                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                    }
+                };
 
                 if (phoneConfiscated === 'true') {
                     filter.phoneConfiscated = true;
@@ -115,6 +122,24 @@ class b1HANA {
                         { phoneConfiscated: false },
                         { phoneConfiscated: { $exists: false } }
                     ];
+                }
+
+                if (paymentStatus.split(',').includes('paid') || paymentStatus.split(',').includes('partial')) {
+                    filterPartial.partial = true
+                }
+
+                let partialModel = []
+
+                if (get(filterPartial, 'partial')) {
+                    partialModel = await InvoiceModel.find(filterPartial, {
+                        phoneConfiscated: 1,
+                        DocEntry: 1,
+                        InstlmntID: 1,
+                        SlpCode: 1,
+                        images: 1,
+                        newDueDate: 1,
+                        CardCode: 1
+                    }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
                 }
 
                 invoicesModel = await InvoiceModel.find(filter, {
@@ -141,6 +166,7 @@ class b1HANA {
                     serial,
                     phone,
                     invoices: invoicesModel,
+                    partial: partialModel,
                     search
                 });
 
@@ -176,7 +202,8 @@ class b1HANA {
                         Images: inv?.images || [],
                         NewDueDate: inv?.newDueDate || '',
                         Comments: commentMap[key] || [],
-                        phoneConfiscated: inv?.phoneConfiscated || false
+                        phoneConfiscated: inv?.phoneConfiscated || false,
+                        partial: partialModel.find(item => `${item.DocEntry}_${item.InstlmntID}` === `${el.DocEntry}_${el.InstlmntID}`)?.partial === true
                     };
                 });
 
@@ -191,6 +218,13 @@ class b1HANA {
 
             // slpCode bo'lmagan holat
             let baseFilter = {
+                DueDate: {
+                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                }
+            };
+
+            let baseFilterPartial = {
                 DueDate: {
                     $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
                     $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
@@ -228,6 +262,24 @@ class b1HANA {
                 notInv = invoiceConfiscated
             }
 
+            if (paymentStatus.split(',').includes('paid') || paymentStatus.split(',').includes('partial')) {
+                baseFilterPartial.partial = true
+            }
+
+            let partialModel = []
+
+            if (get(baseFilterPartial, 'partial')) {
+                partialModel = await InvoiceModel.find(baseFilterPartial, {
+                    phoneConfiscated: 1,
+                    DocEntry: 1,
+                    InstlmntID: 1,
+                    SlpCode: 1,
+                    images: 1,
+                    newDueDate: 1,
+                    CardCode: 1
+                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+            }
+
             const query = await DataRepositories.getInvoice({
                 startDate,
                 endDate,
@@ -240,7 +292,8 @@ class b1HANA {
                 search,
                 inInv,
                 notInv,
-                phoneConfiscated
+                phoneConfiscated,
+                partial: partialModel
             });
 
             const invoices = await this.execute(query);
@@ -279,7 +332,8 @@ class b1HANA {
                     Images: inv?.images || [],
                     NewDueDate: inv?.newDueDate || '',
                     Comments: commentMap[key] || [],
-                    phoneConfiscated: inv?.phoneConfiscated || false
+                    phoneConfiscated: inv?.phoneConfiscated || false,
+                    partial: partialModel.find(item => `${item.DocEntry}_${item.InstlmntID}` === `${el.DocEntry}_${el.InstlmntID}`)?.partial === true
                 };
             });
 
@@ -345,6 +399,15 @@ class b1HANA {
                     }
                 };
 
+                let filterPartial = {
+                    SlpCode: { $in: slpCodeArray },
+                    DueDate: {
+                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                    }
+                };
+
+
                 if (phoneConfiscated === 'true') {
                     filter.phoneConfiscated = true;
                 } else if (['false'].includes(phoneConfiscated)) {
@@ -352,6 +415,24 @@ class b1HANA {
                         { phoneConfiscated: false },
                         { phoneConfiscated: { $exists: false } }
                     ];
+                }
+
+                if (paymentStatus.split(',').includes('paid') || paymentStatus.split(',').includes('partial')) {
+                    filterPartial.partial = true
+                }
+
+                let partialModel = []
+
+                if (get(filterPartial, 'partial')) {
+                    partialModel = await InvoiceModel.find(filterPartial, {
+                        phoneConfiscated: 1,
+                        DocEntry: 1,
+                        InstlmntID: 1,
+                        SlpCode: 1,
+                        images: 1,
+                        newDueDate: 1,
+                        CardCode: 1
+                    }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
                 }
 
                 const invoicesModel = await InvoiceModel.find(filter, {
@@ -379,7 +460,8 @@ class b1HANA {
                     paymentStatus,
                     search,
                     phone,
-                    invoices: invoicesModel
+                    invoices: invoicesModel,
+                    partial: partialModel,
                 });
 
                 const invoices = await this.execute(query);
@@ -399,6 +481,14 @@ class b1HANA {
                     $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
                 }
             };
+
+            let baseFilterPartial = {
+                DueDate: {
+                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                }
+            };
+
             let invoiceConfiscated = [];
 
             if (phoneConfiscated === 'true' || phoneConfiscated === 'false') {
@@ -432,6 +522,28 @@ class b1HANA {
                 notInv = invoiceConfiscated
             }
 
+
+
+            if (paymentStatus.split(',').includes('paid') || paymentStatus.split(',').includes('partial')) {
+                baseFilterPartial.partial = true
+            }
+
+            let partialModel = []
+
+            if (get(baseFilterPartial, 'partial')) {
+                partialModel = await InvoiceModel.find(baseFilterPartial, {
+                    phoneConfiscated: 1,
+                    DocEntry: 1,
+                    InstlmntID: 1,
+                    SlpCode: 1,
+                    images: 1,
+                    newDueDate: 1,
+                    CardCode: 1
+                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+            }
+
+
+
             const query = await DataRepositories.getInvoiceSearchBPorSeria({
                 startDate,
                 endDate,
@@ -442,7 +554,8 @@ class b1HANA {
                 phone,
                 inInv,
                 notInv,
-                phoneConfiscated
+                phoneConfiscated,
+                partial: partialModel
             });
 
             const invoices = await this.execute(query);
@@ -799,8 +912,14 @@ class b1HANA {
                         return invFormattedDate == formattedDate;
                     });
                     if (matchingInvoices.length > 0) {
+                        let sum = matchingInvoices.reduce((sum, inv) => sum + Number(inv?.InsTotal,), 0) || 0;
                         item.PhoneConfiscated = true;
-                        item.Confiscated = matchingInvoices.reduce((sum, inv) => sum + Number(inv?.InsTotal,), 0);
+                        item.Confiscated = sum;
+
+
+                        item.SumApplied = Number(item.SumApplied) + sum;
+                        item.InsTotal = Number(item.InsTotal) + sum;
+                        item.PaidToDate = Number(item.PaidToDate) + sum;
                     }
                     else {
                         item.PhoneConfiscated = false;
@@ -844,14 +963,20 @@ class b1HANA {
 
 
                 if (matchingInvoices.length > 0) {
+                    let sum = matchingInvoices.reduce((sum, inv) => sum + Number(inv.InsTotal), 0) || 0;
                     item.PhoneConfiscated = true;
-                    item.Confiscated = matchingInvoices.reduce((sum, inv) => sum + Number(inv.InsTotal), 0);
+                    item.Confiscated = sum
+
+                    item.SumApplied = Number(item.SumApplied) + sum;
+                    item.InsTotal = Number(item.InsTotal) + sum;
+                    item.PaidToDate = Number(item.PaidToDate) + sum;
                 }
                 else {
                     item.PhoneConfiscated = false;
                     item.Confiscated = 0
                 }
             });
+
 
             return res.status(200).json(data);
         }
@@ -957,6 +1082,9 @@ class b1HANA {
                             Confiscated = confisCatedList.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) || 0
                             phoneConfiscated = true
                         }
+                        item.SumApplied = Number(item.SumApplied) + Confiscated;
+                        item.InsTotal = Number(item.InsTotal) + Confiscated;
+                        item.PaidToDate = Number(item.PaidToDate) + Confiscated;
                         return { ...item, Confiscated, phoneConfiscated }
                     })
                 }
@@ -993,13 +1121,14 @@ class b1HANA {
             let data = await this.execute(query);
             if (data.length) {
 
-                const result = data.reduce((a, b) => {
+                let result = data.reduce((a, b) => {
                     a.SumApplied += Number(b?.SumApplied || 0)
                     a.InsTotal += Number(b?.InsTotal || 0)
                     a.PaidToDate += Number(b?.PaidToDate || 0)
                     if (invoicesModel.length) {
+                        let sum = invoicesModel.reduce((acc, item) => acc + Number(item?.InsTotal || 0), 0);
                         a.phoneConfiscated = true
-                        a.Confiscated = invoicesModel.reduce((acc, item) => acc + Number(item?.InsTotal || 0), 0)
+                        a.Confiscated = sum
                     }
                     return a
                 }, {
@@ -1010,7 +1139,12 @@ class b1HANA {
                     phoneConfiscated: false,
                     Confiscated: 0
                 })
-
+                result = {
+                    ...result,
+                    SumApplied: result.SumApplied + result.Confiscated,
+                    PaidToDate: result.PaidToDate + result.Confiscated,
+                    InsTotal: result.InsTotal + result.Confiscated,
+                }
 
                 return res.status(200).json([result]);
             }
@@ -1298,6 +1432,45 @@ class b1HANA {
                 DocEntry,
                 InstlmntID,
                 phoneConfiscated: invoice.phoneConfiscated,
+                _id: invoice._id,
+            });
+        } catch (e) {
+            next(e);
+        }
+    };
+
+    partial = async (req, res, next) => {
+        try {
+            const { DocEntry, InstlmntID } = req.params;
+            const { partial, DueDate } = req.body;
+
+            if (!DueDate) {
+                return res.status(400).send({
+                    message: "Missing required fields: DueDate "
+                });
+            }
+
+            let invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
+
+            if (invoice) {
+                invoice.partial = partial ? true : false;
+                await invoice.save();
+
+            } else {
+                invoice = await InvoiceModel.create({
+                    DocEntry,
+                    InstlmntID,
+                    DueDate: parseLocalDateString(DueDate),
+                    partial: partial ? true : false,
+
+                });
+            }
+
+            return res.status(200).send({
+                message: invoice ? "Invoice updated successfully." : "Invoice created successfully.",
+                DocEntry,
+                InstlmntID,
+                partial: invoice.partial,
                 _id: invoice._id,
             });
         } catch (e) {
