@@ -1,6 +1,6 @@
 const { get } = require("lodash");
 const tokenService = require('../services/tokenService');
-const { v4: uuidv4, validate } = require('uuid');
+const { v4: uuidv4 } = require('uuid');
 const path = require('path')
 const fs = require('fs')
 let dbService = require('../services/dbService')
@@ -11,6 +11,7 @@ const CommentModel = require("../models/comment-model")
 const b1Sl = require('./b1SL')
 const { convertToISOFormat, shuffleArray, checkFileType, parseLocalDateString } = require("../helpers");
 const moment = require('moment-timezone')
+const sharp = require('sharp');
 require('dotenv').config();
 
 
@@ -54,7 +55,7 @@ class b1HANA {
             });
         }
         catch (e) {
-            next(e)
+            return next(ApiError.UnauthorizedError());
         }
     };
 
@@ -1158,24 +1159,48 @@ class b1HANA {
     createComment = async (req, res, next) => {
         try {
             const { Comments } = req.body;
-            const { DocEntry, InstlmntID } = req.params
+            const { DocEntry, InstlmntID } = req.params;
             const { SlpCode } = req.user;
-            if (!Comments || Comments.length == 0) {
-                return res.status(400).json({
-                    message: 'Comment not found',
-                });
+            const files = req.files;
+
+            if (!DocEntry && !InstlmntID && !files?.audio) {
+                return res.status(400).json({ message: 'DocEntry or InstlmnID is required' });
             }
-            if (Comments.length > 300) {
-                return res.status(400).json({
-                    message: 'Comment long',
-                });
+
+            if (!Comments && !files?.image && !files?.audio) {
+                return res.status(400).json({ message: 'Comment, image, or audio is required' });
             }
+
+            if (Comments && Comments.length > 300) {
+                return res.status(400).json({ message: 'Comment too long' });
+            }
+
+            let imagePath, audioPath;
+
+            if (files?.image?.length) {
+                const originalPath = files.image[0].path;
+                const compressedPath = originalPath.replace(/\.(jpeg|jpg|png)$/, '_compressed.webp');
+
+                await sharp(originalPath)
+                    .webp({ quality: 70 })
+                    .toFile(compressedPath);
+
+                await fs.unlink(originalPath);
+                imagePath = compressedPath;
+            }
+
+            if (files?.audio?.length) {
+                audioPath = files.audio[0].path;
+            }
+
             const newComment = new CommentModel({
                 DocEntry,
                 InstlmntID,
-                Comments,
+                Comments: Comments || null,
                 SlpCode,
-                DocDate: new Date()
+                DocDate: new Date(),
+                Image: imagePath || null,
+                Audio: audioPath || null
             });
 
             await newComment.save();
@@ -1208,26 +1233,62 @@ class b1HANA {
         try {
             const { id } = req.params;
             const { Comments } = req.body;
+            const files = req.files;
 
-            if (!Comments || Comments.length == 0) {
-                return res.status(400).json({
-                    message: 'Comment not found',
-                });
-            }
-            if (Comments.length > 300) {
-                return res.status(400).json({
-                    message: 'Comment long',
-                });
-            }
-            const updated = await CommentModel.findByIdAndUpdate(
-                id,
-                { Comments, updatedAt: new Date() },
-                { new: true }
-            );
-
-            if (!updated) {
+            const existing = await CommentModel.findById(id);
+            if (!existing) {
                 return res.status(404).json({ message: 'Comment not found' });
             }
+
+            if (!Comments && !files?.image && !files?.audio) {
+                return res.status(400).json({ message: 'No data to update' });
+            }
+
+            if (Comments && Comments.length > 300) {
+                return res.status(400).json({ message: 'Comment too long' });
+            }
+
+            const updatePayload = {};
+            if (Comments) updatePayload.Comments = Comments;
+
+            if (files?.image?.[0]) {
+                const file = files.image[0];
+
+                const ext = path.extname(file.filename);
+                const baseName = path.basename(file.filename, ext);
+                const compressedName = `${baseName}_compressed.webp`;
+                const compressedPath = path.join(file.destination, compressedName);
+
+                await sharp(file.path)
+                    .resize({ width: 1024 })
+                    .webp({ quality: 70 })
+                    .toFile(compressedPath);
+
+                await fs.unlink(file.path);
+
+                if (existing.image) {
+                    const oldPath = path.join(file.destination, existing.image);
+                    await fs.unlink(oldPath).catch(() => {});
+                }
+
+                updatePayload.image = compressedName;
+            }
+
+            if (files?.audio?.[0]) {
+                const file = files.audio[0];
+
+                // Delete old audio
+                if (existing.audio) {
+                    const oldPath = path.join(file.destination, existing.audio);
+                    await fs.unlink(oldPath).catch(() => {});
+                }
+
+                updatePayload.audio = file.filename;
+            }
+
+            updatePayload.updatedAt = new Date();
+
+            const updated = await CommentModel.findByIdAndUpdate(id, updatePayload, { new: true });
 
             return res.status(200).json({
                 message: 'Comment updated successfully',
@@ -1265,10 +1326,27 @@ class b1HANA {
                 return res.status(400).send('Error: No files uploaded.');
             }
 
-            const imageEntries = files.map(file => ({
-                _id: uuidv4(),
-                image: file.filename // multer filename avtomatik qaytadi
-            }));
+            const compressedImageEntries = [];
+
+            for (const file of files) {
+                const ext = path.extname(file.filename);
+                const filenameWithoutExt = path.basename(file.filename, ext);
+                const compressedFileName = `${filenameWithoutExt}_compressed.webp`;
+                const compressedFilePath = path.join(file.destination, compressedFileName);
+
+                await sharp(file.path)
+                    .resize({ width: 1024 }) // optional: resize to max width
+                    .webp({ quality: 70 })   // convert and compress
+                    .toFile(compressedFilePath);
+
+                // remove original
+                await fs.unlink(file.path);
+
+                compressedImageEntries.push({
+                    _id: uuidv4(),
+                    image: compressedFileName
+                });
+            }
 
             let invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
 
@@ -1276,18 +1354,18 @@ class b1HANA {
                 if (!Array.isArray(invoice.images)) {
                     invoice.images = [];
                 }
-                invoice.images.push(...imageEntries);
+                invoice.images.push(...compressedImageEntries);
                 await invoice.save();
             } else {
                 invoice = await InvoiceModel.create({
                     DocEntry,
                     InstlmntID,
-                    images: imageEntries
+                    images: compressedImageEntries
                 });
             }
 
             return res.status(201).send({
-                images: imageEntries.map(e => ({
+                images: compressedImageEntries.map(e => ({
                     _id: e._id,
                     image: e.image
                 })),

@@ -23,11 +23,11 @@ app.use(cookieParser());
 app.use(express.json());
 
 app.use(compression({
-    threshold: 1024, // faqat 1KB dan katta javoblar siqiladi
-    level: 6,        // gzip siqish darajasi (0–9)
+    threshold: 1024,
+    level: 6,
     filter: (req, res) => {
         if (req.headers['x-no-compression']) {
-            return false; // maxsus header orqali siqishni o‘chirib qo‘yish
+            return false;
         }
         return compression.filter(req, res);
     }

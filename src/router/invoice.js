@@ -3,6 +3,7 @@ const b1SL = require('../controllers/b1SL');
 const b1HANA = require('../controllers/b1HANA');
 const authMiddleware = require('../middlewares/auth-middleware');
 const upload = require('../middlewares/uploadMiddleware');
+const uploadComment = require('../middlewares/uploadMiddlewareComment');
 const router = new Router();
 
 
@@ -17,7 +18,16 @@ router.put('/confiscating/:DocEntry/:InstlmntID', authMiddleware, b1HANA.confisc
 router.put('/partial/:DocEntry/:InstlmntID', authMiddleware, b1HANA.partial);
 
 router.get('/comments/:DocEntry/:InstlmntID', authMiddleware, b1HANA.getComments);
-router.post('/comments/:DocEntry/:InstlmntID', authMiddleware, b1HANA.createComment);
+
+router.post(
+    '/comments/:DocEntry/:InstlmntID',
+    authMiddleware,
+    uploadComment.fields([
+        { name: 'image', maxCount: 1 },
+        { name: 'audio', maxCount: 1 }
+    ]),
+    b1HANA.createComment
+);
 
 router.put('/comments/:id', authMiddleware, b1HANA.updateComment);
 router.delete('/comments/:id', authMiddleware, b1HANA.deleteComment);

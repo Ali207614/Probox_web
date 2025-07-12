@@ -4,6 +4,8 @@ const CommentSchema = new Schema(
     {
         DocEntry: { type: String, required: false },
         Comments: { type: String, required: true },
+        Image: { type: String, required: true },
+        Audio: { type: String, required: true },
         SlpCode: { type: Number, required: false },
         DocDate: { type: Date, required: false },
         InstlmntID: { type: Number, required: false },
