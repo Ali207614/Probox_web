@@ -3,9 +3,9 @@ const { Schema, model } = require('mongoose');
 const CommentSchema = new Schema(
     {
         DocEntry: { type: String, required: false },
-        Comments: { type: String, required: true },
-        Image: { type: String, required: true },
-        Audio: { type: String, required: true },
+        Comments: { type: String, required: false },
+        Image: { type: String, required: false },
+        Audio: { type: String, required: false },
         SlpCode: { type: Number, required: false },
         DocDate: { type: Date, required: false },
         InstlmntID: { type: Number, required: false },

@@ -12,6 +12,7 @@ const b1Sl = require('./b1SL')
 const { convertToISOFormat, shuffleArray, checkFileType, parseLocalDateString } = require("../helpers");
 const moment = require('moment-timezone')
 const sharp = require('sharp');
+const fsPromises = require('fs/promises');
 require('dotenv').config();
 
 
@@ -1167,8 +1168,18 @@ class b1HANA {
                 return res.status(400).json({ message: 'DocEntry or InstlmnID is required' });
             }
 
-            if (!Comments && !files?.image && !files?.audio) {
+            const hasComment = !!Comments;
+            const hasImage = files?.image?.length > 0;
+            const hasAudio = files?.audio?.length > 0;
+
+            const activeInputs = [hasComment, hasImage, hasAudio].filter(Boolean);
+
+            if (activeInputs.length === 0) {
                 return res.status(400).json({ message: 'Comment, image, or audio is required' });
+            }
+
+            if (activeInputs.length > 1) {
+                return res.status(400).json({ message: 'Only one of comment, image, or audio can be submitted at a time' });
             }
 
             if (Comments && Comments.length > 300) {
@@ -1177,26 +1188,28 @@ class b1HANA {
 
             let imagePath, audioPath;
 
-            if (files?.image?.length) {
+            if (hasImage) {
+                const originalFilename = files.image[0].filename;
                 const originalPath = files.image[0].path;
-                const compressedPath = originalPath.replace(/\.(jpeg|jpg|png)$/, '_compressed.webp');
+                const compressedFilename = originalFilename.replace(/\.(jpeg|jpg|png)$/, '_compressed.webp');
+                const compressedPath = path.join(path.dirname(originalPath), compressedFilename);
 
                 await sharp(originalPath)
                     .webp({ quality: 70 })
                     .toFile(compressedPath);
 
-                await fs.unlink(originalPath);
-                imagePath = compressedPath;
+                await fsPromises.unlink(originalPath);
+                imagePath = compressedFilename;
             }
 
-            if (files?.audio?.length) {
-                audioPath = files.audio[0].path;
+            if (hasAudio) {
+                audioPath = files.audio[0].filename; // faqat nomi
             }
 
             const newComment = new CommentModel({
                 DocEntry,
                 InstlmntID,
-                Comments: Comments || null,
+                Comments: hasComment ? Comments : null,
                 SlpCode,
                 DocDate: new Date(),
                 Image: imagePath || null,
@@ -1240,20 +1253,42 @@ class b1HANA {
                 return res.status(404).json({ message: 'Comment not found' });
             }
 
-            if (!Comments && !files?.image && !files?.audio) {
+            const hasComment = !!Comments;
+            const hasImage = files?.image?.length > 0;
+            const hasAudio = files?.audio?.length > 0;
+            const activeInputs = [hasComment, hasImage, hasAudio].filter(Boolean);
+
+            if (activeInputs.length === 0) {
                 return res.status(400).json({ message: 'No data to update' });
             }
 
-            if (Comments && Comments.length > 300) {
+            if (activeInputs.length > 1) {
+                return res.status(400).json({ message: 'Only one of comment, image, or audio can be updated at a time' });
+            }
+
+            if (hasComment && Comments.length > 300) {
                 return res.status(400).json({ message: 'Comment too long' });
             }
 
             const updatePayload = {};
-            if (Comments) updatePayload.Comments = Comments;
+            const uploadsDir = path.join(process.cwd(), 'uploads');
 
-            if (files?.image?.[0]) {
+            if (hasComment) {
+                updatePayload.Comments = Comments;
+                updatePayload.Image = null;
+                updatePayload.Audio = null;
+
+                // Eski fayllarni o‘chirish
+                if (existing.Image) {
+                    await fsPromises.unlink(path.join(uploadsDir, existing.Image)).catch(() => {});
+                }
+                if (existing.Audio) {
+                    await fsPromises.unlink(path.join(uploadsDir, existing.Audio)).catch(() => {});
+                }
+            }
+
+            if (hasImage) {
                 const file = files.image[0];
-
                 const ext = path.extname(file.filename);
                 const baseName = path.basename(file.filename, ext);
                 const compressedName = `${baseName}_compressed.webp`;
@@ -1264,26 +1299,34 @@ class b1HANA {
                     .webp({ quality: 70 })
                     .toFile(compressedPath);
 
-                await fs.unlink(file.path);
+                await fsPromises.unlink(file.path);
 
-                if (existing.image) {
-                    const oldPath = path.join(file.destination, existing.image);
-                    await fs.unlink(oldPath).catch(() => {});
+                // Eski fayllarni o‘chirish
+                if (existing.Image) {
+                    await fsPromises.unlink(path.join(file.destination, existing.Image)).catch(() => {});
+                }
+                if (existing.Audio) {
+                    await fsPromises.unlink(path.join(file.destination, existing.Audio)).catch(() => {});
                 }
 
-                updatePayload.image = compressedName;
+                updatePayload.Image = compressedName;
+                updatePayload.Audio = null;
+                updatePayload.Comments = null;
             }
 
-            if (files?.audio?.[0]) {
+            if (hasAudio) {
                 const file = files.audio[0];
 
-                // Delete old audio
-                if (existing.audio) {
-                    const oldPath = path.join(file.destination, existing.audio);
-                    await fs.unlink(oldPath).catch(() => {});
+                if (existing.Audio) {
+                    await fsPromises.unlink(path.join(file.destination, existing.Audio)).catch(() => {});
+                }
+                if (existing.Image) {
+                    await fsPromises.unlink(path.join(file.destination, existing.Image)).catch(() => {});
                 }
 
-                updatePayload.audio = file.filename;
+                updatePayload.Audio = file.filename;
+                updatePayload.Image = null;
+                updatePayload.Comments = null;
             }
 
             updatePayload.updatedAt = new Date();
@@ -1340,7 +1383,7 @@ class b1HANA {
                     .toFile(compressedFilePath);
 
                 // remove original
-                await fs.unlink(file.path);
+                await fsPromises.unlink(file.path);
 
                 compressedImageEntries.push({
                     _id: uuidv4(),

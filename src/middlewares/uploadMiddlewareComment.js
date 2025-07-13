@@ -2,12 +2,14 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Fayl saqlash va nomlash
+const uploadDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        const dir = './uploads/comments';
-        fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
+        cb(null, uploadDir);
     },
     filename: function (req, file, cb) {
         const ext = path.extname(file.originalname);
@@ -16,6 +18,7 @@ const storage = multer.diskStorage({
     }
 });
 
+// Ruxsat berilgan MIME turlar
 const fileFilter = (req, file, cb) => {
     const allowedTypes = ['image/jpeg', 'image/png', 'audio/mpeg', 'audio/mp3', 'audio/wav'];
     if (allowedTypes.includes(file.mimetype)) {
@@ -25,7 +28,7 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
-const uploadComment = multer({ storage, fileFilter }); // ✅ ESENG kerak bo‘lgani mana shu
+// Multer instance
+const upload = multer({ storage, fileFilter });
 
-
-module.exports = uploadComment;
+module.exports = upload; // 👈 `uploadComment` emas, to‘g‘ridan-to‘g‘ri multer instance

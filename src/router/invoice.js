@@ -29,7 +29,12 @@ router.post(
     b1HANA.createComment
 );
 
-router.put('/comments/:id', authMiddleware, b1HANA.updateComment);
+router.put('/comments/:id', authMiddleware,   uploadComment.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'audio', maxCount: 1 }
+]), b1HANA.updateComment);
+
+
 router.delete('/comments/:id', authMiddleware, b1HANA.deleteComment);
 
 router.put('/upload/:DocEntry/:InstlmntID', authMiddleware, upload.array('files'), b1HANA.uploadImage);
