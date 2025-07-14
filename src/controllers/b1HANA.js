@@ -93,6 +93,9 @@ class b1HANA {
                 endDate = moment(now).endOf('month').format('YYYY.MM.DD');
             }
 
+            const startDateMoment = moment(startDate, 'YYYY.MM.DD').startOf('day').toDate();
+            const endDateMoment = moment(endDate, 'YYYY.MM.DD').endOf('day').toDate();
+
             if (search) {
                 search = search.replace(/'/g, "''"); // SQL injectionni oldini oladi
             }
@@ -106,15 +109,15 @@ class b1HANA {
                 let filter = {
                     SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                        $gte: startDateMoment,
+                        $lte: endDateMoment
                     }
                 };
                 let filterPartial = {
                     SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                        $gte: startDateMoment,
+                        $lte: endDateMoment
                     }
                 };
 
@@ -204,8 +207,8 @@ class b1HANA {
                 userModel.forEach(user => {
                     if (user.CardCode) {
                         userLocationMap.set(user.CardCode, {
-                            Lat: user.Lat || null,
-                            Long: user.Long || null,
+                            lat: user.lat || null,
+                            long: user.long || null,
                         });
                     }
                 });
@@ -223,8 +226,10 @@ class b1HANA {
                         Comments: commentMap[key] || [],
                         phoneConfiscated: inv?.phoneConfiscated || false,
                         partial: partialModel.find(item => `${item.DocEntry}_${item.InstlmntID}` === key)?.partial === true,
-                        Lat: userLocation.Lat || null,
-                        Long: userLocation.Long || null,
+                        location:{
+                            lat: userLocation.lat || null,
+                            long: userLocation.long || null,
+                        }
                     };
                 });
 
@@ -240,15 +245,15 @@ class b1HANA {
             // slpCode bo'lmagan holat
             let baseFilter = {
                 DueDate: {
-                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                    $gte: startDateMoment,
+                    $lte: endDateMoment
                 }
             };
 
             let baseFilterPartial = {
                 DueDate: {
-                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                    $gte: startDateMoment,
+                    $lte: endDateMoment
                 }
             };
             let invoiceConfiscated = [];
@@ -283,7 +288,7 @@ class b1HANA {
                 notInv = invoiceConfiscated
             }
 
-            if (paymentStatus.split(',').includes('paid') || paymentStatus.split(',').includes('partial')) {
+            if (paymentStatus?.split(',').includes('paid') || paymentStatus?.split(',').includes('partial')) {
                 baseFilterPartial.partial = true
             }
 
@@ -342,8 +347,8 @@ class b1HANA {
             userModel.forEach(user => {
                 if (user.CardCode) {
                     userLocationMap.set(user.CardCode, {
-                        Lat: user.Lat || null,
-                        Long: user.Long || null,
+                        lat: user.lat || null,
+                        long: user.long || null,
                     });
                 }
             });
@@ -370,12 +375,13 @@ class b1HANA {
                     NewDueDate: inv?.newDueDate || '',
                     Comments: commentMap[key] || [],
                     phoneConfiscated: inv?.phoneConfiscated || false,
-                    partial: partialModel.find(item => `${item.DocEntry}_${item.InstlmntID}` === `${el.DocEntry}_${el.InstlmntID}`)?.partial === true
-                    Lat: userLocation.Lat || null,
-                    Long: userLocation.Long || null,
+                    partial: partialModel.find(item => `${item.DocEntry}_${item.InstlmntID}` === `${el.DocEntry}_${el.InstlmntID}`)?.partial === true,
+                    location:{
+                        lat: userLocation.lat || null,
+                        long: userLocation.long || null,
+                    }
                 };
             });
-
 
             return res.status(200).json({
                 total,
@@ -425,6 +431,9 @@ class b1HANA {
                 endDate = moment(now).endOf('month').format('YYYY.MM.DD');
             }
 
+            const startDateMoment = moment(startDate, 'YYYY.MM.DD').startOf('day').toDate();
+            const endDateMoment = moment(endDate, 'YYYY.MM.DD').endOf('day').toDate();
+
             const slpCodeRaw = req.query.slpCode;
             const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
 
@@ -433,19 +442,18 @@ class b1HANA {
                 let filter = {
                     SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate(),
+                        $gte: startDateMoment,
+                        $lte: endDateMoment,
                     }
                 };
 
                 let filterPartial = {
                     SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                        $gte: startDateMoment,
+                        $lte: endDateMoment
                     }
                 };
-
 
                 if (phoneConfiscated === 'true') {
                     filter.phoneConfiscated = true;
@@ -516,15 +524,15 @@ class b1HANA {
             }
             let baseFilter = {
                 DueDate: {
-                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                    $gte: startDateMoment,
+                    $lte: endDateMoment
                 }
             };
 
             let baseFilterPartial = {
                 DueDate: {
-                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                    $gte: startDateMoment,
+                    $lte: endDateMoment
                 }
             };
 
@@ -561,8 +569,6 @@ class b1HANA {
                 notInv = invoiceConfiscated
             }
 
-
-
             if (paymentStatus.split(',').includes('paid') || paymentStatus.split(',').includes('partial')) {
                 baseFilterPartial.partial = true
             }
@@ -580,8 +586,6 @@ class b1HANA {
                     CardCode: 1
                 }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
             }
-
-
 
             const query = await DataRepositories.getInvoiceSearchBPorSeria({
                 startDate,
@@ -718,13 +722,13 @@ class b1HANA {
             let result = InstIdList.map(el => {
                 let list = data.filter(item => item.InstlmntID == el)
                 let invoiceItem = invoice.find(item => item.InstlmntID == el)
-                console.log(invoiceItem)
                 return {
                     ItemCode: get(list, `[0].ItemCode`, ''),
                     Dscription: get(list, `[0].Dscription`, ''),
                     CardCode: get(list, `[0].CardCode`, ''),
                     CardName: get(list, `[0].CardName`, ''),
                     MaxDocTotal: get(list, `[0].MaxDocTotal`, 0),
+                    IntrSerial: get(list, `[0].IntrSerial`, ''),
                     MaxTotalPaidToDate: get(list, `[0].MaxTotalPaidToDate`, 0),
                     Cellular: get(list, `[0].Cellular`, ''),
                     Phone1: get(list, `[0].Phone1`, ''),
@@ -1571,6 +1575,18 @@ class b1HANA {
             const { cardCode } = req.params;
             const { lat, long } = req.body;
 
+            if(!lat || !long) {
+                return res.status(400).json({
+                    message: 'lat and long are required.',
+                });
+            }
+
+            if(lat?.length > 100 || long?.length > 100) {
+                return res.status(400).json({
+                    message: 'lat and long must be less than 100 characters.',
+                });
+            }
+
             if (!cardCode || !lat || !long) {
                 return res.status(400).json({
                     message: 'cardCode, lat, and long are required.',
@@ -1580,14 +1596,14 @@ class b1HANA {
             let user = await UserModel.findOne({ CardCode: cardCode });
 
             if (user) {
-                user.Lat = lat;
-                user.Long = long;
+                user.lat = lat;
+                user.long = long;
                 await user.save();
             } else {
-                user = await User.create({
+                user = await UserModel.create({
                     CardCode: cardCode,
-                    Lat: lat,
-                    Long: long,
+                    lat: lat,
+                    long: long,
                 });
             }
 

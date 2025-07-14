@@ -280,7 +280,6 @@ class DataRepositories {
             }
         }
 
-        console.log(statusCondition)
         // 2. CARD CODE filter
         if (cardCode) {
             businessPartnerCondition = `AND T2."CardCode" = '${cardCode}'`;
@@ -671,46 +670,69 @@ class DataRepositories {
 
     getPayList({ docEntry }) {
         let sql = `SELECT
-                       T1."Canceled",
-                       T0."DocNum",
-                       T0."DocEntry",
-                       T0."SumApplied",
-                       T0."InstId",
-                       T1."CashAcct",
-                       T1."DocDate",
-                       T1."CheckAcct",
-                       T2."InstlmntID",
-                       T2."DueDate",
-                       T2."PaidToDate",
-                       T2."InsTotal",
-                       T3."AcctName",
-                       T4."CardCode",
-                       T4."CardName",
-                       T4."DocTotal" as "MaxDocTotal",
-                       T4."PaidToDate" as "MaxTotalPaidToDate",
-                       T5."Cellular",
-                       T5."Phone1",
-                       T5."Phone2",
-                       T6."ItemCode",
-                       T6."Dscription"
-                   FROM
-                       ${this.db}.INV6 T2
-                           LEFT JOIN
-                       ${this.db}.RCT2 T0 ON T2."DocEntry" = T0."DocEntry" AND T2."InstlmntID" = T0."InstId"
-                           LEFT JOIN
-                       ${this.db}.ORCT T1 ON T0."DocNum" = T1."DocEntry"
-                           LEFT JOIN
-                       ${this.db}.OACT T3 ON T3."AcctCode" = COALESCE(T1."CashAcct", T1."CheckAcct")
-                           INNER JOIN
-                       ${this.db}.OINV T4 ON T4."DocEntry" = T2."DocEntry"
-                           INNER JOIN
-                       ${this.db}.OCRD T5 ON T4."CardCode" = T5."CardCode"
-                           LEFT JOIN
-                       ${this.db}.INV1 T6 ON T6."DocEntry" = T4."DocEntry" AND T6."LineNum" = 0
-                   WHERE
-                       T2."DocEntry" = '${docEntry}'
-                   ORDER BY
-                       T2."InstlmntID" ASC`
+    T1."Canceled",
+    T0."DocNum",
+    T0."DocEntry",
+    T0."SumApplied",
+    T0."InstId",
+    T1."CashAcct",
+    T1."DocDate",
+    T1."CheckAcct",
+    T2."InstlmntID",
+    T2."DueDate",
+    T2."PaidToDate",
+    T2."InsTotal",
+    T3."AcctName",
+    T4."CardCode",
+    T4."CardName",
+    T4."DocTotal" as "MaxDocTotal",
+    T4."PaidToDate" as "MaxTotalPaidToDate",
+    T5."Cellular",
+    T5."Phone1",
+    T5."Phone2",
+    T6."ItemCode",
+    T6."Dscription",
+    STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial"
+FROM
+    ${this.db}.INV6 T2
+    LEFT JOIN ${this.db}.RCT2 T0 ON T2."DocEntry" = T0."DocEntry" AND T2."InstlmntID" = T0."InstId"
+    LEFT JOIN ${this.db}.ORCT T1 ON T0."DocNum" = T1."DocEntry"
+    LEFT JOIN ${this.db}.OACT T3 ON T3."AcctCode" = COALESCE(T1."CashAcct", T1."CheckAcct")
+    LEFT JOIN ${this.db}.OINV T4 ON T4."DocEntry" = T2."DocEntry"
+    INNER JOIN ${this.db}.OCRD T5 ON T4."CardCode" = T5."CardCode"
+    LEFT JOIN ${this.db}.INV1 T6 ON T6."DocEntry" = T4."DocEntry" AND T6."LineNum" = 0
+    LEFT JOIN ${this.db}.SRI1 TSRI1 ON T6."DocEntry" = TSRI1."BaseEntry"
+        AND TSRI1."BaseType" = 13 AND TSRI1."BaseLinNum" = T6."LineNum"
+    LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+        AND TOSRI."ItemCode" = TSRI1."ItemCode"
+WHERE
+    T2."DocEntry" = '${docEntry}'
+GROUP BY
+    T1."Canceled",
+    T0."DocNum",
+    T0."DocEntry",
+    T0."SumApplied",
+    T0."InstId",
+    T1."CashAcct",
+    T1."DocDate",
+    T1."CheckAcct",
+    T2."InstlmntID",
+    T2."DueDate",
+    T2."PaidToDate",
+    T2."InsTotal",
+    T3."AcctName",
+    T4."CardCode",
+    T4."CardName",
+    T4."DocTotal",
+    T4."PaidToDate",
+    T5."Cellular",
+    T5."Phone1",
+    T5."Phone2",
+    T6."ItemCode",
+    T6."Dscription"
+ORDER BY
+    T2."InstlmntID" ASC
+`
         return sql
     }
 
