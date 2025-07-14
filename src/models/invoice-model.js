@@ -2,10 +2,10 @@ const { Schema, model } = require('mongoose');
 
 const InvoiceSchema = new Schema(
     {
-        DocEntry: { type: String, required: false }, // Ichki hujjat raqami
-        CardCode: { type: String, required: false }, // Mijoz kodi
-        CardName: { type: String, required: false }, // Mijoz nomi
-        Dscription: { type: String, required: false }, // Tavsif
+        DocEntry: { type: String, required: false }, 
+        CardCode: { type: String, required: false },
+        CardName: { type: String, required: false },
+        Dscription: { type: String, required: false },
         SlpName: { type: String, required: false, default: '' },
         SlpCode: { type: Number, required: false },
         DueDate: { type: Date, required: false },

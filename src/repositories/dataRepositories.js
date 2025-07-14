@@ -405,25 +405,6 @@ class DataRepositories {
             salesCondition = `AND NOT (${inConditions})`;
         }
 
-
-        // if (paymentStatus) {
-        //     const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
-        //     const conditions = [];
-        //     if (statuses.includes('paid')) {
-        //         conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
-        //     }
-        //     if (statuses.includes('unpaid')) {
-        //         conditions.push(`(T0."PaidToDate" = 0)`);
-        //     }
-        //     if (statuses.includes('partial')) {
-        //         conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
-        //     }
-
-        //     if (conditions.length > 0) {
-        //         statusCondition = `AND (${conditions.join(' OR ')})`;
-        //     }
-        // }
-
         if (paymentStatus) {
             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
             const conditions = [];
@@ -549,24 +530,6 @@ class DataRepositories {
     getInvoiceSearchBPorSeriaDistribution({ startDate, endDate, limit, offset, paymentStatus, search, phone, invoices, partial }) {
         let statusCondition = '';
         let salesCondition = `and (T1."DocEntry", T0."InstlmntID") IN (${invoices.map(item => `('${item.DocEntry}', '${item.InstlmntID}')`).join(", ")}) `
-
-        // if (paymentStatus) {
-        //     const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
-        //     const conditions = [];
-        //     if (statuses.includes('paid')) {
-        //         conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
-        //     }
-        //     if (statuses.includes('unpaid')) {
-        //         conditions.push(`(T0."PaidToDate" = 0)`);
-        //     }
-        //     if (statuses.includes('partial')) {
-        //         conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
-        //     }
-
-        //     if (conditions.length > 0) {
-        //         statusCondition = `AND (${conditions.join(' OR ')})`;
-        //     }
-        // }
 
         if (paymentStatus) {
             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
@@ -707,32 +670,47 @@ class DataRepositories {
 
 
     getPayList({ docEntry }) {
-        let sql = `SELECT 
-          T1."Canceled", 
-          T0."DocNum", 
-          T0."DocEntry", 
-          T0."SumApplied", 
-          T0."InstId", 
-          T1."CashAcct", 
-          T1."DocDate", 
-          T1."CheckAcct", 
-          T2."InstlmntID", 
-          T2."DueDate", 
-          T2."PaidToDate", 
-          T2."InsTotal" ,
-          T3."AcctName"
-      FROM 
-      ${this.db}.INV6 T2
-      LEFT JOIN 
-      ${this.db}.RCT2 T0  ON T2."DocEntry" = T0."DocEntry"  and T2."InstlmntID" = T0."InstId" 
-      LEFT JOIN 
-          ${this.db}.ORCT T1 ON T0."DocNum" = T1."DocEntry" 
-      LEFT JOIN 
-          ${this.db}.OACT T3 ON T3."AcctCode" = COALESCE(T1."CashAcct", T1."CheckAcct") 
-      WHERE 
-       T2."DocEntry" = '${docEntry}' 
-      ORDER BY 
-          T2."InstlmntID" ASC`
+        let sql = `SELECT
+                       T1."Canceled",
+                       T0."DocNum",
+                       T0."DocEntry",
+                       T0."SumApplied",
+                       T0."InstId",
+                       T1."CashAcct",
+                       T1."DocDate",
+                       T1."CheckAcct",
+                       T2."InstlmntID",
+                       T2."DueDate",
+                       T2."PaidToDate",
+                       T2."InsTotal",
+                       T3."AcctName",
+                       T4."CardCode",
+                       T4."CardName",
+                       T4."DocTotal" as "MaxDocTotal",
+                       T4."PaidToDate" as "MaxTotalPaidToDate",
+                       T5."Cellular",
+                       T5."Phone1",
+                       T5."Phone2",
+                       T6."ItemCode",
+                       T6."Dscription"
+                   FROM
+                       ${this.db}.INV6 T2
+                           LEFT JOIN
+                       ${this.db}.RCT2 T0 ON T2."DocEntry" = T0."DocEntry" AND T2."InstlmntID" = T0."InstId"
+                           LEFT JOIN
+                       ${this.db}.ORCT T1 ON T0."DocNum" = T1."DocEntry"
+                           LEFT JOIN
+                       ${this.db}.OACT T3 ON T3."AcctCode" = COALESCE(T1."CashAcct", T1."CheckAcct")
+                           INNER JOIN
+                       ${this.db}.OINV T4 ON T4."DocEntry" = T2."DocEntry"
+                           INNER JOIN
+                       ${this.db}.OCRD T5 ON T4."CardCode" = T5."CardCode"
+                           LEFT JOIN
+                       ${this.db}.INV1 T6 ON T6."DocEntry" = T4."DocEntry" AND T6."LineNum" = 0
+                   WHERE
+                       T2."DocEntry" = '${docEntry}'
+                   ORDER BY
+                       T2."InstlmntID" ASC`
         return sql
     }
 

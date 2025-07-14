@@ -8,6 +8,7 @@ const DataRepositories = require("../repositories/dataRepositories");
 const ApiError = require("../exceptions/api-error");
 const InvoiceModel = require("../models/invoice-model");
 const CommentModel = require("../models/comment-model")
+const UserModel = require("../models/user-model")
 const b1Sl = require('./b1SL')
 const { convertToISOFormat, shuffleArray, checkFileType, parseLocalDateString } = require("../helpers");
 const moment = require('moment-timezone')
@@ -195,9 +196,25 @@ class b1HANA {
                     commentMap[key].push(c);
                 }
 
+                let userModel = await UserModel.find({
+                    CardCode: { $in: invoices.map(el => el.CardCode) }
+                });
+
+                const userLocationMap = new Map();
+                userModel.forEach(user => {
+                    if (user.CardCode) {
+                        userLocationMap.set(user.CardCode, {
+                            Lat: user.Lat || null,
+                            Long: user.Long || null,
+                        });
+                    }
+                });
+
                 const data = invoices.map(el => {
                     const key = `${el.DocEntry}_${el.InstlmntID}`;
                     const inv = invoiceMap.get(key);
+                    const userLocation = userLocationMap.get(el.CardCode) || {};
+
                     return {
                         ...el,
                         SlpCode: inv?.SlpCode || null,
@@ -205,7 +222,9 @@ class b1HANA {
                         NewDueDate: inv?.newDueDate || '',
                         Comments: commentMap[key] || [],
                         phoneConfiscated: inv?.phoneConfiscated || false,
-                        partial: partialModel.find(item => `${item.DocEntry}_${item.InstlmntID}` === `${el.DocEntry}_${el.InstlmntID}`)?.partial === true
+                        partial: partialModel.find(item => `${item.DocEntry}_${item.InstlmntID}` === key)?.partial === true,
+                        Lat: userLocation.Lat || null,
+                        Long: userLocation.Long || null,
                     };
                 });
 
@@ -315,6 +334,20 @@ class b1HANA {
                 commentMap[key].push(c);
             }
 
+            let userModel = await UserModel.find({
+                CardCode: { $in: invoices.map(el => el.CardCode) }
+            });
+
+            const userLocationMap = new Map();
+            userModel.forEach(user => {
+                if (user.CardCode) {
+                    userLocationMap.set(user.CardCode, {
+                        Lat: user.Lat || null,
+                        Long: user.Long || null,
+                    });
+                }
+            });
+
             const docEntrySet = [...new Set(invoices.map(el => el.DocEntry))];
             invoicesModel = await InvoiceModel.find({
                 DocEntry: { $in: docEntrySet }
@@ -328,6 +361,8 @@ class b1HANA {
             const data = invoices.map(el => {
                 const key = `${el.DocEntry}_${el.InstlmntID}`;
                 const inv = invoiceMap.get(key);
+                const userLocation = userLocationMap.get(el.CardCode) || {};
+
                 return {
                     ...el,
                     SlpCode: inv?.SlpCode || null,
@@ -336,6 +371,8 @@ class b1HANA {
                     Comments: commentMap[key] || [],
                     phoneConfiscated: inv?.phoneConfiscated || false,
                     partial: partialModel.find(item => `${item.DocEntry}_${item.InstlmntID}` === `${el.DocEntry}_${el.InstlmntID}`)?.partial === true
+                    Lat: userLocation.Lat || null,
+                    Long: userLocation.Long || null,
                 };
             });
 
@@ -675,17 +712,30 @@ class b1HANA {
         try {
             const { id } = req.params
             const query = await DataRepositories.getPayList({ docEntry: id })
-
+            let invoice = await InvoiceModel.find({ DocEntry: id })
             let data = await this.execute(query)
             let InstIdList = [...new Set(data.map(el => el.InstlmntID))]
             let result = InstIdList.map(el => {
                 let list = data.filter(item => item.InstlmntID == el)
-
+                let invoiceItem = invoice.find(item => item.InstlmntID == el)
+                console.log(invoiceItem)
                 return {
-                    DueDate: get(list, `[0].DueDate`, 0),
+                    ItemCode: get(list, `[0].ItemCode`, ''),
+                    Dscription: get(list, `[0].Dscription`, ''),
+                    CardCode: get(list, `[0].CardCode`, ''),
+                    CardName: get(list, `[0].CardName`, ''),
+                    MaxDocTotal: get(list, `[0].MaxDocTotal`, 0),
+                    MaxTotalPaidToDate: get(list, `[0].MaxTotalPaidToDate`, 0),
+                    Cellular: get(list, `[0].Cellular`, ''),
+                    Phone1: get(list, `[0].Phone1`, ''),
+                    Phone2: get(list, `[0].Phone2`, ''),
                     InstlmntID: el,
                     PaidToDate: list?.length ? list.filter(item => (item.Canceled === null || item.Canceled === 'N')).reduce((a, b) => a + Number(b?.SumApplied || 0), 0) : 0,
                     InsTotal: get(list, `[0].InsTotal`, 0),
+                    Images: invoiceItem?.images || [],
+                    partial: invoiceItem?.partial || false,
+                    phoneConfiscated: invoiceItem?.phoneConfiscated || false,
+                    SlpCode: invoiceItem?.SlpCode || null,
                     PaysList: list.filter(i => i.DocDate && (i.Canceled === null || i.Canceled === 'N')).map(item => ({
                         SumApplied: item.SumApplied,
                         AcctName: item.AcctName,
@@ -1515,6 +1565,41 @@ class b1HANA {
             next(e);
         }
     };
+
+    map = async (req, res, next) => {
+        try {
+            const { cardCode } = req.params;
+            const { lat, long } = req.body;
+
+            if (!cardCode || !lat || !long) {
+                return res.status(400).json({
+                    message: 'cardCode, lat, and long are required.',
+                });
+            }
+
+            let user = await UserModel.findOne({ CardCode: cardCode });
+
+            if (user) {
+                user.Lat = lat;
+                user.Long = long;
+                await user.save();
+            } else {
+                user = await User.create({
+                    CardCode: cardCode,
+                    Lat: lat,
+                    Long: long,
+                });
+            }
+
+            return res.status(200).json({
+                message: user.created_at ? 'User created successfully.' : 'User location updated.',
+                data: user,
+            });
+        } catch (e) {
+            next(e);
+        }
+    };
+
 
     confiscating = async (req, res, next) => {
         try {

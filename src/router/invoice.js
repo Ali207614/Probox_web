@@ -17,6 +17,8 @@ router.put('/executor/:DocEntry/:InstlmntID', authMiddleware, b1HANA.updateExecu
 router.put('/confiscating/:DocEntry/:InstlmntID', authMiddleware, b1HANA.confiscating);
 router.put('/partial/:DocEntry/:InstlmntID', authMiddleware, b1HANA.partial);
 
+router.put('/map/:cardCode', authMiddleware, b1HANA.map);
+
 router.get('/comments/:DocEntry/:InstlmntID', authMiddleware, b1HANA.getComments);
 
 router.post(
