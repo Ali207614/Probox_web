@@ -14,6 +14,7 @@ const { convertToISOFormat, shuffleArray, checkFileType, parseLocalDateString } 
 const moment = require('moment-timezone')
 const sharp = require('sharp');
 const fsPromises = require('fs/promises');
+const {notIncExecutorRole} = require("../config");
 require('dotenv').config();
 
 
@@ -633,7 +634,7 @@ class b1HANA {
 
     executors = async (req, res, next) => {
         try {
-            const query = await DataRepositories.getSalesPersons();
+            const query = await DataRepositories.getSalesPersons(notIncExecutorRole);
             let data = await this.execute(query);
             let total = data.length
 

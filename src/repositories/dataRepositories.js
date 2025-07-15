@@ -650,9 +650,9 @@ class DataRepositories {
     }
 
 
-    getSalesPersons() {
+    getSalesPersons(notIncExecutorRole) {
         let sql = `
-        SELECT T0."SlpCode", T0."SlpName", T0."U_login", T0."U_role" FROM ${this.db}.OSLP T0  WHERE T0."U_role" IS NOT NULL
+        SELECT T0."SlpCode", T0."SlpName", T0."U_login", T0."U_role" FROM ${this.db}.OSLP T0  WHERE T0."U_role" IS NOT NULL and T0."U_role" not in (${notIncExecutorRole.map(item => `'${item}'`).join(', ')})
         `
         return sql
     }

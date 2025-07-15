@@ -16,7 +16,9 @@ const api_params = {
 }
 
 // let db = process.env.test_db
+let notIncExecutorRole= ['CEO']
 module.exports = {
+    notIncExecutorRole,
     conn_params,
     db,
     api_params,
