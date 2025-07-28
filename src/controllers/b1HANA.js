@@ -15,11 +15,6 @@ const moment = require('moment-timezone')
 const sharp = require('sharp');
 const fsPromises = require('fs/promises');
 const {notIncExecutorRole} = require("../config");
-
-const ffmpeg = require('fluent-ffmpeg');
-const ffprobeStatic = require('ffprobe-static');
-
-ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
 
@@ -1225,21 +1220,16 @@ class b1HANA {
             const { SlpCode } = req.user;
             const files = req.files;
 
-            console.log(req.params)
-
-
             if (!DocEntry && !InstlmntID && !files?.audio) {
                 return res.status(400).json({ message: 'DocEntry or InstlmnID is required' });
             }
 
-            console.log(req.files ,' bu arr')
 
             const hasComment = !!Comments;
             const hasImage = files?.image?.length > 0;
             const hasAudio = files?.audio?.length > 0;
 
             const activeInputs = [hasComment, hasImage, hasAudio].filter(Boolean);
-            console.log(activeInputs)
             if (activeInputs.length === 0) {
                 return res.status(400).json({ message: 'Comment, image, or audio is required' });
             }
@@ -1269,24 +1259,9 @@ class b1HANA {
             }
 
             if (hasAudio) {
-                const audioFilePath = files.audio[0].path;
-                const audioFilename = files.audio[0].filename;
-
-                const getAudioDuration = () => {
-                    return new Promise((resolve, reject) => {
-                        ffmpeg.ffprobe(audioFilePath, (err, metadata) => {
-                            if (err) return reject(err);
-                            const durationInSeconds = metadata.format.duration;
-                            resolve(durationInSeconds);
-                        });
-                    });
-                };
-
-                const duration = await getAudioDuration();
-
                 audioPath = {
-                    url: audioFilename,
-                    duration: Math.round(duration) // yaxlitlangan sekundlar
+                    url: files.audio[0].filename,
+                    duration: get(req,'body.audioDuration', 0),
                 };
             }
 
@@ -1332,7 +1307,6 @@ class b1HANA {
             const { Comments } = req.body;
             const files = req.files;
 
-            console.log(req.files)
 
             const existing = await CommentModel.findById(id);
             if (!existing) {
@@ -1410,7 +1384,10 @@ class b1HANA {
                     await fsPromises.unlink(path.join(file.destination, existing.Image)).catch(() => {});
                 }
 
-                updatePayload.Audio = file.filename;
+                updatePayload.Audio = {
+                    url: file.filename,
+                    duration: get(req,'body.audioDuration', 0),
+                };
                 updatePayload.Image = null;
                 updatePayload.Comments = null;
             }
