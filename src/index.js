@@ -7,7 +7,7 @@ const router = require('./router/index')
 const errorMiddleware = require('./middlewares/error-middleware');
 const hanaClient = require("@sap/hana-client");
 const compression = require('compression');
-
+const multer = require('multer');
 const { PORT, DB_URL, CLIENT_URL, conn_params } = require('./config')
 const app = express()
 
@@ -38,12 +38,7 @@ app.use("/api/images", express.static("uploads"));
 
 app.use(errorMiddleware);
 
-app.use((req, res, next) => {
-    res.status(404).json({
-        message: 'Endpoint not found',
-        error: [],
-    });
-});
+
 const start = async () => {
     try {
         await mongoose.connect(DB_URL, {

@@ -15,6 +15,11 @@ const moment = require('moment-timezone')
 const sharp = require('sharp');
 const fsPromises = require('fs/promises');
 const {notIncExecutorRole} = require("../config");
+
+const ffmpeg = require('fluent-ffmpeg');
+const ffprobeStatic = require('ffprobe-static');
+
+ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
 
@@ -226,7 +231,7 @@ class b1HANA {
                         NewDueDate: inv?.newDueDate || '',
                         Comments: commentMap[key] || [],
                         phoneConfiscated: inv?.phoneConfiscated || false,
-                        partial: partialModel.find(item => `${item.DocEntry}_${item.InstlmntID}` === key)?.partial === true,
+                        partial: inv?.partial || false,
                         location:{
                             lat: userLocation.lat || null,
                             long: userLocation.long || null,
@@ -376,7 +381,7 @@ class b1HANA {
                     NewDueDate: inv?.newDueDate || '',
                     Comments: commentMap[key] || [],
                     phoneConfiscated: inv?.phoneConfiscated || false,
-                    partial: partialModel.find(item => `${item.DocEntry}_${item.InstlmntID}` === `${el.DocEntry}_${el.InstlmntID}`)?.partial === true,
+                    partial: inv?.partial || false,
                     location:{
                         lat: userLocation.lat || null,
                         long: userLocation.long || null,
@@ -738,6 +743,7 @@ class b1HANA {
                     PaidToDate: list?.length ? list.filter(item => (item.Canceled === null || item.Canceled === 'N')).reduce((a, b) => a + Number(b?.SumApplied || 0), 0) : 0,
                     InsTotal: get(list, `[0].InsTotal`, 0),
                     Images: invoiceItem?.images || [],
+                    DueDate: get(list, `[0].DueDate`, 0),
                     partial: invoiceItem?.partial || false,
                     phoneConfiscated: invoiceItem?.phoneConfiscated || false,
                     SlpCode: invoiceItem?.SlpCode || null,
@@ -1219,16 +1225,21 @@ class b1HANA {
             const { SlpCode } = req.user;
             const files = req.files;
 
+            console.log(req.params)
+
+
             if (!DocEntry && !InstlmntID && !files?.audio) {
                 return res.status(400).json({ message: 'DocEntry or InstlmnID is required' });
             }
+
+            console.log(req.files ,' bu arr')
 
             const hasComment = !!Comments;
             const hasImage = files?.image?.length > 0;
             const hasAudio = files?.audio?.length > 0;
 
             const activeInputs = [hasComment, hasImage, hasAudio].filter(Boolean);
-
+            console.log(activeInputs)
             if (activeInputs.length === 0) {
                 return res.status(400).json({ message: 'Comment, image, or audio is required' });
             }
@@ -1258,7 +1269,25 @@ class b1HANA {
             }
 
             if (hasAudio) {
-                audioPath = files.audio[0].filename; // faqat nomi
+                const audioFilePath = files.audio[0].path;
+                const audioFilename = files.audio[0].filename;
+
+                const getAudioDuration = () => {
+                    return new Promise((resolve, reject) => {
+                        ffmpeg.ffprobe(audioFilePath, (err, metadata) => {
+                            if (err) return reject(err);
+                            const durationInSeconds = metadata.format.duration;
+                            resolve(durationInSeconds);
+                        });
+                    });
+                };
+
+                const duration = await getAudioDuration();
+
+                audioPath = {
+                    url: audioFilename,
+                    duration: Math.round(duration) // yaxlitlangan sekundlar
+                };
             }
 
             const newComment = new CommentModel({
@@ -1302,6 +1331,8 @@ class b1HANA {
             const { id } = req.params;
             const { Comments } = req.body;
             const files = req.files;
+
+            console.log(req.files)
 
             const existing = await CommentModel.findById(id);
             if (!existing) {
@@ -1424,25 +1455,14 @@ class b1HANA {
                 return res.status(400).send('Error: No files uploaded.');
             }
 
-            const compressedImageEntries = [];
+            const imageEntries = [];
 
             for (const file of files) {
-                const ext = path.extname(file.filename);
-                const filenameWithoutExt = path.basename(file.filename, ext);
-                const compressedFileName = `${filenameWithoutExt}_compressed.webp`;
-                const compressedFilePath = path.join(file.destination, compressedFileName);
-
-                await sharp(file.path)
-                    .resize({ width: 1024 }) // optional: resize to max width
-                    .webp({ quality: 70 })   // convert and compress
-                    .toFile(compressedFilePath);
-
-                // remove original
-                await fsPromises.unlink(file.path);
-
-                compressedImageEntries.push({
+                imageEntries.push({
                     _id: uuidv4(),
-                    image: compressedFileName
+                    image: file.filename,
+                    mimetype: file.mimetype,
+                    originalName: file.originalname,
                 });
             }
 
@@ -1452,28 +1472,30 @@ class b1HANA {
                 if (!Array.isArray(invoice.images)) {
                     invoice.images = [];
                 }
-                invoice.images.push(...compressedImageEntries);
+                invoice.images.push(...imageEntries);
                 await invoice.save();
             } else {
                 invoice = await InvoiceModel.create({
                     DocEntry,
                     InstlmntID,
-                    images: compressedImageEntries
+                    images: imageEntries,
                 });
             }
 
             return res.status(201).send({
-                images: compressedImageEntries.map(e => ({
+                images: imageEntries.map(e => ({
                     _id: e._id,
-                    image: e.image
+                    image: e.image,
                 })),
                 DocEntry,
-                InstlmntID
+                InstlmntID,
             });
         } catch (e) {
+            console.error(e);
             next(e);
         }
     };
+
 
     deleteImage = async (req, res, next) => {
         try {
