@@ -248,7 +248,7 @@ class DataRepositories {
                 let partialCondition = '';
                 if (partial?.length > 0) {
                     const partialFilter = partial.map(p =>
-                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' )`
                     ).join(' OR ');
 
                     partialCondition = `OR (${partialFilter})`;
@@ -266,7 +266,7 @@ class DataRepositories {
 
                 if (partial?.length > 0) {
                     const partialFilter = partial.map(p =>
-                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' )`
                     ).join(' AND '); // <-- AND ishlatamiz, chunki har bir kombinatsiyani inkor qilish kerak
 
                     excludePartials = `AND (${partialFilter})`;
@@ -304,7 +304,7 @@ class DataRepositories {
             SELECT 1 FROM DUMMY
             WHERE (
                 ${invoices.map(item =>
-                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}' AND T2."CardCode" = '${item.CardCode}')`
+                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
             ).join(' OR ')}
             )
         )`;
@@ -385,6 +385,8 @@ class DataRepositories {
 
 
 
+
+
     getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset, paymentStatus, search, phone, inInv = [], notInv = [], phoneConfiscated, partial }) {
         let statusCondition = '';
         let salesCondition = ''
@@ -413,7 +415,7 @@ class DataRepositories {
                 let partialCondition = '';
                 if (partial?.length > 0) {
                     const partialFilter = partial.map(p =>
-                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}')`
                     ).join(' OR ');
 
                     partialCondition = `OR (${partialFilter})`;
@@ -431,7 +433,7 @@ class DataRepositories {
 
                 if (partial?.length > 0) {
                     const partialFilter = partial.map(p =>
-                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}')`
                     ).join(' AND '); // <-- AND ishlatamiz, chunki har bir kombinatsiyani inkor qilish kerak
 
                     excludePartials = `AND (${partialFilter})`;
@@ -472,56 +474,56 @@ class DataRepositories {
 
 
         let count = `
-            SELECT COUNT(*) 
+            SELECT COUNT(*)
             FROM ${this.db}.INV6 T0
-            INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-            INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
-            INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
-            LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
+                     INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+                     INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+                     INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+                     LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
                 AND TSRI1."BaseType" = ${INVOICE_TYPE}
                 AND TSRI1."BaseLinNum" = T3."LineNum"
-            LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+                     LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
                 AND TOSRI."ItemCode" = TSRI1."ItemCode"
             WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-            AND T1."CANCELED" = 'N'
-            ${statusCondition}
-            ${searchCondition}
-            ${salesCondition}
-        `;
-
-        return `
-            SELECT 
-                (${count}) AS "TOTAL",
-                T2."CardCode", 
-                T2."CardName", 
-                T2."Phone1", 
-                T2."Phone2",
-                STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial"
-            FROM 
-                ${this.db}.INV6 T0
-            INNER JOIN 
-                ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-            INNER JOIN 
-                ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
-            INNER JOIN 
-                ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
-            LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
-                AND TSRI1."BaseType" = ${INVOICE_TYPE}
-                AND TSRI1."BaseLinNum" = T3."LineNum"
-            LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
-                AND TOSRI."ItemCode" = TSRI1."ItemCode"
-            WHERE 
-                T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-                AND T1."CANCELED" = 'N'
+              AND T1."CANCELED" = 'N'
                 ${statusCondition}
                 ${searchCondition}
                 ${salesCondition}
-            GROUP BY 
-                T2."CardCode", 
-                T2."CardName", 
-                T2."Phone1", 
+        `;
+
+        return `
+            SELECT
+                (${count}) AS "TOTAL",
+                T2."CardCode",
+                T2."CardName",
+                T2."Phone1",
+                T2."Phone2",
+                STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial"
+            FROM
+                ${this.db}.INV6 T0
+                    INNER JOIN
+                ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+                    INNER JOIN
+                ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+                    INNER JOIN
+                ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+                    LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
+                    AND TSRI1."BaseType" = ${INVOICE_TYPE}
+                    AND TSRI1."BaseLinNum" = T3."LineNum"
+                    LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+                    AND TOSRI."ItemCode" = TSRI1."ItemCode"
+            WHERE
+                T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+              AND T1."CANCELED" = 'N'
+                ${statusCondition}
+                ${searchCondition}
+                ${salesCondition}
+            GROUP BY
+                T2."CardCode",
+                T2."CardName",
+                T2."Phone1",
                 T2."Phone2"
-            LIMIT ${limit} OFFSET ${offset}
+                LIMIT ${limit} OFFSET ${offset}
         `;
     }
 
@@ -539,7 +541,7 @@ class DataRepositories {
                 let partialCondition = '';
                 if (partial?.length > 0) {
                     const partialFilter = partial.map(p =>
-                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}'`
                     ).join(' OR ');
 
                     partialCondition = `OR (${partialFilter})`;
@@ -557,8 +559,8 @@ class DataRepositories {
 
                 if (partial?.length > 0) {
                     const partialFilter = partial.map(p =>
-                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
-                    ).join(' AND '); // <-- AND ishlatamiz, chunki har bir kombinatsiyani inkor qilish kerak
+                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}')`
+                    ).join(' AND ');
 
                     excludePartials = `AND (${partialFilter})`;
                 }
@@ -596,58 +598,60 @@ class DataRepositories {
 
 
         let count = `
-            SELECT COUNT(*) 
+            SELECT COUNT(*)
             FROM ${this.db}.INV6 T0
-            INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-            INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
-            INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
-            LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
+                     INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+                     INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+                     INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+                     LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
                 AND TSRI1."BaseType" = ${INVOICE_TYPE}
                 AND TSRI1."BaseLinNum" = T3."LineNum"
-            LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+                     LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
                 AND TOSRI."ItemCode" = TSRI1."ItemCode"
             WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-            AND T1."CANCELED" = 'N'
-            ${statusCondition}
-            ${searchCondition}
-            ${salesCondition}
-        `;
-
-        return `
-            SELECT 
-                (${count}) AS "Total",
-                T2."CardCode", 
-                T2."CardName", 
-                T2."Phone1", 
-                T2."Phone2",
-                STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial"
-            FROM 
-                ${this.db}.INV6 T0
-            INNER JOIN 
-                ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-            INNER JOIN 
-                ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
-            INNER JOIN 
-                ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
-            LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
-                AND TSRI1."BaseType" = ${INVOICE_TYPE}
-                AND TSRI1."BaseLinNum" = T3."LineNum"
-            LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
-                AND TOSRI."ItemCode" = TSRI1."ItemCode"
-            WHERE 
-                T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-                AND T1."CANCELED" = 'N'
+              AND T1."CANCELED" = 'N'
                 ${statusCondition}
                 ${searchCondition}
                 ${salesCondition}
-            GROUP BY 
-                T2."CardCode", 
-                T2."CardName", 
-                T2."Phone1", 
-                T2."Phone2"
-            LIMIT ${limit} OFFSET ${offset}
+        `;
+
+        return `
+           
+       SELECT
+    (${count}) AS "Total",
+    T2."CardCode",
+    T2."CardName",
+    T2."Phone1",
+    T2."Phone2",
+    STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial"
+FROM
+    ${this.db}.INV6 T0
+    INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+    INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
+    INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
+    LEFT JOIN ${this.db}.SRI1 TSRI1 
+        ON T3."DocEntry" = TSRI1."BaseEntry"
+        AND TSRI1."BaseType" = ${INVOICE_TYPE}
+        AND TSRI1."BaseLinNum" = T3."LineNum"
+    LEFT JOIN ${this.db}."OSRI" TOSRI 
+        ON TSRI1."SysSerial" = TOSRI."SysSerial"
+        AND TOSRI."ItemCode" = TSRI1."ItemCode"
+WHERE
+    T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+    AND T1."CANCELED" = 'N'
+    ${statusCondition}
+    ${searchCondition}
+    ${salesCondition}
+GROUP BY
+    T2."CardCode",
+    T2."CardName",
+    T2."Phone1",
+    T2."Phone2"
+LIMIT ${limit} OFFSET ${offset};
         `;
     }
+
+
 
 
     getSalesPersons(notIncExecutorRole) {
@@ -741,7 +745,7 @@ ORDER BY
 
         if (invoices.length > 0) {
             const condition = invoices.map(item =>
-                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}' AND T1."CardCode" = '${item.CardCode}')`
+                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
             ).join(' OR ');
 
             salesCondition = `
@@ -751,26 +755,36 @@ ORDER BY
                 )
             `;
         }
+        const newEndDate = moment(endDate, 'YYYY.MM.DD')
+            .endOf('month')
+            .add(10, 'days')
+            .format('YYYY.MM.DD');
 
-        let sql = `SELECT 
-            SUM(T2."SumApplied") as "SumApplied",  
-            SUM(T0."InsTotal") as "InsTotal", 
-            SUM(T0."PaidToDate") as "PaidToDate"
+        let sql = `SELECT
+            SUM(T2."SumApplied") as "SumApplied",
+            T0."InsTotal",
+            T0."PaidToDate"
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN '${startDate}' and '${endDate}' and T3."Canceled" = 'N' 
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'
+        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN T1."DocDate" and '${newEndDate}' and T3."Canceled" = 'N' and T3."DocType" ='C'
+        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'  AND T3."DocDate" IS NOT NULL
         ${salesCondition}
+                   GROUP BY
+                       T0."DocEntry",
+                       T0."InstlmntID",
+                       T0."InsTotal",
+                       T0."PaidToDate"
         `
         return sql
+
     }
 
     getAnalyticsByDay({ startDate, endDate, invoices = [], phoneConfiscated }) {
         let salesCondition = '';
         if (invoices.length > 0) {
             const condition = invoices.map(item =>
-                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}' AND T1."CardCode" = '${item.CardCode}')`
+                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}') `
             ).join(' OR ');
 
             salesCondition = `
@@ -781,18 +795,27 @@ ORDER BY
             `;
         }
 
+        const newEndDate = moment(endDate, 'YYYY.MM.DD')
+            .endOf('month')     // oyni oxiriga olish
+            .add(10, 'days')    // 10 kun qo‘shish
+            .format('YYYY.MM.DD');
+
+
         let sql = `SELECT 
             TO_VARCHAR(T0."DueDate", 'YYYY.MM.DD') AS "DueDate",
             COALESCE(SUM(T2."SumApplied"), 0) AS "SumApplied",
-            SUM(T0."InsTotal") as "InsTotal", 
-            SUM(T0."PaidToDate") as "PaidToDate"
+            T0."InsTotal", 
+            T0."PaidToDate"
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN '${startDate}' and '${endDate}' and T3."Canceled" = 'N' 
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'
+        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN T1."DocDate" and '${newEndDate}' and T3."Canceled" = 'N' and T3."DocType" ='C'
+        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'  AND T3."DocDate" IS NOT NULL
         ${salesCondition}
-        GROUP BY T0."DueDate"
+        GROUP BY T0."DueDate",   T0."DocEntry",
+                       T0."InstlmntID",
+                       T0."InsTotal",
+                       T0."PaidToDate"
         ORDER BY T0."DueDate"
         `
         return sql
@@ -814,29 +837,29 @@ ORDER BY
     //         WITH "InvoiceFilter"("DocEntry", "InstlmntID", "CardCode", "SlpCode") AS (
     //             ${invoiceRows}
     //           )
-    // SELECT 
+    // SELECT
     //     F."SlpCode",
     //     SUM(T2."SumApplied") AS "SumApplied",
     //     SUM(T0."InsTotal") AS "InsTotal",
     //     SUM(T0."PaidToDate") AS "PaidToDate"
-    // FROM 
+    // FROM
     //     ${this.db}.INV6 T0
     //     INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-    //     INNER JOIN "InvoiceFilter" F ON 
-    //         T1."DocEntry" = F."DocEntry" AND 
-    //         T0."InstlmntID" = F."InstlmntID" AND 
+    //     INNER JOIN "InvoiceFilter" F ON
+    //         T1."DocEntry" = F."DocEntry" AND
+    //         T0."InstlmntID" = F."InstlmntID" AND
     //         T1."CardCode" = F."CardCode"
-    //     LEFT JOIN ${this.db}.RCT2 T2 ON 
-    //         T2."DocEntry" = T0."DocEntry" AND 
+    //     LEFT JOIN ${this.db}.RCT2 T2 ON
+    //         T2."DocEntry" = T0."DocEntry" AND
     //         T0."InstlmntID" = T2."InstId"
-    //     LEFT JOIN ${this.db}.ORCT T3 ON 
-    //         T2."DocNum" = T3."DocEntry" AND 
-    //         T3."DocDate" BETWEEN '${startDate}' AND '${endDate}' AND 
+    //     LEFT JOIN ${this.db}.ORCT T3 ON
+    //         T2."DocNum" = T3."DocEntry" AND
+    //         T3."DocDate" BETWEEN '${startDate}' AND '${endDate}' AND
     //         T3."Canceled" = 'N'
-    // WHERE 
-    //     T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' AND 
+    // WHERE
+    //     T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' AND
     //     T1."CANCELED" = 'N'
-    // GROUP BY 
+    // GROUP BY
     //     F."SlpCode"
     // `;
     //         return sql;
@@ -848,7 +871,7 @@ ORDER BY
 
         if (invoices.length > 0) {
             const condition = invoices.map(item =>
-                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}' AND T1."CardCode" = '${item.CardCode}')`
+                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
             ).join(' OR ');
 
             salesCondition = `
@@ -859,18 +882,29 @@ ORDER BY
             `;
         }
 
+        const newEndDate = moment(endDate, 'YYYY.MM.DD')
+            .endOf('month')     // oyni oxiriga olish
+            .add(10, 'days')    // 10 kun qo‘shish
+            .format('YYYY.MM.DD');
+
         let sql = `SELECT 
             T0."DocEntry",
             T0."InstlmntID",
-            T2."SumApplied",  
+            SUM(T2."SumApplied") as "SumApplied",
             T0."InsTotal", 
            T0."PaidToDate"
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN '${startDate}' and '${endDate}' and T3."Canceled" = 'N' 
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'
+        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN T1."DocDate" and '${newEndDate}' and T3."Canceled" = 'N' 
+        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N' AND T3."DocDate" IS NOT NULL  and T3."DocType" ='C'
         ${salesCondition}
+                   GROUP BY
+                       T0."DocEntry",
+                       T0."InstlmntID",
+                       T0."InsTotal",
+                       T0."PaidToDate"
+       
         `
         return sql
     }

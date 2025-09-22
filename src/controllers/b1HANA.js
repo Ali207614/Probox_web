@@ -2,7 +2,7 @@ const { get } = require("lodash");
 const tokenService = require('../services/tokenService');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path')
-const fs = require('fs')
+const fs = require('fs/promises')
 let dbService = require('../services/dbService')
 const DataRepositories = require("../repositories/dataRepositories");
 const ApiError = require("../exceptions/api-error");
@@ -15,6 +15,11 @@ const moment = require('moment-timezone')
 const sharp = require('sharp');
 const fsPromises = require('fs/promises');
 const {notIncExecutorRole} = require("../config");
+
+const ffmpeg = require('fluent-ffmpeg');
+const ffprobeStatic = require('ffprobe-static');
+
+ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
 
@@ -393,6 +398,7 @@ class b1HANA {
             });
 
         } catch (e) {
+            console.log(e , ' bu eeee')
             next(e);
         }
     };
@@ -655,10 +661,11 @@ class b1HANA {
                 return res.status(404).json({ error: 'startDate and endDate are required' });
             }
 
-            const executorsQuery = await DataRepositories.getSalesPersons();
+            const executorsQuery = await DataRepositories.getSalesPersons(notIncExecutorRole);
             let executorList = await this.execute(executorsQuery);
 
             let SalesList = executorList.filter(el => el.U_role == 'Assistant')
+            console.log(executorList)
 
             const query = await DataRepositories.getDistribution({ startDate, endDate })
             let data = await this.execute(query)
@@ -672,7 +679,9 @@ class b1HANA {
                     let existShuffle = existInvoice.find(el => el.InstlmntID == data[i].InstlmntID)
                     if (!existShuffle) {
                         let nonExistList = shuffleArray(SalesList.filter(item => !existInvoice.map(item => item.SlpCode).includes(item.SlpCode)))
-                        let first = nonExistList.length ? nonExistList[0] : shuffleArray(SalesList)[0]
+                        let lastExecutor = existInvoice[existInvoice.length - 1]
+                        let isManager = executorList.find(el => el?.SlpCode == lastExecutor?.SlpCode && el?.U_role == 'Manager')
+                        let first = isManager ? isManager :  (nonExistList.length ? nonExistList[0] : shuffleArray(SalesList)[0])
                         newResult.push({
                             DueDate: parseLocalDateString(moment(data[i].DueDate).format('YYYY.MM.DD')),
                             SlpName: first.SlpName,
@@ -735,10 +744,10 @@ class b1HANA {
                     Phone1: get(list, `[0].Phone1`, ''),
                     Phone2: get(list, `[0].Phone2`, ''),
                     InstlmntID: el,
+                    DueDate: get(list, `[0].DueDate`, 0),
                     PaidToDate: list?.length ? list.filter(item => (item.Canceled === null || item.Canceled === 'N')).reduce((a, b) => a + Number(b?.SumApplied || 0), 0) : 0,
                     InsTotal: get(list, `[0].InsTotal`, 0),
                     Images: invoiceItem?.images || [],
-                    DueDate: get(list, `[0].DueDate`, 0),
                     partial: invoiceItem?.partial || false,
                     phoneConfiscated: invoiceItem?.phoneConfiscated || false,
                     SlpCode: invoiceItem?.SlpCode || null,
@@ -785,10 +794,11 @@ class b1HANA {
                 let filter = {
                     SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate(),
+                        $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment(endDate, 'YYYY.MM.DD').endOf('day').toDate(),
                     }
                 };
+
                 // if (phoneConfiscated === 'true') {
                 //     filter.phoneConfiscated = true;
                 // } else if (['false'].includes(phoneConfiscated)) {
@@ -808,6 +818,7 @@ class b1HANA {
                     CardCode: 1,
                     InsTotal: 1
                 }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+
                 if (invoicesModel.length === 0) {
                     return res.status(200).json({
                         SumApplied: 0,
@@ -834,11 +845,17 @@ class b1HANA {
                     // phoneConfiscated: 'false'
                 });
                 let data = await this.execute(query);
-                const result = data.length ? data[0] : {
-                    SumApplied: 0,
-                    InsTotal: 0,
-                    PaidToDate: 0
-                };
+                const result = data.length
+                    ? data.reduce(
+                        (acc, item) => ({
+                            SumApplied: acc.SumApplied + (+item.SumApplied || 0),
+                            InsTotal: acc.InsTotal + (+item.InsTotal || 0),
+                            PaidToDate: acc.PaidToDate + (+item.PaidToDate || 0),
+                        }),
+                        { SumApplied: 0, InsTotal: 0, PaidToDate: 0 }
+                    )
+                    : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
+
                 result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
                 result.InsTotal = Number(result.InsTotal) + confiscatedTotal;
                 result.PaidToDate = Number(result.PaidToDate) + confiscatedTotal;
@@ -848,8 +865,8 @@ class b1HANA {
 
             let baseFilter = {
                 DueDate: {
-                    $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                    $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate()
+                    $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                    $lte: moment(endDate, 'YYYY.MM.DD').endOf('day').toDate()
                 }
             };
             let invoiceConfiscated = [];
@@ -872,15 +889,17 @@ class b1HANA {
             const query = await DataRepositories.getAnalytics({ startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
 
             let data = await this.execute(query)
-            let result = data.length ? {
-                SumApplied: Number(data[0].SumApplied ?? 0),
-                InsTotal: Number(data[0].InsTotal ?? 0),
-                PaidToDate: Number(data[0].PaidToDate ?? 0),
-            } : {
-                SumApplied: 0,
-                InsTotal: 0,
-                PaidToDate: 0
-            };
+
+            let result = data.length
+                ? data.reduce(
+                    (acc, item) => ({
+                        SumApplied: acc.SumApplied + Number(item.SumApplied ?? 0),
+                        InsTotal: acc.InsTotal + Number(item.InsTotal ?? 0),
+                        PaidToDate: acc.PaidToDate + Number(item.PaidToDate ?? 0),
+                    }),
+                    { SumApplied: 0, InsTotal: 0, PaidToDate: 0 }
+                )
+                : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
             result.SumApplied += confiscatedTotal;
             result.InsTotal += confiscatedTotal;
@@ -959,6 +978,30 @@ class b1HANA {
                     invoices: phoneConfisList,
                 });
                 let data = await this.execute(query);
+
+                const grouped = data.reduce((acc, item) => {
+                    const date = item.DueDate;
+
+                    if (!acc[date]) {
+                        acc[date] = {
+                            DueDate: date,
+                            SumApplied: 0,
+                            InsTotal: 0,
+                            PaidToDate: 0,
+                        };
+                    }
+
+                    acc[date].SumApplied += Number(item.SumApplied ?? 0);
+                    acc[date].InsTotal   += Number(item.InsTotal ?? 0);
+                    acc[date].PaidToDate += Number(item.PaidToDate ?? 0);
+
+                    return acc;
+                }, {});
+
+                const result = Object.values(grouped);
+
+               data = result
+
                 if (phoneConfisList.length === 0 || data.length === 0) {
                     return res.status(200).json(data);
                 }
@@ -985,6 +1028,8 @@ class b1HANA {
                     }
                 });
 
+                console.log(data , ' bu data')
+
                 return res.status(200).json(data);
             }
 
@@ -1010,6 +1055,28 @@ class b1HANA {
             const query = await DataRepositories.getAnalyticsByDay({ startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
             let data = await this.execute(query)
 
+            const grouped = data.reduce((acc, item) => {
+                const date = item.DueDate;
+
+                if (!acc[date]) {
+                    acc[date] = {
+                        DueDate: date,
+                        SumApplied: 0,
+                        InsTotal: 0,
+                        PaidToDate: 0,
+                    };
+                }
+
+                acc[date].SumApplied += Number(item.SumApplied ?? 0);
+                acc[date].InsTotal   += Number(item.InsTotal ?? 0);
+                acc[date].PaidToDate += Number(item.PaidToDate ?? 0);
+
+                return acc;
+            }, {});
+
+            const result = Object.values(grouped);
+
+            data = result
 
             data.forEach(item => {
                 const formattedDate = item.DueDate; // '2025.05.01'
@@ -1039,6 +1106,7 @@ class b1HANA {
             return res.status(200).json(data);
         }
         catch (e) {
+            console.log(e)
             next(e)
         }
     }
@@ -1099,6 +1167,7 @@ class b1HANA {
                     endDate,
                     invoices: phoneConfisList,
                 });
+
                 let data = await this.execute(query);
 
                 const invoiceKeyMap = new Map();
@@ -1224,12 +1293,12 @@ class b1HANA {
                 return res.status(400).json({ message: 'DocEntry or InstlmnID is required' });
             }
 
-
             const hasComment = !!Comments;
             const hasImage = files?.image?.length > 0;
             const hasAudio = files?.audio?.length > 0;
 
             const activeInputs = [hasComment, hasImage, hasAudio].filter(Boolean);
+
             if (activeInputs.length === 0) {
                 return res.status(400).json({ message: 'Comment, image, or audio is required' });
             }
@@ -1245,17 +1314,8 @@ class b1HANA {
             let imagePath, audioPath;
 
             if (hasImage) {
-                const originalFilename = files.image[0].filename;
-                const originalPath = files.image[0].path;
-                const compressedFilename = originalFilename.replace(/\.(jpeg|jpg|png)$/, '_compressed.webp');
-                const compressedPath = path.join(path.dirname(originalPath), compressedFilename);
-
-                await sharp(originalPath)
-                    .webp({ quality: 70 })
-                    .toFile(compressedPath);
-
-                await fsPromises.unlink(originalPath);
-                imagePath = compressedFilename;
+                const file = files.image[0];
+                imagePath = file.filename;
             }
 
             if (hasAudio) {
@@ -1307,7 +1367,6 @@ class b1HANA {
             const { Comments } = req.body;
             const files = req.files;
 
-
             const existing = await CommentModel.findById(id);
             if (!existing) {
                 return res.status(404).json({ message: 'Comment not found' });
@@ -1349,17 +1408,7 @@ class b1HANA {
 
             if (hasImage) {
                 const file = files.image[0];
-                const ext = path.extname(file.filename);
-                const baseName = path.basename(file.filename, ext);
-                const compressedName = `${baseName}_compressed.webp`;
-                const compressedPath = path.join(file.destination, compressedName);
 
-                await sharp(file.path)
-                    .resize({ width: 1024 })
-                    .webp({ quality: 70 })
-                    .toFile(compressedPath);
-
-                await fsPromises.unlink(file.path);
 
                 // Eski fayllarni o‘chirish
                 if (existing.Image) {
@@ -1369,11 +1418,10 @@ class b1HANA {
                     await fsPromises.unlink(path.join(file.destination, existing.Audio)).catch(() => {});
                 }
 
-                updatePayload.Image = compressedName;
+                updatePayload.Image = file.filename;
                 updatePayload.Audio = null;
                 updatePayload.Comments = null;
             }
-
             if (hasAudio) {
                 const file = files.audio[0];
 
@@ -1391,6 +1439,7 @@ class b1HANA {
                 updatePayload.Image = null;
                 updatePayload.Comments = null;
             }
+
 
             updatePayload.updatedAt = new Date();
 
@@ -1415,13 +1464,29 @@ class b1HANA {
                 return res.status(404).json({ message: 'Comment not found' });
             }
 
+            const uploadsDir = path.join(process.cwd(), 'uploads');
+
+            // Rasmni o‘chirish
+            if (deleted.Image) {
+                const imagePath = path.join(uploadsDir, deleted.Image);
+                await fs.unlink(imagePath).catch(() => {});
+            }
+
+            // Audio faylni o‘chirish
+            if (deleted.Audio?.url) {
+                const audioPath = path.join(uploadsDir, deleted.Audio.url);
+                await fs.unlink(audioPath).catch(() => {});
+            }
+
             return res.status(200).json({
                 message: 'Comment deleted successfully'
             });
         } catch (e) {
+            console.log(e)
             next(e);
         }
     };
+
 
     uploadImage = async (req, res, next) => {
         try {
@@ -1472,6 +1537,8 @@ class b1HANA {
             next(e);
         }
     };
+
+
 
 
     deleteImage = async (req, res, next) => {
@@ -1525,6 +1592,8 @@ class b1HANA {
             if (invoice) {
                 if (slpCode) {
                     invoice.SlpCode = slpCode;
+                    invoice.CardCode = CardCode;
+                    invoice.DueDate= parseLocalDateString(DueDate)
                 }
 
                 if (newDueDate) {
@@ -1537,6 +1606,7 @@ class b1HANA {
                 invoice = await InvoiceModel.create({
                     DocEntry,
                     InstlmntID,
+                    CardCode,
                     SlpCode: (slpCode || ''),
                     newDueDate: newDueDate ? parseLocalDateString(newDueDate) : '',
                     DueDate: parseLocalDateString(DueDate)

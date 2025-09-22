@@ -25,7 +25,7 @@ function formatterCurrency(
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]]; // Elementlarni joylarini almashtirish
+        [array[i], array[j]] = [array[j], array[i]];
     }
     return array;
 }
@@ -49,7 +49,6 @@ function convertToISOFormat(dateString) {
     const date = new Date(dateString);
     return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
 }
-// Kengaytmani tekshirish funksiyasi
 function checkFileType(file) {
     const extname = allowedFileTypes.test(path.extname(file.name).toLowerCase());
     const mimetype = allowedFileTypes.test(file.mimetype);
