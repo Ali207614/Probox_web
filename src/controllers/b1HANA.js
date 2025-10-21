@@ -10,12 +10,12 @@ const InvoiceModel = require("../models/invoice-model");
 const CommentModel = require("../models/comment-model")
 const UserModel = require("../models/user-model")
 const b1Sl = require('./b1SL')
-const { convertToISOFormat, shuffleArray, checkFileType, parseLocalDateString } = require("../helpers");
+const { shuffleArray, parseLocalDateString } = require("../helpers");
 const moment = require('moment-timezone')
-const sharp = require('sharp');
 const fsPromises = require('fs/promises');
 const {notIncExecutorRole} = require("../config");
-
+const LeadModel = require('../models/lead-model')
+const BranchModel= require('../models/branch-model')
 const ffmpeg = require('fluent-ffmpeg');
 const ffprobeStatic = require('ffprobe-static');
 
@@ -403,6 +403,239 @@ class b1HANA {
         }
     };
 
+    leads = async (req, res, next) => {
+        try {
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 10;
+            const skip = (page - 1) * limit;
+
+            const {
+                search,
+                source,
+                branch,
+                operator,
+                operator2,
+                meetingDateStart,
+                meetingDateEnd,
+            } = req.query;
+
+            const filter = {};
+
+            if (search) {
+                filter.$or = [
+                    { clientName: { $regex: search, $options: 'i' } },
+                    { clientPhone: { $regex: search, $options: 'i' } },
+                    { comment: { $regex: search, $options: 'i' } },
+                ];
+            }
+
+            const parseArray = (val) => {
+                if (!val) return null;
+                if (Array.isArray(val)) return val;
+                return val.split(',').map((v) => v.trim()).filter(Boolean);
+            };
+
+            const sources = parseArray(source);
+            const branches = parseArray(branch);
+            const operators = parseArray(operator);
+            const operators2 = parseArray(operator2);
+
+            if (sources?.length) filter.source = { $in: sources };
+            if (branches?.length) filter.branch = { $in: branches };
+            if (operators?.length) filter.operator = { $in: operators };
+            if (operators2?.length) filter.operator2 = { $in: operators2 };
+
+            if (meetingDateStart || meetingDateEnd) {
+                filter.meetingDate = {};
+
+                const parseDate = (value) => {
+                    if (!value) return null;
+                    const normalized = value.trim().replace(/\./g, '-');
+                    const d = new Date(normalized);
+                    return isNaN(d.getTime()) ? null : d;
+                };
+
+                const start = parseDate(meetingDateStart);
+                const end = parseDate(meetingDateEnd);
+                console.log(start, end)
+                if (start) filter.meetingDate.$gte = start;
+                if (end) {
+                    end.setHours(23, 59, 59, 999);
+                    filter.meetingDate.$lte = end;
+                }
+            }
+
+
+            const total = await LeadModel.countDocuments(filter);
+
+            const rawData = await LeadModel.find(filter)
+                .select(
+                    '_id clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt'
+                )
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean();
+
+            const data = rawData.map((item) => ({
+                id: item._id,
+                clientName: item.clientName || '',
+                clientPhone: item.clientPhone || '',
+                source: item.source || '',
+                time: item.time ? moment(item.time).format('YYYY.MM.DD HH:mm') : null,
+                operator: item.operator || null,
+                operator2: item.operator2 || null,
+                branch: item.branch || null,
+                comment: item.comment || '',
+                meetingConfirmed: item.meetingConfirmed ?? null,
+                meetingDate: item.meetingDate
+                    ? moment(item.meetingDate).format('YYYY.MM.DD')
+                    : null,
+                createdAt: item.createdAt || null,
+            }));
+
+            return res.status(200).json({
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+                data,
+            });
+        } catch (e) {
+            console.error('Error fetching leads:', e);
+            next(e);
+        }
+    };
+
+    leadOne = async (req, res, next) => {
+        try {
+            const { id } = req.params;
+
+            const lead = await LeadModel.findById(id).lean();
+
+            if (!lead) {
+                return res.status(404).json({
+                    message: 'Lead not found',
+                });
+            }
+
+            const formatDate = (date, withTime = false) => {
+                if (!date) return null;
+                return withTime
+                    ? moment(date).format('YYYY.MM.DD HH:mm')
+                    : moment(date).format('YYYY.MM.DD');
+            };
+
+            const data = {
+                id: lead._id,
+                n: lead.n ?? null,
+                limit: lead.limit ?? null,
+                clientName: lead.clientName || '',
+                clientPhone: lead.clientPhone || '',
+                source: lead.source || '',
+                time: formatDate(lead.time, true),
+                operator: lead.operator || '',
+                called: lead.called ?? false,
+                callTime: formatDate(lead.callTime, true),
+                answered: lead.answered ?? false,
+                callCount: lead.callCount ?? 0,
+                interested: lead.interested ?? false,
+                rejectionReason: lead.rejectionReason || '',
+                passportVisit: lead.passportVisit || '',
+                jshshir: lead.jshshir || '',
+                idX: lead.idX || '',
+                operator2: lead.operator2 || '',
+                answered2: lead.answered2 ?? false,
+                callCount2: lead.callCount2 ?? 0,
+                meetingDate: formatDate(lead.meetingDate),
+                rejectionReason2: lead.rejectionReason2 || '',
+                paymentInterest: lead.paymentInterest || '',
+                branch: lead.branch || '',
+                meetingHappened: lead.meetingHappened ?? false,
+                percentage: lead.percentage ?? null,
+                meetingConfirmed: lead.meetingConfirmed ?? null,
+                meetingConfirmedDate: formatDate(lead.meetingConfirmedDate),
+                consultant: lead.consultant || '',
+                purchase: lead.purchase ?? false,
+                purchaseDate: formatDate(lead.purchaseDate),
+                saleType: lead.saleType || '',
+                passportId: lead.passportId || '',
+                jshshir2: lead.jshshir2 || '',
+                employeeName: lead.employeeName || '',
+                region: lead.region || '',
+                district: lead.district || '',
+                address: lead.address || '',
+                birthDate: formatDate(lead.birthDate),
+                applicationDate: formatDate(lead.applicationDate),
+                age: lead.age ?? null,
+                score: lead.score ?? null,
+                katm: lead.katm || '',
+                katmPayment: lead.katmPayment ?? null,
+                paymentHistory: lead.paymentHistory || '',
+                mib: lead.mib ?? false,
+                mibIrresponsible: lead.mibIrresponsible ?? false,
+                aliment: lead.aliment ?? false,
+                officialSalary: lead.officialSalary ?? null,
+                finalLimit: lead.finalLimit ?? null,
+                finalPercentage: lead.finalPercentage ?? null,
+                createdAt: formatDate(lead.createdAt, true),
+                updatedAt: formatDate(lead.updatedAt, true),
+            };
+
+            return res.status(200).json({
+                data,
+            });
+        } catch (e) {
+            console.error('Error fetching lead details:', e);
+            next(e);
+        }
+    }
+
+    findAllBranch = async(req, res, next) => {
+        try {
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 20;
+            const skip = (page - 1) * limit;
+
+            const { search, status, region } = req.query;
+
+            const filter = {};
+            if (search) filter.name = { $regex: search, $options: 'i' };
+            if (status) filter.status = status;
+            if (region) filter.region = { $regex: region, $options: 'i' };
+
+            const total = await BranchModel.countDocuments(filter);
+
+            const branches = await BranchModel.find(filter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean();
+
+            const data = branches.map((b) => ({
+                id: b._id,
+                name: b.name,
+                region: b.region || null,
+                address: b.address || null,
+                phone: b.phone || null,
+                status: b.status,
+                createdAt: b.createdAt,
+                updatedAt: b.updatedAt,
+            }));
+
+            return res.status(200).json({
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+                data,
+            });
+        } catch (err) {
+            console.error('Error fetching branches:', err);
+            next(err);
+        }
+    }
+
     search = async (req, res, next) => {
         try {
             let {
@@ -418,7 +651,7 @@ class b1HANA {
             } = req.query;
 
             if (search) {
-                search = search.replace(/'/g, "''"); // SQL injectionni oldini oladi
+                search = search.replace(/'/g, "''");
             }
 
             page = parseInt(page, 10);
@@ -444,7 +677,6 @@ class b1HANA {
             const slpCodeRaw = req.query.slpCode;
             const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
 
-            // 📦 BIRINCHI CASE: slpCode mavjud bo‘lsa
             if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
                 let filter = {
                     SlpCode: { $in: slpCodeArray },
@@ -640,17 +872,43 @@ class b1HANA {
 
     executors = async (req, res, next) => {
         try {
-            const query = await DataRepositories.getSalesPersons(notIncExecutorRole);
-            let data = await this.execute(query);
-            let total = data.length
+            const { exclude_role, include_role } = req.query;
+
+            let notIncExecutorRole = [];
+            let onlyIncExecutorRole = [];
+
+            // exclude_role ni arrayga aylantirish
+            if (exclude_role) {
+                if (Array.isArray(exclude_role)) {
+                    notIncExecutorRole = exclude_role;
+                } else if (typeof exclude_role === 'string') {
+                    notIncExecutorRole = exclude_role.split(',').map(r => r.trim());
+                }
+            }
+
+            // include_role ni arrayga aylantirish
+            if (include_role) {
+                if (Array.isArray(include_role)) {
+                    onlyIncExecutorRole = include_role;
+                } else if (typeof include_role === 'string') {
+                    onlyIncExecutorRole = include_role.split(',').map(r => r.trim());
+                }
+            }
+
+            const query = await DataRepositories.getSalesPersons({
+                exclude: notIncExecutorRole,
+                include: onlyIncExecutorRole,
+            });
+
+            const data = await this.execute(query);
+            const total = data.length;
 
             return res.status(200).json({
                 total,
-                data: data.sort((a, b) => b.SlpName.localeCompare(a.SlpName))
+                data: data.sort((a, b) => b.SlpName.localeCompare(a.SlpName)),
             });
-        }
-        catch (e) {
-            next(e)
+        } catch (e) {
+            next(e);
         }
     };
 
@@ -665,7 +923,6 @@ class b1HANA {
             let executorList = await this.execute(executorsQuery);
 
             let SalesList = executorList.filter(el => el.U_role == 'Assistant')
-            console.log(executorList)
 
             const query = await DataRepositories.getDistribution({ startDate, endDate })
             let data = await this.execute(query)
@@ -738,8 +995,11 @@ class b1HANA {
                     CardCode: get(list, `[0].CardCode`, ''),
                     CardName: get(list, `[0].CardName`, ''),
                     MaxDocTotal: get(list, `[0].MaxDocTotal`, 0),
+                    MaxDocTotalFC: get(list, `[0].MaxDocTotalFC`, 0),
+                    DocCur: get(list, `[0].DocCur`, ''),
                     IntrSerial: get(list, `[0].IntrSerial`, ''),
                     MaxTotalPaidToDate: get(list, `[0].MaxTotalPaidToDate`, 0),
+                    MaxTotalPaidToDateFC: get(list, `[0].MaxTotalPaidToDateFC`, 0),
                     Cellular: get(list, `[0].Cellular`, ''),
                     Phone1: get(list, `[0].Phone1`, ''),
                     Phone2: get(list, `[0].Phone2`, ''),
@@ -752,7 +1012,9 @@ class b1HANA {
                     phoneConfiscated: invoiceItem?.phoneConfiscated || false,
                     SlpCode: invoiceItem?.SlpCode || null,
                     PaysList: list.filter(i => i.DocDate && (i.Canceled === null || i.Canceled === 'N')).map(item => ({
-                        SumApplied: item.SumApplied,
+                        SumApplied: item?.SumApplied || 0,
+                        SumAppliedFC: item?.AppliedFC || 0,
+                        Currency: item?.Currency || '',
                         AcctName: item.AcctName,
                         DocDate: item.DocDate,
                         CashAcct: item.CashAcct,
@@ -856,9 +1118,9 @@ class b1HANA {
                     )
                     : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
-                result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
-                result.InsTotal = Number(result.InsTotal) + confiscatedTotal;
-                result.PaidToDate = Number(result.PaidToDate) + confiscatedTotal;
+                result.SumApplied = Number(result.SumApplied) ;
+                result.InsTotal = Number(result.InsTotal) ;
+                result.PaidToDate = Number(result.PaidToDate) ;
 
                 return res.status(200).json(result);
             }
@@ -889,7 +1151,6 @@ class b1HANA {
             const query = await DataRepositories.getAnalytics({ startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
 
             let data = await this.execute(query)
-
             let result = data.length
                 ? data.reduce(
                     (acc, item) => ({
@@ -901,13 +1162,11 @@ class b1HANA {
                 )
                 : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
-            result.SumApplied += confiscatedTotal;
-            result.InsTotal += confiscatedTotal;
-            result.PaidToDate += confiscatedTotal;
 
             return res.status(200).json(result);
         }
         catch (e) {
+            console.log(e)
             next(e)
         }
     }
@@ -1028,7 +1287,6 @@ class b1HANA {
                     }
                 });
 
-                console.log(data , ' bu data')
 
                 return res.status(200).json(data);
             }
@@ -1487,7 +1745,6 @@ class b1HANA {
         }
     };
 
-
     uploadImage = async (req, res, next) => {
         try {
             const { DocEntry, InstlmntID } = req.params;
@@ -1537,9 +1794,6 @@ class b1HANA {
             next(e);
         }
     };
-
-
-
 
     deleteImage = async (req, res, next) => {
         try {
@@ -1685,7 +1939,6 @@ class b1HANA {
             next(e);
         }
     };
-
 
     confiscating = async (req, res, next) => {
         try {

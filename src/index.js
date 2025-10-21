@@ -7,10 +7,16 @@ const router = require('./router/index')
 const errorMiddleware = require('./middlewares/error-middleware');
 const hanaClient = require("@sap/hana-client");
 const compression = require('compression');
-const multer = require('multer');
-const { PORT, DB_URL, CLIENT_URL, conn_params } = require('./config')
+const { PORT, DB_URL, conn_params } = require('./config')
+const LeadModel = require("./models/lead-model");
 const app = express()
-
+const { google } = require('googleapis');
+const { GoogleAuth } = require('google-auth-library');
+const path = require('path');
+const DataRepositories = require("./repositories/dataRepositories");
+const b1Controller = require('./controllers/b1HANA');
+const moment = require("moment");
+const {get} = require("lodash");
 
 // app.use(cors({
 //     credentials: true,
@@ -38,6 +44,102 @@ app.use("/api/images", express.static("uploads"));
 
 app.use(errorMiddleware);
 
+async function main() {
+    const sheetId = process.env.SHEET_ID;
+    const range = process.env.SHEET_RANGE || 'Sheet1!A2:F100';
+    const saKeyPath = process.env.SA_KEY_PATH || './sa.json';
+
+    if (!sheetId) throw new Error('❌ Missing SHEET_ID in .env');
+
+    const auth = new GoogleAuth({
+        keyFile: path.resolve(saKeyPath),
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    try {
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: sheetId,
+            range,
+        });
+
+        const rows = response.data.values || [];
+        if (!rows.length) {
+            console.log('⚠️ Sheet is empty.');
+            return;
+        }
+
+        // 🔹 Operatorlarni olish
+        const query = DataRepositories.getSalesPersons({
+            include: ['Operator1'],
+        });
+        const data = await b1Controller.execute(query);
+
+        console.log(`✅ ${rows.length} rows read successfully.\n`);
+
+        let counter = 1;
+        let operatorIndex = {}; // kun bo‘yicha operator navbati
+
+        const leads = rows.map((row) => {
+            const parsedTime = parseSheetDate(row[3]);
+            const weekday = moment(parsedTime).isoWeekday().toString(); // 1–7
+
+            // Shu kunda ishlaydigan operatorlarni topish
+            const availableOperators = data.filter((item) =>
+                get(item, 'U_workDay', '').split(',').includes(weekday)
+            );
+
+            // Agar shu kunda ishlaydigan operatorlar bo‘lsa, ularni aylantiramiz
+            let operator = null;
+            if (availableOperators.length > 0) {
+                const index = operatorIndex[weekday] || 0;
+                operator = availableOperators[index % availableOperators.length];
+                operatorIndex[weekday] = index + 1;
+            }
+
+            // 🔸 Ismni tozalash
+            let clientName = row[0]?.trim() || '';
+            clientName = clientName.replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
+            if (!clientName) {
+                clientName = `Mijoz_${counter++}`;
+            }
+
+            // 🔸 Telefon raqamni tozalash
+            let clientPhone = (row[1] || '').replace(/\D/g, '').slice(0, 12);
+
+            return {
+                clientName,
+                clientPhone,
+                source: row[2]?.trim() || '',
+                time: parsedTime,
+                operator: operator?.SlpCode || null,
+            };
+        }).filter(lead => lead.clientPhone);
+
+        const result = await LeadModel.insertMany(leads);
+        console.log(`📥 ${result.length} rows inserted into MongoDB.\n`);
+    } catch (err) {
+        console.error('❌ Error reading Google Sheet:');
+        if (err.code === 403) {
+            console.error('➡️ SA email sheet’ga qo‘shilmagan bo‘lishi mumkin.');
+        }
+        console.error(err.message || err);
+    }
+}
+
+function parseSheetDate(value) {
+    if (!value) return null;
+
+    if (!isNaN(value)) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        return new Date(excelEpoch.getTime() + value * 86400000);
+    }
+
+    const str = String(value).trim().replace(/\//g, '.');
+    const parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY H:mm:ss', 'DD.MM.YYYY'], true);
+    return parsed.isValid() ? parsed.toDate() : null;
+}
 
 const start = async () => {
     try {
@@ -45,6 +147,7 @@ const start = async () => {
             useNewUrlParser: true,
             useUnifiedTopology: true
         })
+         // main()
 
         const connection = hanaClient.createConnection();
         connection.connect(conn_params, async (err) => {
