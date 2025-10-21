@@ -9,7 +9,6 @@ module.exports = async function (req, res, next) {
             return next(ApiError.UnauthorizedError());
         }
 
-        // Tokenni tekshirish
         const userData = tokenService.validateAccessToken(accessToken);
         if (!userData) {
             return next(ApiError.UnauthorizedError());

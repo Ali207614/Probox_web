@@ -10,7 +10,13 @@ router.post('/login', b1HANA.login);
 
 router.get('/executors', authMiddleware, b1HANA.executors)
 
+router.get('/branches', authMiddleware, b1HANA.findAllBranch)
+
 router.get('/rate', authMiddleware, b1HANA.getRate)
+
+router.get('/leads', authMiddleware, b1HANA.leads)
+
+router.get('/leads/:id', authMiddleware, b1HANA.leadOne)
 
 router.use('/invoice', invoiceRouter);
 

@@ -11,8 +11,6 @@ class DataRepositories {
         SELECT T0."SlpCode", T0."SlpName", T0."GroupCode", T0."Telephone", T0."U_login", T0."U_password",T0."U_role" FROM ${this.db}.OSLP T0 where T0."U_login"= '${login}' and T0."U_password"='${password}'`;
     }
 
-
-
     getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, search, inInv = [], notInv = [], phoneConfiscated, partial }) {
 
         let statusCondition = '';
@@ -45,34 +43,15 @@ class DataRepositories {
             `;
         }
 
-        // if (paymentStatus) {
-        //     const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
-        //     const conditions = [];
-        //     if (statuses.includes('paid')) {
-        //         conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
-        //     }
-        //     if (statuses.includes('unpaid')) {
-        //         conditions.push(`(T0."PaidToDate" = 0)`);
-        //     }
-        //     if (statuses.includes('partial')) {
-        //         conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
-        //     }
-
-        //     if (conditions.length > 0) {
-        //         statusCondition = `AND (${conditions.join(' OR ')})`;
-        //     }
-        // }
-
         if (paymentStatus) {
             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
             const conditions = [];
 
             if (statuses.includes('paid')) {
-                // To‘liq to‘langanlar va partial listdagi to‘lanmaganlar (lekin qisman bo‘lganlar)
                 let partialCondition = '';
                 if (partial?.length > 0) {
                     const partialFilter = partial.map(p =>
-                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                        `(T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}')`
                     ).join(' OR ');
 
                     partialCondition = `OR (${partialFilter})`;
@@ -90,7 +69,7 @@ class DataRepositories {
 
                 if (partial?.length > 0) {
                     const partialFilter = partial.map(p =>
-                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}' AND T2."CardCode" = '${p.CardCode}')`
+                        `NOT (T0."DocEntry" = '${p.DocEntry}' AND T0."InstlmntID" = '${p.InstlmntID}')`
                     ).join(' AND '); // <-- AND ishlatamiz, chunki har bir kombinatsiyani inkor qilish kerak
 
                     excludePartials = `AND (${partialFilter})`;
@@ -120,14 +99,16 @@ class DataRepositories {
             phoneCondition = `AND (T2."Phone1" LIKE '%${trimmedPhone}%' OR T2."Phone2" LIKE '%${trimmedPhone}%')`;
         }
 
-        const INVOICE_TYPE = 13;
         return `
         WITH base_data AS (
             SELECT 
                 T0."DocEntry", 
                 T0."InstlmntID",
-                T1."DocTotal", 
+                T1."DocTotal",
+                T1."DocTotalFC",
                 T1."PaidToDate",
+                T1."PaidFC",
+                T1."DocCur",
                 MAX(T2."CardCode") as "CardCode",
                 MAX(T2."CardName") as "CardName",
                 MAX(T3."Dscription") as "Dscription",
@@ -135,9 +116,11 @@ class DataRepositories {
                 MAX(T2."Phone1") as "Phone1",
                 MAX(T2."Phone2") as "Phone2",
                 MAX(T0."PaidToDate") AS "InstallmentPaidToDate",
+                MAX(T0."PaidFC") AS "InstallmentPaidToDateFC",
                 MAX(T1."Installmnt") as "Installmnt",
                 MAX(T0."DueDate") as "DueDate",
                 MAX(T0."InsTotal") as "InsTotal",
+                Max(T0."InsTotalFC") as "InsTotalFC",
                 STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial",
                 Max(T2."Cellular") as "Cellular"
             FROM ${this.db}.INV6 T0
@@ -158,7 +141,7 @@ class DataRepositories {
                 ${searchCondition}
                 ${salesCondition}
             GROUP BY T0."DocEntry", T0."InstlmntID" ,T1."DocTotal", 
-            T1."PaidToDate"
+            T1."PaidToDate", T1."DocTotalFC", T1."PaidFC" , T1."DocCur"
 
         )
         
@@ -176,8 +159,16 @@ class DataRepositories {
             MAX("Phone2") AS "Phone2",
             MAX("DocTotal") AS "MaxDocTotal",
             MAX("PaidToDate") AS "MaxTotalPaidToDate",
+            "DocCur" AS "DocCur",
+            MAX("DocTotalFC") AS "MaxDocTotalFC",
+            MAX("PaidFC") AS "MaxTotalPaidToDateFC",
+            
+            MAX("InstallmentPaidToDateFC") AS "PaidToDateFC",
+            Max("InsTotalFC") as "InsTotalFC",
+            
             MAX("InstallmentPaidToDate") AS "PaidToDate",
             MAX("Installmnt") AS "Installmnt",
+            
             "InstlmntID",
             "DocEntry",
             MAX("DueDate") AS "DueDate",
@@ -185,23 +176,11 @@ class DataRepositories {
             STRING_AGG("IntrSerial", ', ') AS "IntrSerial"
         FROM base_data
         GROUP BY "DocEntry", "InstlmntID"  ,"DocTotal", 
-        "PaidToDate"
+        "PaidToDate" , "DocTotalFC" , "PaidFC" ,"DocCur"
         ORDER BY "DueDate" ASC, "DocEntry" ASC, "InstlmntID" ASC
         LIMIT ${limit} OFFSET ${offset};
                 `;
     }
-
-    getInvoiceById({ DocEntry, InstlmntID }) {
-        return `   SELECT 
-            T0."DocEntry", 
-            T0."InstlmntID",
-            T0."InsTotal"
-    FROM ${this.db}.INV6 T0 WHERE T0."DocEntry" = ${DocEntry} and T0."InstlmntID" = ${InstlmntID}
- `
-    }
-
-
-
 
     getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices, search, partial }) {
         let statusCondition = '';
@@ -221,30 +200,12 @@ class DataRepositories {
             `;
         }
 
-        // 1. PAYMENT STATUS filter
-        // if (paymentStatus) {
-        //     const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
-        //     const conditions = [];
-        //     if (statuses.includes('paid')) {
-        //         conditions.push(`(T0."PaidToDate" = T0."InsTotal")`);
-        //     }
-        //     if (statuses.includes('unpaid')) {
-        //         conditions.push(`(T0."PaidToDate" = 0)`);
-        //     }
-        //     if (statuses.includes('partial')) {
-        //         conditions.push(`(T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")`);
-        //     }
-        //     if (conditions.length > 0) {
-        //         statusCondition = `AND (${conditions.join(' OR ')})`;
-        //     }
-        // }
 
         if (paymentStatus) {
             const statuses = paymentStatus.replace(/'/g, '').split(',').map(s => s.trim());
             const conditions = [];
 
             if (statuses.includes('paid')) {
-                // To‘liq to‘langanlar va partial listdagi to‘lanmaganlar (lekin qisman bo‘lganlar)
                 let partialCondition = '';
                 if (partial?.length > 0) {
                     const partialFilter = partial.map(p =>
@@ -310,16 +271,17 @@ class DataRepositories {
         )`;
         }
 
-        const INVOICE_TYPE = 13;
-
-
         return `
         WITH base_data AS (
             SELECT 
                 T0."DocEntry", 
                 T0."InstlmntID",
-                T1."DocTotal", 
+
+                T1."DocTotal",
+                T1."DocTotalFC",
                 T1."PaidToDate",
+                T1."PaidFC",
+                T1."DocCur",
                 MAX(T2."CardCode") as "CardCode",
                 MAX(T2."CardName") as "CardName",
                 MAX(T3."Dscription") as "Dscription",
@@ -327,6 +289,8 @@ class DataRepositories {
                 MAX(T2."Phone1") as "Phone1",
                 MAX(T2."Phone2") as "Phone2",
                 MAX(T0."PaidToDate") AS "InstallmentPaidToDate",
+                MAX(T0."PaidFC") AS "InstallmentPaidToDateFC",
+                Max(T0."InsTotalFC") as "InsTotalFC",
                 MAX(T1."Installmnt") as "Installmnt",
                 MAX(T0."DueDate") as "DueDate",
                 MAX(T0."InsTotal") as "InsTotal",
@@ -351,7 +315,7 @@ class DataRepositories {
                 ${salesCondition}
                 ${searchCondition}
             GROUP BY T0."DocEntry", T0."InstlmntID" ,T1."DocTotal", 
-            T1."PaidToDate"
+            T1."PaidToDate" , T1."DocTotalFC", T1."PaidFC" , T1."DocCur"
         )
         
         SELECT 
@@ -368,6 +332,13 @@ class DataRepositories {
             MAX("Phone2") AS "Phone2",
             MAX("DocTotal") AS "MaxDocTotal",
             MAX("PaidToDate") AS "MaxTotalPaidToDate",
+            "DocCur" AS "DocCur",
+            MAX("DocTotalFC") AS "MaxDocTotalFC",
+            MAX("PaidFC") AS "MaxTotalPaidToDateFC",
+
+            MAX("InstallmentPaidToDateFC") AS "PaidToDateFC",
+            Max("InsTotalFC") as "InsTotalFC",
+            
             MAX("InstallmentPaidToDate") AS "PaidToDate",
             MAX("Installmnt") AS "Installmnt",
             "InstlmntID",
@@ -377,15 +348,20 @@ class DataRepositories {
             STRING_AGG("IntrSerial", ', ') AS "IntrSerial"
         FROM base_data
         GROUP BY "DocEntry", "InstlmntID" ,"DocTotal", 
-        "PaidToDate"
+        "PaidToDate" , "DocTotalFC" , "PaidFC" ,"DocCur"
         ORDER BY "DueDate" ASC, "DocEntry" ASC, "InstlmntID" ASC
         LIMIT ${limit} OFFSET ${offset};
                 `;
     }
 
-
-
-
+    getInvoiceById({ DocEntry, InstlmntID }) {
+        return `   SELECT 
+            T0."DocEntry", 
+            T0."InstlmntID",
+            T0."InsTotal"
+    FROM ${this.db}.INV6 T0 WHERE T0."DocEntry" = ${DocEntry} and T0."InstlmntID" = ${InstlmntID}
+ `
+    }
 
     getInvoiceSearchBPorSeria({ startDate, endDate, limit, offset, paymentStatus, search, phone, inInv = [], notInv = [], phoneConfiscated, partial }) {
         let statusCondition = '';
@@ -527,7 +503,6 @@ class DataRepositories {
         `;
     }
 
-
     getInvoiceSearchBPorSeriaDistribution({ startDate, endDate, limit, offset, paymentStatus, search, phone, invoices, partial }) {
         let statusCondition = '';
         let salesCondition = `and (T1."DocEntry", T0."InstlmntID") IN (${invoices.map(item => `('${item.DocEntry}', '${item.InstlmntID}')`).join(", ")}) `
@@ -651,45 +626,64 @@ LIMIT ${limit} OFFSET ${offset};
         `;
     }
 
+    getSalesPersons({ exclude = [], include = [] } = {}) {
+        let whereClause = `WHERE T0."U_role" IS NOT NULL`;
 
+        if (include.length > 0) {
+            whereClause += ` AND T0."U_role" IN (${include.map(r => `'${r}'`).join(', ')})`;
+        } else if (exclude.length > 0) {
+            whereClause += ` AND T0."U_role" NOT IN (${exclude.map(r => `'${r}'`).join(', ')})`;
+        }
 
-
-    getSalesPersons(notIncExecutorRole) {
-        let sql = `
-        SELECT T0."SlpCode", T0."SlpName", T0."U_login", T0."U_role" FROM ${this.db}.OSLP T0  WHERE T0."U_role" IS NOT NULL and T0."U_role" not in (${notIncExecutorRole.map(item => `'${item}'`).join(', ')})
-        `
-        return sql
+        return `
+            SELECT
+                T0."SlpCode",
+                T0."SlpName",
+                T0."U_login",
+                T0."U_role",
+                T0."U_summa",
+                T0."U_workDay"
+            FROM ${this.db}.OSLP T0
+                ${whereClause}
+        `;
     }
 
+
+
     getRate({ currency = 'UZS', date = '' }) {
-        let sql = `
+        return  `
             SELECT T0."RateDate", T0."Currency", T0."Rate"
             FROM ${this.db}.ORTT T0
             WHERE T0."Currency" = '${currency}'
             AND T0."RateDate" = ${date ? `'${date}'` : 'CURRENT_DATE'}
         `;
-        return sql;
     }
 
-
     getPayList({ docEntry }) {
-        let sql = `SELECT
+        return `SELECT
     T1."Canceled",
     T0."DocNum",
     T0."DocEntry",
     T0."SumApplied",
+    T0."AppliedSys" as "AppliedFC",
     T0."InstId",
     T1."CashAcct",
     T1."DocDate",
     T1."CheckAcct",
+    T1."DocCurr" as "Currency",
     T2."InstlmntID",
     T2."DueDate",
     T2."PaidToDate",
     T2."InsTotal",
+    T2."PaidFC",
+    T2."InsTotalFC",
+    T4."DocCur",
     T3."AcctName",
     T4."CardCode",
     T4."CardName",
     T4."DocTotal" as "MaxDocTotal",
+    T4."DocTotalFC" as "MaxDocTotalFC",
+    T4."PaidFC" as "MaxTotalPaidToDateFC",
     T4."PaidToDate" as "MaxTotalPaidToDate",
     T5."Cellular",
     T5."Phone1",
@@ -724,28 +718,37 @@ GROUP BY
     T2."DueDate",
     T2."PaidToDate",
     T2."InsTotal",
+    T2."PaidFC",
+    T2."InsTotalFC",
     T3."AcctName",
     T4."CardCode",
     T4."CardName",
     T4."DocTotal",
     T4."PaidToDate",
+    T4."DocTotalFC",
+    T4."PaidFC",
     T5."Cellular",
     T5."Phone1",
     T5."Phone2",
     T6."ItemCode",
-    T6."Dscription"
+    T6."Dscription",
+    T4."DocCur",
+    T0."AppliedSys",
+    T4."PaidToDate",
+    T1."DocCurr"
 ORDER BY
     T2."InstlmntID" ASC
 `
-        return sql
     }
 
     getAnalytics({ startDate, endDate, invoices = [], phoneConfiscated }) {
         let salesCondition = '';
 
-        if (invoices.length > 0) {
+        console.log(invoices.length)
+
+        if (invoices.length > 0 && false) {
             const condition = invoices.map(item =>
-                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
+                `(T2."DocEntry" = '${item.DocEntry}' AND T2."InstId" = '${item.InstlmntID}')`
             ).join(' OR ');
 
             salesCondition = `
@@ -760,24 +763,19 @@ ORDER BY
             .add(10, 'days')
             .format('YYYY.MM.DD');
 
-        let sql = `SELECT
-            SUM(T2."SumApplied") as "SumApplied",
-            T0."InsTotal",
-            T0."PaidToDate"
+
+       return `SELECT
+           sum(T0."InsTotal") as "InsTotal",
+           sum(T0."PaidToDate") as "PaidToDate",
+            sum(T2."SumApplied") AS "SumApplied"
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN T1."DocDate" and '${newEndDate}' and T3."Canceled" = 'N' and T3."DocType" ='C'
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'  AND T3."DocDate" IS NOT NULL
+        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"  and T3."Canceled" = 'N'
+        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'
         ${salesCondition}
-                   GROUP BY
-                       T0."DocEntry",
-                       T0."InstlmntID",
-                       T0."InsTotal",
-                       T0."PaidToDate"
+     GROUP BY T2."DocEntry", T2."InstId" , T0."PaidToDate" , T0."InsTotal"
         `
-        return sql
-
     }
 
     getAnalyticsByDay({ startDate, endDate, invoices = [], phoneConfiscated }) {
@@ -801,7 +799,7 @@ ORDER BY
             .format('YYYY.MM.DD');
 
 
-        let sql = `SELECT 
+        return `SELECT 
             TO_VARCHAR(T0."DueDate", 'YYYY.MM.DD') AS "DueDate",
             COALESCE(SUM(T2."SumApplied"), 0) AS "SumApplied",
             T0."InsTotal", 
@@ -818,53 +816,7 @@ ORDER BY
                        T0."PaidToDate"
         ORDER BY T0."DueDate"
         `
-        return sql
     }
-
-    //     getAnalyticsBySlpCode({ startDate, endDate, invoices = [], phoneConfiscated }) {
-    //         if (!invoices.length) {
-    //             return this.getAnalytics({ startDate, endDate, invoices, phoneConfiscated })
-    //         }
-
-
-    //         // VALUES qatorlarini hosil qilamiz
-    //         const invoiceRows = invoices.map(({ DocEntry, InstlmntID, CardCode, SlpCode }) => {
-    //             return `SELECT '${DocEntry}', '${InstlmntID}', '${CardCode}', ${SlpCode} FROM DUMMY`;
-    //         }).join('\nUNION ALL\n');
-
-    //         // SQLni to'liq hosil qilamiz
-    //         const sql = `
-    //         WITH "InvoiceFilter"("DocEntry", "InstlmntID", "CardCode", "SlpCode") AS (
-    //             ${invoiceRows}
-    //           )
-    // SELECT
-    //     F."SlpCode",
-    //     SUM(T2."SumApplied") AS "SumApplied",
-    //     SUM(T0."InsTotal") AS "InsTotal",
-    //     SUM(T0."PaidToDate") AS "PaidToDate"
-    // FROM
-    //     ${this.db}.INV6 T0
-    //     INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-    //     INNER JOIN "InvoiceFilter" F ON
-    //         T1."DocEntry" = F."DocEntry" AND
-    //         T0."InstlmntID" = F."InstlmntID" AND
-    //         T1."CardCode" = F."CardCode"
-    //     LEFT JOIN ${this.db}.RCT2 T2 ON
-    //         T2."DocEntry" = T0."DocEntry" AND
-    //         T0."InstlmntID" = T2."InstId"
-    //     LEFT JOIN ${this.db}.ORCT T3 ON
-    //         T2."DocNum" = T3."DocEntry" AND
-    //         T3."DocDate" BETWEEN '${startDate}' AND '${endDate}' AND
-    //         T3."Canceled" = 'N'
-    // WHERE
-    //     T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' AND
-    //     T1."CANCELED" = 'N'
-    // GROUP BY
-    //     F."SlpCode"
-    // `;
-    //         return sql;
-    //     }
-
 
     getAnalyticsBySlpCode({ startDate, endDate, invoices = [], phoneConfiscated }) {
         let salesCondition = '';
@@ -887,7 +839,7 @@ ORDER BY
             .add(10, 'days')    // 10 kun qo‘shish
             .format('YYYY.MM.DD');
 
-        let sql = `SELECT 
+        return`SELECT 
             T0."DocEntry",
             T0."InstlmntID",
             SUM(T2."SumApplied") as "SumApplied",
@@ -906,21 +858,10 @@ ORDER BY
                        T0."PaidToDate"
        
         `
-        return sql
     }
-
-
 
     getDistribution({ startDate, endDate, }) {
         let statusCondition = 'AND ((T0."PaidToDate" = 0) OR (T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"))';
-        // (T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal")
-        // statusCondition = `AND (T0."PaidToDate" = 0)  `;
-        // if (statuses.includes('unpaid')) {
-        //     conditions.push(``);
-        // }
-        // if (statuses.includes('partial')) {
-        //     conditions.push(``);
-        // }
         const INVOICE_TYPE = 13;
         return `
             SELECT 
@@ -962,11 +903,3 @@ ORDER BY
 }
 
 module.exports = new DataRepositories(db);
-
-
-// SELECT T0."DueDate", T0."InsTotal", T0."PaidToDate" FROM INV6 T0  INNER JOIN OINV T1 ON T0."DocEntry" = T1."DocEntry"
-//  LEFT JOIN
-//       RCT2 T0  ON T2."DocEntry" = T0."DocEntry"  and T2."InstlmntID" = T0."InstId"
-//       LEFT JOIN
-//           ORCT T1 ON T0."DocNum" = T1."DocEntry"
-//  WHERE T1."DocNum" = 21779 and T0."DueDate" BETWEEN '01.05.2025' AND '31.05.2025'
