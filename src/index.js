@@ -147,7 +147,11 @@ const start = async () => {
             useNewUrlParser: true,
             useUnifiedTopology: true
         })
-         // main()
+        console.log(process.env.LEAD === 'true')
+        if(process.env.LEAD === 'true'){
+            main()
+        }
+
 
         const connection = hanaClient.createConnection();
         connection.connect(conn_params, async (err) => {
