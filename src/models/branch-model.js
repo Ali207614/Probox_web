@@ -2,6 +2,10 @@ const { Schema, model } = require('mongoose');
 
 const BranchSchema = new Schema(
     {
+        id: {
+            type: Number,
+            required: true,
+        },
         name: {
             type: String,
             required: true,

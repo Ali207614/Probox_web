@@ -8,7 +8,7 @@ class DataRepositories {
 
     getSalesManager({ login = '', password = '' }) {
         return `
-        SELECT T0."SlpCode", T0."SlpName", T0."GroupCode", T0."Telephone", T0."U_login", T0."U_password",T0."U_role" FROM ${this.db}.OSLP T0 where T0."U_login"= '${login}' and T0."U_password"='${password}'`;
+        SELECT T0."SlpCode", T0."SlpName", T0."GroupCode", T0."Telephone", T0."U_login", T0."U_password",T0."U_role" , T0."U_branch" FROM ${this.db}.OSLP T0 where T0."U_login"= '${login}' and T0."U_password"='${password}'`;
     }
 
     getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, search, inInv = [], notInv = [], phoneConfiscated, partial }) {
@@ -626,13 +626,17 @@ LIMIT ${limit} OFFSET ${offset};
         `;
     }
 
-    getSalesPersons({ exclude = [], include = [] } = {}) {
+    getSalesPersons({ exclude = [], include = []  , branch} = {}) {
         let whereClause = `WHERE T0."U_role" IS NOT NULL`;
 
         if (include.length > 0) {
             whereClause += ` AND T0."U_role" IN (${include.map(r => `'${r}'`).join(', ')})`;
         } else if (exclude.length > 0) {
             whereClause += ` AND T0."U_role" NOT IN (${exclude.map(r => `'${r}'`).join(', ')})`;
+        }
+
+        if(branch) {
+            whereClause += ` AND T0."U_branch" = '${branch}'`;
         }
 
         return `
@@ -642,13 +646,12 @@ LIMIT ${limit} OFFSET ${offset};
                 T0."U_login",
                 T0."U_role",
                 T0."U_summa",
-                T0."U_workDay"
+                T0."U_workDay",
+                T0."U_branch"
             FROM ${this.db}.OSLP T0
                 ${whereClause}
         `;
     }
-
-
 
     getRate({ currency = 'UZS', date = '' }) {
         return  `
