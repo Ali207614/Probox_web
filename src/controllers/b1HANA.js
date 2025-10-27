@@ -1252,6 +1252,8 @@ class b1HANA {
                     DueDate: get(list, `[0].DueDate`, 0),
                     PaidToDate: list?.length ? list.filter(item => (item.Canceled === null || item.Canceled === 'N')).reduce((a, b) => a + Number(b?.SumApplied || 0), 0) : 0,
                     InsTotal: get(list, `[0].InsTotal`, 0),
+                    PaidToDateFC:get(list, `[0].PaidFC`, 0),
+                    InsTotalFC:get(list, `[0].InsTotalFC`, 0),
                     Images: invoiceItem?.images || [],
                     partial: invoiceItem?.partial || false,
                     phoneConfiscated: invoiceItem?.phoneConfiscated || false,
