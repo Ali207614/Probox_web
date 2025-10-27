@@ -10,7 +10,7 @@ const invoiceRouter = require("./invoice")
 
 router.post('/login', b1HANA.login);
 
-router.use('/api/v1/google-sheet', googleSheetWebhook);
+router.use('/google-sheet', googleSheetWebhook);
 
 router.get('/executors', authMiddleware, b1HANA.executors)
 
