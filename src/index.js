@@ -116,6 +116,7 @@ async function main() {
                 operator: operator?.SlpCode || null,
             };
         }).filter(lead => lead.clientPhone);
+        await LeadModel.deleteMany();
 
         const result = await LeadModel.insertMany(leads);
         console.log(`📥 ${result.length} rows inserted into MongoDB.\n`);
@@ -151,7 +152,6 @@ const start = async () => {
         if(process.env.LEAD === 'true'){
             main()
         }
-
 
         const connection = hanaClient.createConnection();
         connection.connect(conn_params, async (err) => {
