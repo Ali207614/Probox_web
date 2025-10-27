@@ -18,10 +18,10 @@ const b1Controller = require('./controllers/b1HANA');
 const moment = require("moment");
 const {get} = require("lodash");
 
-// app.use(cors({
-//     credentials: true,
-//     origin: [CLIENT_URL, 'http://localhost:3000', "http://localhost:5646", "http://83.69.136.98:5646"]
-// }));
+app.use(cors({
+    credentials: true,
+    origin: [CLIENT_URL, 'http://localhost:3000', "http://localhost:5646", "http://83.69.136.98:5646"]
+}));
 
 app.use(cors());
 

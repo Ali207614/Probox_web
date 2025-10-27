@@ -18,7 +18,8 @@ const LeadModel = require('../models/lead-model')
 const BranchModel= require('../models/branch-model')
 const ffmpeg = require('fluent-ffmpeg');
 const ffprobeStatic = require('ffprobe-static');
-
+const permissions = require('../utils/lead-permissions')
+const {validateFields} = require("../utils/validate-types")
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
@@ -58,7 +59,8 @@ class b1HANA {
                 data: {
                     SlpCode: user[0].SlpCode,
                     SlpName: user[0].SlpName,
-                    U_role: user[0].U_role
+                    U_role: user[0].U_role,
+                    U_branch: user[0].U_branch,
                 }
             });
         }
@@ -417,10 +419,30 @@ class b1HANA {
                 operator2,
                 meetingDateStart,
                 meetingDateEnd,
+                meeting,
+                purchase,
+                called,
+                answered,
+                interested,
+                called2,
+                answered2,
+                passportId,
+                jshshir2,
+                scoreMin,
+                scoreMax,
+                mib,
+                aliment,
+                officialSalaryMin,
+                officialSalaryMax,
+                finalLimitMin,
+                finalLimitMax,
+                finalPercentageMin,
+                finalPercentageMax,
             } = req.query;
 
             const filter = {};
 
+            // 🔍 Qidiruv (clientName, clientPhone, comment)
             if (search) {
                 filter.$or = [
                     { clientName: { $regex: search, $options: 'i' } },
@@ -429,6 +451,7 @@ class b1HANA {
                 ];
             }
 
+            // 🔁 String array parser
             const parseArray = (val) => {
                 if (!val) return null;
                 if (Array.isArray(val)) return val;
@@ -446,7 +469,13 @@ class b1HANA {
             if (operators2?.length) filter.operator2 = { $in: operators2 };
 
             if (meetingDateStart || meetingDateEnd) {
-                filter.meetingDate = {};
+                if(meeting === 'true'){
+                    filter.time = {};
+                }
+                else{
+                    filter.meetingDate = {};
+                    filter.meetingConfirmed = false
+                }
 
                 const parseDate = (value) => {
                     if (!value) return null;
@@ -457,20 +486,121 @@ class b1HANA {
 
                 const start = parseDate(meetingDateStart);
                 const end = parseDate(meetingDateEnd);
-                console.log(start, end)
-                if (start) filter.meetingDate.$gte = start;
+                if (start) {
+                    if(meeting === 'true'){
+                        filter.time.$gte = start;
+                    }
+                    else{
+                        filter.meetingDate.$gte = start;
+                    }
+                }
                 if (end) {
                     end.setHours(23, 59, 59, 999);
-                    filter.meetingDate.$lte = end;
+                    if(meeting === 'true'){
+                        filter.time.$lte = end;
+                    }
+                    else{
+                        filter.meetingDate.$lte = end;
+                    }
                 }
             }
 
 
+            if (purchase !== undefined)
+                filter.purchase = purchase === 'true' || purchase === true;
+
+            // ☎️ Operator1 holatlari
+            if (called !== undefined)
+                filter.called = called === 'true' || called === true;
+            if (answered !== undefined)
+                filter.answered = answered === 'true' || answered === true;
+            if (interested !== undefined)
+                filter.interested = interested === 'true' || interested === true;
+
+            // ☎️ Operator2 holatlari
+            if (called2 !== undefined)
+                filter.called2 = called2 === 'true' || called2 === true;
+            if (answered2 !== undefined)
+                filter.answered2 = answered2 === 'true' || answered2 === true;
+
+            // 🪪 Seller / Scoring ID bo‘yicha qidiruv
+
+            if (passportId !== undefined) {
+                if (passportId === 'true' || passportId === true) {
+                    filter.passportId = { $exists: true, $nin: [null, ''] };
+                } else if (passportId === 'false' || passportId === false) {
+                        const passportIdEmptyFilter = {
+                            $or: [
+                                { passportId: { $exists: false } },
+                                { passportId: null },
+                                { passportId: '' },
+                            ],
+                        };
+
+                        // Agar allaqachon $and mavjud bo‘lsa, unga push qilamiz
+                        if (filter.$and) {
+                            filter.$and.push(passportIdEmptyFilter);
+                        } else {
+                            filter.$and = [passportIdEmptyFilter];
+                        }
+                }
+            }
+
+            if (jshshir2 !== undefined) {
+                if (jshshir2 === 'true' || jshshir2 === true) {
+                    filter.jshshir2 = { $exists: true, $nin: [null, ''] };
+                } else if (jshshir2 === 'false' || jshshir2 === false) {
+                    const passportIdEmptyFilter = {
+                        $or: [
+                            { jshshir2: { $exists: false } },
+                            { jshshir2: null },
+                            { jshshir2: '' },
+                        ],
+                    };
+
+                    // Agar allaqachon $and mavjud bo‘lsa, unga push qilamiz
+                    if (filter.$and) {
+                        filter.$and.push(passportIdEmptyFilter);
+                    } else {
+                        filter.$and = [passportIdEmptyFilter];
+                    }
+                }
+            }
+
+            if (req.user?.U_role === 'Scoring') {
+                filter.$or = [
+                    { jshshir2: { $exists: true, $nin: [null, ''] } },
+                    { passportId: { $exists: true, $nin: [null, ''] } }
+                ];
+            }
+
+
+
+
+            const addRangeFilter = (field, min, max) => {
+                if (min || max) {
+                    filter[field] = {};
+                    if (min) filter[field].$gte = parseFloat(min);
+                    if (max) filter[field].$lte = parseFloat(max);
+                }
+            };
+
+            addRangeFilter('score', scoreMin, scoreMax);
+            addRangeFilter('officialSalary', officialSalaryMin, officialSalaryMax);
+            addRangeFilter('finalLimit', finalLimitMin, finalLimitMax);
+            addRangeFilter('finalPercentage', finalPercentageMin, finalPercentageMax);
+
+            if (mib !== undefined)
+                filter.mib = mib === 'true' || mib === true;
+            if (aliment !== undefined)
+                filter.aliment = aliment === 'true' || aliment === true;
+
+            // 🔢 Jami son va ma’lumotlarni olish
             const total = await LeadModel.countDocuments(filter);
 
             const rawData = await LeadModel.find(filter)
                 .select(
-                    '_id clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt'
+                    '_id seller scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
                 )
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -488,9 +618,22 @@ class b1HANA {
                 branch: item.branch || null,
                 comment: item.comment || '',
                 meetingConfirmed: item.meetingConfirmed ?? null,
-                meetingDate: item.meetingDate
-                    ? moment(item.meetingDate).format('YYYY.MM.DD')
-                    : null,
+                purchase: item.purchase ?? null,
+                called: item.called ?? null,
+                answered: item.answered ?? null,
+                interested: item.interested ?? null,
+                called2: item.called2 ?? null,
+                answered2: item.answered2 ?? null,
+                scoring: item.scoring || null,
+                seller: item.seller || null,
+                passportId: item.passportId || '',
+                jshshir2: item.jshshir2 || '',
+                score: item.score ?? null,
+                mib: item.mib ?? null,
+                aliment: item.aliment ?? null,
+                officialSalary: item.officialSalary ?? null,
+                finalLimit: item.finalLimit ?? null,
+                finalPercentage: item.finalPercentage ?? null,
                 createdAt: item.createdAt || null,
             }));
 
@@ -504,6 +647,102 @@ class b1HANA {
         } catch (e) {
             console.error('Error fetching leads:', e);
             next(e);
+        }
+    };
+
+    updateLead = async (req, res, next) => {
+        try {
+            const { id } = req.params;
+            const { U_role } = req.user;
+            const body = req.body;
+
+            if (!permissions[U_role]) {
+                return res.status(403).json({
+                    message: `Role ${U_role} is not allowed to update leads`,
+                });
+            }
+
+            const allowedFields = permissions[U_role];
+            const { validData, errors } = validateFields(
+                body,
+                LeadModel.schema,
+                allowedFields
+            );
+
+            if (errors.length) {
+                return res.status(400).json({
+                    message: 'Type validation failed',
+                    details: errors,
+                });
+            }
+
+            const bodyKeys = Object.keys(body);
+            const invalidFields = bodyKeys.filter(
+                (key) => !allowedFields.includes(key)
+            );
+
+            if (Object.keys(validData).length === 0) {
+                return res.status(400).json({
+                    message: 'No valid fields provided for update',
+                    invalidFields: invalidFields.length ? invalidFields : undefined,
+                    allowedFields,
+                });
+            }
+
+            if (validData?.clientFullName) {
+                validData.clientName = validData.clientFullName;
+            }
+
+            if (validData.passportId) {
+                validData.idX = validData.passportId;
+            } else if (validData.idX) {
+                validData.passportId = validData.idX;
+            }
+
+            if (validData.jshshir2 ) {
+                validData.jshshir = validData.jshshir2;
+            } else if (validData.jshshir) {
+                validData.jshshir2 = validData.jshshir;
+            }
+
+            if (validData.passportVisit && ['Passport', 'Visit'].includes(validData.passportVisit)) {
+                const weekday = moment().isoWeekday().toString();
+
+                const query = DataRepositories.getSalesPersons({
+                    include: ['Operator2'],
+                });
+                const data = await this.execute(query);
+
+                const availableOperators = data.filter((item) =>
+                    (item.U_workDay || '').split(',').includes(weekday)
+                );
+
+                if (availableOperators.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * availableOperators.length);
+                    const selectedOperator = availableOperators[randomIndex];
+
+                    validData.operator2 = selectedOperator?.SlpCode || null;
+                } else {
+                    console.warn('No available Operator2 found for today');
+                }
+            }
+
+            const updated = await LeadModel.findByIdAndUpdate(id, validData, {
+                new: true,
+                runValidators: true,
+            });
+
+            if (!updated) {
+                return res.status(404).json({ message: 'Lead not found' });
+            }
+
+            return res.status(200).json({
+                message: 'Lead updated successfully',
+                data: updated,
+            });
+        } catch (err) {
+            console.error('Error updating lead:', err);
+            next(err);
         }
     };
 
@@ -537,21 +776,23 @@ class b1HANA {
                 operator: lead.operator || '',
                 called: lead.called ?? false,
                 callTime: formatDate(lead.callTime, true),
-                answered: lead.answered ?? false,
+                answered: lead.answered ?? null,
                 callCount: lead.callCount ?? 0,
-                interested: lead.interested ?? false,
+                interested: lead.interested ?? null,
                 rejectionReason: lead.rejectionReason || '',
                 passportVisit: lead.passportVisit || '',
                 jshshir: lead.jshshir || '',
                 idX: lead.idX || '',
                 operator2: lead.operator2 || '',
-                answered2: lead.answered2 ?? false,
+                source2: lead.source2 || null,
+                called2: lead.called2 ?? null,
+                answered2: lead.answered2 ?? null,
                 callCount2: lead.callCount2 ?? 0,
                 meetingDate: formatDate(lead.meetingDate),
                 rejectionReason2: lead.rejectionReason2 || '',
                 paymentInterest: lead.paymentInterest || '',
                 branch: lead.branch || '',
-                meetingHappened: lead.meetingHappened ?? false,
+                meetingHappened: lead.meetingHappened ?? null,
                 percentage: lead.percentage ?? null,
                 meetingConfirmed: lead.meetingConfirmed ?? null,
                 meetingConfirmedDate: formatDate(lead.meetingConfirmedDate),
@@ -561,7 +802,10 @@ class b1HANA {
                 saleType: lead.saleType || '',
                 passportId: lead.passportId || '',
                 jshshir2: lead.jshshir2 || '',
-                employeeName: lead.employeeName || '',
+                scoring: lead.scoring || null,
+                seller: lead.seller || null,
+                branch2: lead.branch2 || '',
+                clientFullName: lead.clientFullName || '',
                 region: lead.region || '',
                 district: lead.district || '',
                 address: lead.address || '',
@@ -872,7 +1116,7 @@ class b1HANA {
 
     executors = async (req, res, next) => {
         try {
-            const { exclude_role, include_role } = req.query;
+            const { exclude_role, include_role , branch } = req.query;
 
             let notIncExecutorRole = [];
             let onlyIncExecutorRole = [];
@@ -898,6 +1142,7 @@ class b1HANA {
             const query = await DataRepositories.getSalesPersons({
                 exclude: notIncExecutorRole,
                 include: onlyIncExecutorRole,
+                branch
             });
 
             const data = await this.execute(query);

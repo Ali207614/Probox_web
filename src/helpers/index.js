@@ -1,25 +1,9 @@
 const fs = require("fs");
-const { get } = require("lodash");
 const path = require("path");
-const moment = require('moment');
 
 function parseLocalDateString(str) {
     const [year, month, day] = str.split('.').map(Number);
     return new Date(Date.UTC(year, month - 1, day, 0, 0, 0)); // UTC 00:00
-}
-
-
-function formatterCurrency(
-    number = 0,
-    currency = "UZS",
-    locale = "ru",
-    maximumSignificantDigits = 10
-) {
-    return number.toLocaleString(locale, {
-        style: "currency",
-        currency: currency,
-        maximumSignificantDigits: maximumSignificantDigits,
-    });
 }
 
 function shuffleArray(array) {
@@ -45,24 +29,11 @@ function getSession() {
     return docs
 }
 
-function convertToISOFormat(dateString) {
-    const date = new Date(dateString);
-    return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
-}
-function checkFileType(file) {
-    const extname = allowedFileTypes.test(path.extname(file.name).toLowerCase());
-    const mimetype = allowedFileTypes.test(file.mimetype);
-    return extname && mimetype;
-}
-
 
 
 module.exports = {
     saveSession,
     getSession,
-    formatterCurrency,
-    convertToISOFormat,
     shuffleArray,
-    checkFileType,
     parseLocalDateString
 }
