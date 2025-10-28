@@ -602,7 +602,7 @@ class b1HANA {
                 .select(
                     '_id seller scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
                 )
-                .sort({ createdAt: -1 })
+                .sort({ time: 1 })
                 .skip(skip)
                 .limit(limit)
                 .lean();
