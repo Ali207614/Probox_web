@@ -156,17 +156,17 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 console.log(`🔁 Existing BP found: ${found.CardCode} (${found.CardName})`);
             } else {
                 // SAP’da yo‘q → yangi yaratish
-                const newCode = await createBusinessPartnerInSAP({
-                    name: lead.clientName,
-                    phone: cleanPhone,
-                });
-                if (newCode) {
-                    lead.cardCode = newCode;
-                    lead.cardName = lead.clientName;
-                    console.log(`🆕 Created new BP: ${newCode}`);
-                } else {
-                    console.log(`⚠️ Failed to create BP for ${lead.clientName}`);
-                }
+                // const newCode = await createBusinessPartnerInSAP({
+                //     name: lead.clientName,
+                //     phone: cleanPhone,
+                // });
+                // if (newCode) {
+                //     lead.cardCode = newCode;
+                //     lead.cardName = lead.clientName;
+                //     console.log(`🆕 Created new BP: ${newCode}`);
+                // } else {
+                //     console.log(`⚠️ Failed to create BP for ${lead.clientName}`);
+                // }
             }
         }
 
