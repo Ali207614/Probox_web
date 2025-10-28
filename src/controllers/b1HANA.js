@@ -576,7 +576,6 @@ class b1HANA {
 
 
 
-
             const addRangeFilter = (field, min, max) => {
                 if (min || max) {
                     filter[field] = {};

@@ -58,11 +58,10 @@ router.post('/webhook', basicAuth, async (req, res) => {
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
         const lastRow = lastLead?.n || 2;
         const nextStart = lastRow + 1;
-        const nextEnd = nextStart + 5; // faqat 5 ta qatorni tekshiramiz
+        const nextEnd = nextStart + 5;
 
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
-        // === 2️⃣ Google Sheets’dan yangi qatorlarni olish
         const sheetId = process.env.SHEET_ID;
         const saKeyPath = process.env.SA_KEY_PATH || './sa.json';
 
@@ -73,7 +72,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
         const sheets = google.sheets({ version: 'v4', auth });
 
-        const range = `Asosiy!A${nextStart}:J${nextEnd}`; // A:J — telefon, ism, source va vaqt uchun
+        const range = `Asosiy!A${nextStart}:J${nextEnd}`;
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: sheetId,
             range,
@@ -85,12 +84,10 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: 'No new rows detected.' });
         }
 
-        // === 3️⃣ Operatorlarni olish (SAPdan)
         const query = DataRepositories.getSalesPersons({ include: ['Operator1'] });
         const data = await b1Controller.execute(query);
         const operatorIndex = {};
 
-        // === 4️⃣ Yangi leadlarni shakllantirish
         let counter = 1;
         const leads = rows.map((row, i) => {
             const rowNumber = nextStart + i;
@@ -103,9 +100,8 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
             let operator = null;
             if (availableOperators.length > 0) {
-                const index = operatorIndex[weekday] || 0;
-                operator = availableOperators[index % availableOperators.length];
-                operatorIndex[weekday] = index + 1;
+                const randomIndex = Math.floor(Math.random() * availableOperators.length);
+                operator = availableOperators[randomIndex];
             }
 
             let clientName = row[0]?.trim() || '';
@@ -124,7 +120,6 @@ router.post('/webhook', basicAuth, async (req, res) => {
             };
         }).filter(lead => lead.clientPhone);
 
-        // === 5️⃣ Dublikatlarni filtrlash
         const uniqueLeads = [];
         for (const lead of leads) {
             const exists = await LeadModel.exists({
@@ -140,8 +135,12 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: 'No unique new leads.' });
         }
 
-        // === 6️⃣ MongoDB’ga yozish
         const inserted = await LeadModel.insertMany(uniqueLeads);
+        const io = req.app.get('io');
+        if (io && inserted.length > 0) {
+            io.emit('new_leads', inserted);
+            console.log('📡 Socket broadcast: new_leads sent to all clients');
+        }
         console.log(`📥 ${inserted.length} new rows inserted successfully.`);
         return res.status(200).json({ message: `Inserted ${inserted.length} new rows.` });
 
