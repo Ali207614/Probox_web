@@ -1,11 +1,11 @@
 const express = require('express');
-const moment = require('moment');
-const get = require('lodash/get');
 const path = require('path');
+const moment = require('moment');
 const { google } = require('googleapis');
 const { GoogleAuth } = require('google-auth-library');
-const LeadModel  = require('../models/lead-model');
-const DataRepositories = require("../repositories/dataRepositories");
+const { get } = require('lodash');
+const LeadModel = require('../models/lead-model');
+const DataRepositories = require('../repositories/dataRepositories');
 const b1Controller = require('../controllers/b1HANA');
 const router = express.Router();
 
@@ -13,9 +13,7 @@ const router = express.Router();
 const AUTH_USER = process.env.GS_WEBHOOK_USER || 'sheetbot';
 const AUTH_PASS = process.env.GS_WEBHOOK_PASS || 'supersecret';
 
-/**
- * Basic Auth middleware
- */
+// === Basic Auth middleware ===
 function basicAuth(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Basic ')) {
@@ -30,9 +28,7 @@ function basicAuth(req, res, next) {
     next();
 }
 
-/**
- * === Utility: parseSheetDate ===
- */
+// === Utility ===
 function parseSheetDate(value) {
     if (!value) return null;
     if (!isNaN(value)) {
@@ -44,9 +40,8 @@ function parseSheetDate(value) {
     return parsed.isValid() ? parsed.toDate() : null;
 }
 
-/**
- * === Main webhook ===
- */
+
+// === Main Webhook ===
 router.post('/webhook', basicAuth, async (req, res) => {
     try {
         const { sheetName } = req.body;
@@ -57,36 +52,29 @@ router.post('/webhook', basicAuth, async (req, res) => {
         // === 1️⃣ MongoDB’dan oxirgi rowNumber olish
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
         const lastRow = lastLead?.n || 2;
-        const nextStart = lastRow + 1;
-        const nextEnd = nextStart + 5;
+        const nextEnd = lastRow + 5;
 
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
+        // === 2️⃣ Google Sheets’dan yangi qatorlarni olish
         const sheetId = process.env.SHEET_ID;
         const saKeyPath = process.env.SA_KEY_PATH || './sa.json';
-
         const auth = new GoogleAuth({
             keyFile: path.resolve(saKeyPath),
             scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
         });
-
         const sheets = google.sheets({ version: 'v4', auth });
-
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId: sheetId,
-            range,
-        });
-
+        const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
         const rows = response.data.values || [];
         if (!rows.length) {
             console.log('⚠️ No new rows found.');
             return res.status(200).json({ message: 'No new rows detected.' });
         }
 
+        // === 3️⃣ Operatorlarni olish
         const query = DataRepositories.getSalesPersons({ include: ['Operator1'] });
         const data = await b1Controller.execute(query);
-        const operatorIndex = {};
 
         let counter = 1;
         const leads = rows.map((row, i) => {
@@ -118,8 +106,9 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 time: parsedTime,
                 operator: operator?.SlpCode || null,
             };
-        }).filter(lead => lead.clientPhone);
+        }).filter((lead) => lead.clientPhone);
 
+        // === 4️⃣ Dublikatlarni tekshirish
         const uniqueLeads = [];
         for (const lead of leads) {
             const exists = await LeadModel.exists({
@@ -135,12 +124,61 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: 'No unique new leads.' });
         }
 
+        // === 5️⃣ SAP’da mavjudlarini bitta IN so‘rov bilan tekshirish
+        const phones = uniqueLeads.map((l) => l.clientPhone?.replace(/\D/g, '')).filter(Boolean);
+        let existingMap = new Map();
+
+        if (phones.length > 0) {
+            const phoneList = phones.map((p) => `'${p}'`).join(', ');
+            const sapQuery = `
+        SELECT "CardCode", "CardName", "Phone1", "Phone2"
+        FROM ${DataRepositories.db}.OCRD
+        WHERE "Phone1" IN (${phoneList}) OR "Phone2" IN (${phoneList})
+      `;
+            const existingRecords = await b1Controller.execute(sapQuery);
+            existingMap = new Map();
+            for (const r of existingRecords) {
+                const phone = (r.Phone1 || r.Phone2 || '').replace(/\D/g, '');
+                existingMap.set(phone, { CardCode: r.CardCode, CardName: r.CardName });
+            }
+        }
+
+        // === 6️⃣ SAP bilan sinxronizatsiya qilish
+        for (const lead of uniqueLeads) {
+            const cleanPhone = lead.clientPhone.replace(/\D/g, '');
+            const found = existingMap.get(cleanPhone);
+
+            if (found) {
+                // SAP’da mavjud
+                lead.cardCode = found.CardCode;
+                lead.cardName = found.CardName;
+                console.log(`🔁 Existing BP found: ${found.CardCode} (${found.CardName})`);
+            } else {
+                // SAP’da yo‘q → yangi yaratish
+                const newCode = await createBusinessPartnerInSAP({
+                    name: lead.clientName,
+                    phone: cleanPhone,
+                });
+                if (newCode) {
+                    lead.cardCode = newCode;
+                    lead.cardName = lead.clientName;
+                    console.log(`🆕 Created new BP: ${newCode}`);
+                } else {
+                    console.log(`⚠️ Failed to create BP for ${lead.clientName}`);
+                }
+            }
+        }
+
+        // === 7️⃣ MongoDB’ga yozish
         const inserted = await LeadModel.insertMany(uniqueLeads);
+
+        // === 8️⃣ Socket orqali yuborish
         const io = req.app.get('io');
         if (io && inserted.length > 0) {
             io.emit('new_leads', inserted);
             console.log('📡 Socket broadcast: new_leads sent to all clients');
         }
+
         console.log(`📥 ${inserted.length} new rows inserted successfully.`);
         return res.status(200).json({ message: `Inserted ${inserted.length} new rows.` });
 
