@@ -61,12 +61,12 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 sourceRaw,
                 timeRaw,
                 , , , , ,
-                backupPhone,
+                backupPhone
             ] = valuesRow;
 
-            const clientName = (clientNameRaw || '').trim();
+            const clientName = String(clientNameRaw || '').trim();
             const clientPhone = String(clientPhoneRaw || backupPhone || '').replace(/\D/g, '').slice(0, 12);
-            const source = (sourceRaw || '').trim();
+            const source = String(sourceRaw || '').trim();
             const time = parseSheetDate(timeRaw);
 
             if (!clientPhone) {
