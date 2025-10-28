@@ -46,7 +46,7 @@ app.use(errorMiddleware);
 
 async function main() {
     const sheetId = process.env.SHEET_ID;
-    const range = process.env.SHEET_RANGE || 'Sheet1!A2:F100';
+    const range = process.env.SHEET_RANGE || 'Sheet1!A1:F100';
     const saKeyPath = process.env.SA_KEY_PATH || './sa.json';
 
     if (!sheetId) throw new Error('❌ Missing SHEET_ID in .env');
@@ -81,7 +81,7 @@ async function main() {
         let counter = 1;
         let operatorIndex = {}; // kun bo‘yicha operator navbati
 
-        const leads = rows.map((row) => {
+        const leads = rows.map((row, index) => {
             const parsedTime = parseSheetDate(row[3]);
             const weekday = moment(parsedTime).isoWeekday().toString(); // 1–7
 
@@ -93,9 +93,9 @@ async function main() {
             // Agar shu kunda ishlaydigan operatorlar bo‘lsa, ularni aylantiramiz
             let operator = null;
             if (availableOperators.length > 0) {
-                const index = operatorIndex[weekday] || 0;
-                operator = availableOperators[index % availableOperators.length];
-                operatorIndex[weekday] = index + 1;
+                const idx = operatorIndex[weekday] || 0;
+                operator = availableOperators[idx % availableOperators.length];
+                operatorIndex[weekday] = idx + 1;
             }
 
             // 🔸 Ismni tozalash
@@ -109,18 +109,20 @@ async function main() {
             let clientPhone = (row[1] || '').replace(/\D/g, '').slice(0, 12);
 
             return {
+                n: index + 2, // Sheet1!A2 dan boshlangan, shuning uchun +2
                 clientName,
                 clientPhone,
                 source: row[2]?.trim() || '',
                 time: parsedTime,
                 operator: operator?.SlpCode || null,
             };
-        }).filter(lead => lead.clientPhone);
+        }).filter((lead) => lead.clientPhone);
         await LeadModel.deleteMany();
 
         const result = await LeadModel.insertMany(leads);
         console.log(`📥 ${result.length} rows inserted into MongoDB.\n`);
     } catch (err) {
+        console.log(err)
         console.error('❌ Error reading Google Sheet:');
         if (err.code === 403) {
             console.error('➡️ SA email sheet’ga qo‘shilmagan bo‘lishi mumkin.');
@@ -149,9 +151,7 @@ const start = async () => {
             useUnifiedTopology: true
         })
         console.log(process.env.LEAD === 'true')
-        if(process.env.LEAD === 'true'){
-            main()
-        }
+
 
         const connection = hanaClient.createConnection();
         connection.connect(conn_params, async (err) => {
@@ -162,7 +162,9 @@ const start = async () => {
             }
         });
         global.connection = connection;
-
+        if(process.env.LEAD === 'true'){
+            main()
+        }
         app.listen(PORT, () => console.log(`Server started on PORT = ${PORT}`))
     } catch (e) {
         console.log(e);
