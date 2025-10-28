@@ -52,7 +52,8 @@ router.post('/webhook', basicAuth, async (req, res) => {
         // === 1️⃣ MongoDB’dan oxirgi rowNumber olish
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
         const lastRow = lastLead?.n || 2;
-        const nextEnd = lastRow + 5;
+        const nextStart = lastRow ;
+        const nextEnd = nextStart + 5;
 
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
