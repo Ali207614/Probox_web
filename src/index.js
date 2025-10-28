@@ -159,12 +159,13 @@ const start = async () => {
                 console.error('Hanaga ulanishda xatolik yuz berdi:', err);
             } else {
                 console.log('Hanaga ulanish muvaffaqiyatli amalga oshirildi');
+                if(process.env.LEAD === 'true'){
+                    main()
+                }
             }
         });
         global.connection = connection;
-        if(process.env.LEAD === 'true'){
-            main()
-        }
+
         app.listen(PORT, () => console.log(`Server started on PORT = ${PORT}`))
     } catch (e) {
         console.log(e);
