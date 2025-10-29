@@ -113,6 +113,7 @@ class b1SL {
                 }
             });
     }
+
     createBusinessPartner = async ({ Phone1, Phone2, CardName }) => {
 
         let body = {CardName}

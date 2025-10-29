@@ -1,11 +1,14 @@
 const { Schema, model } = require('mongoose');
 
+
 const LeadSchema = new Schema(
     {
         n: { type: Number, description: 'Tartib raqami' },
         limit: { type: Number, description: 'Ajratilgan limit yoki kredit miqdori' },
         clientName: { type: String, trim: true, description: 'Mijozning to‘liq ismi (Umumiy ozgarmaydi)' },
         clientPhone: { type: String, trim: true, description: 'Mijozning telefon raqami (Umumiy ozgarmaydi)' },
+        cardCode: { type: String, trim: true, description: 'CardCode' },
+        cardName: { type: String, trim: true, description: 'CardName' },
         source: { type: String, description: 'Manba (reklama, ijtimoiy tarmoq, va hokazo) (Umumiy ozgarmaydi)' },
         time: { type: Date, description: 'Yozilgan vaqt (Umumiy ozgarmaydi)' },
         operator: { type: String, description: 'Qo‘ng‘iroq qilgan operator (Operator1 )' },
