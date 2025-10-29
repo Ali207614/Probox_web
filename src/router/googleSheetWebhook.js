@@ -7,6 +7,7 @@ const { get } = require('lodash');
 const LeadModel = require('../models/lead-model');
 const DataRepositories = require('../repositories/dataRepositories');
 const b1Controller = require('../controllers/b1HANA');
+const b1ServiceLayer = require('../controllers/b1SL')
 const router = express.Router();
 
 // === Auth ===
@@ -156,17 +157,17 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 console.log(`🔁 Existing BP found: ${found.CardCode} (${found.CardName})`);
             } else {
                 // SAP’da yo‘q → yangi yaratish
-                // const newCode = await createBusinessPartnerInSAP({
-                //     name: lead.clientName,
-                //     phone: cleanPhone,
-                // });
-                // if (newCode) {
-                //     lead.cardCode = newCode;
-                //     lead.cardName = lead.clientName;
-                //     console.log(`🆕 Created new BP: ${newCode}`);
-                // } else {
-                //     console.log(`⚠️ Failed to create BP for ${lead.clientName}`);
-                // }
+                const newCode = await b1ServiceLayer.createBusinessPartner({
+                    Phone1:cleanPhone,
+                    CardName: lead.clientName
+                });
+                if (newCode) {
+                    lead.cardCode = newCode.CardCode;
+                    lead.cardName = newCode.CardName;
+                    console.log(`🆕 Created new BP: ${newCode}`);
+                } else {
+                    console.log(`⚠️ Failed to create BP for ${lead.clientName}`);
+                }
             }
         }
 
