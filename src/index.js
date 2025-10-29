@@ -9,6 +9,7 @@ const hanaClient = require('@sap/hana-client');
 
 const { main } = require('../src/utils/googleSheetSync');
 const googleSheetRouter = require('../src/router/googleSheetWebhook');
+const router = require('../src/router/index')
 const { PORT, DB_URL, conn_params, CLIENT_URL } = require('./config');
 
 const app = express();
@@ -29,6 +30,7 @@ app.set('io', io);
 
 // === Routers
 app.use('/api', googleSheetRouter);
+app.use('/api', router);
 
 // === MongoDB ulanish
 const MONGO_URI = DB_URL || process.env.MONGO_URI || 'mongodb://localhost:27017/probox';
