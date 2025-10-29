@@ -796,7 +796,7 @@ class b1HANA {
                 meetingConfirmed: lead.meetingConfirmed ?? null,
                 meetingConfirmedDate: formatDate(lead.meetingConfirmedDate),
                 consultant: lead.consultant || '',
-                purchase: lead.purchase ?? false,
+                purchase: lead.purchase ?? null,
                 purchaseDate: formatDate(lead.purchaseDate),
                 saleType: lead.saleType || '',
                 passportId: lead.passportId || '',
