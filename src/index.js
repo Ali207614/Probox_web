@@ -11,6 +11,8 @@ const { main } = require('../src/utils/googleSheetSync');
 const googleSheetRouter = require('../src/router/googleSheetWebhook');
 const router = require('../src/router/index')
 const { PORT, DB_URL, conn_params, CLIENT_URL } = require('./config');
+const { ensureBucket } = require('./minio');
+const leadImageRoute = require('../src/router/leadImageRoute');
 
 const app = express();
 const server = http.createServer(app);
@@ -31,6 +33,7 @@ app.set('io', io);
 // === Routers
 app.use('/api', googleSheetRouter);
 app.use('/api', router);
+app.use('/api/lead-images', leadImageRoute);
 
 // === MongoDB ulanish
 const MONGO_URI = DB_URL || process.env.MONGO_URI || 'mongodb://localhost:27017/probox';
@@ -70,6 +73,8 @@ server.listen(port, () => {
                 }
             }
         });
+
+        await ensureBucket(process.env.MINIO_BUCKET);
     } catch (err) {
         console.error('❌ Initial sync failed:', err.message);
     }

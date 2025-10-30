@@ -113,7 +113,6 @@ async function main(io) {
                 clientName: lead.clientName,
                 source: lead.source,
                 cardCode: lead.cardCode,
-                cardName: lead.cardName,
             });
             if (!exists) uniqueLeads.push(lead);
         }
@@ -124,7 +123,7 @@ async function main(io) {
         }
 
         const notInSap = uniqueLeads.filter((lead) => !lead.cardCode);
-        console.log(`🆕 SAP’da topilmagan yangi leadlar soni: ${notInSap.length}`);
+        console.log(`🆕 SAP’da topilmagan yangi clientlar soni: ${notInSap.length}`);
 
         const inserted = await LeadModel.insertMany(uniqueLeads);
         console.log(`📥 ${inserted.length} new leads inserted into MongoDB.`);
