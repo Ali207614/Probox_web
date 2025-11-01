@@ -10,11 +10,9 @@ const b1Controller = require('../controllers/b1HANA');
 const b1ServiceLayer = require('../controllers/b1SL');
 const router = express.Router();
 
-// === Auth ===
 const AUTH_USER = process.env.GS_WEBHOOK_USER || 'sheetbot';
 const AUTH_PASS = process.env.GS_WEBHOOK_PASS || 'supersecret';
 
-// === Basic Auth middleware ===
 function basicAuth(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Basic ')) {
@@ -29,7 +27,6 @@ function basicAuth(req, res, next) {
     next();
 }
 
-// === Utility ===
 function parseSheetDate(value) {
     if (!value) return null;
     if (!isNaN(value)) {
@@ -41,7 +38,6 @@ function parseSheetDate(value) {
     return parsed.isValid() ? parsed.toDate() : null;
 }
 
-// Telefonni tozalash va 998 ni olib tashlash
 function normalizePhone(input) {
     if (!input) return null;
     let digits = String(input).replace(/\D/g, '');
@@ -51,7 +47,6 @@ function normalizePhone(input) {
     return digits;
 }
 
-// Operator balansini aniqlash (oxirgi 50 ta yozuv asosida)
 async function getOperatorBalance(operators) {
     const lastLeads = await LeadModel.find({ operator: { $ne: null } })
         .sort({ _id: -1 })
@@ -72,7 +67,6 @@ async function getOperatorBalance(operators) {
     return balance;
 }
 
-// Eng kam yuklangan operatorni topish
 function pickLeastLoadedOperator(availableOperators, balance) {
     if (!availableOperators.length) return null;
 
@@ -89,7 +83,6 @@ function pickLeastLoadedOperator(availableOperators, balance) {
     return chosen;
 }
 
-// === Main Webhook ===
 router.post('/webhook', basicAuth, async (req, res) => {
     try {
         const { sheetName } = req.body;
@@ -97,7 +90,6 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: `Ignored — sheet "${sheetName}" is not Asosiy.` });
         }
 
-        // === 1️⃣ MongoDB’dan oxirgi rowNumber olish
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
         const lastRow = lastLead?.n || 2;
         const nextStart = lastRow;
@@ -105,7 +97,6 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
-        // === 2️⃣ Google Sheets’dan yangi qatorlarni olish
         const sheetId = process.env.SHEET_ID;
         const saKeyPath = process.env.SA_KEY_PATH || './sa.json';
         const auth = new GoogleAuth({
@@ -121,12 +112,10 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: 'No new rows detected.' });
         }
 
-        // === 3️⃣ Operatorlarni olish
         const query = DataRepositories.getSalesPersons({ include: ['Operator1'] });
         const operators = await b1Controller.execute(query);
         const operatorBalance = await getOperatorBalance(operators);
 
-        let counter = 1;
         const leads = [];
 
         for (let i = 0; i < rows.length; i++) {
@@ -139,12 +128,15 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 get(item, 'U_workDay', '').split(',').includes(weekday)
             );
 
-            // ⚖️ Eng kam yuklangan operatorni tanlash
             const operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
 
             let clientName = row[0]?.trim() || '';
             clientName = clientName.replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
-            if (!clientName) clientName = `Mijoz_${counter++}`;
+
+            if (!clientName) {
+                const timestamp = moment().format('YYYYMMDD_HHmmss');
+                clientName = `Mijoz_${timestamp}_${rowNumber}`;
+            }
 
             const clientPhone = normalizePhone(row[1]);
             if (!clientPhone) continue;
@@ -164,7 +156,6 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: 'No valid leads.' });
         }
 
-        // === 4️⃣ Dublikatlarni tekshirish
         const uniqueLeads = [];
         for (const lead of leads) {
             const exists = await LeadModel.exists({
@@ -180,17 +171,16 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: 'No unique new leads.' });
         }
 
-        // === 5️⃣ SAP’da mavjudlarini tekshirish
         const phones = uniqueLeads.map((l) => l.clientPhone).filter(Boolean);
         let existingMap = new Map();
 
         if (phones.length > 0) {
             const phoneList = phones.map((p) => `'${p}'`).join(', ');
             const sapQuery = `
-                SELECT "CardCode", "CardName", "Phone1", "Phone2"
-                FROM ${DataRepositories.db}.OCRD
-                WHERE "Phone1" IN (${phoneList}) OR "Phone2" IN (${phoneList})
-            `;
+          SELECT "CardCode", "CardName", "Phone1", "Phone2"
+          FROM ${DataRepositories.db}.OCRD
+          WHERE "Phone1" IN (${phoneList}) OR "Phone2" IN (${phoneList})
+      `;
             const existingRecords = await b1Controller.execute(sapQuery);
             for (const r of existingRecords) {
                 const phone = (r.Phone1 || r.Phone2 || '').replace(/\D/g, '');
@@ -198,7 +188,6 @@ router.post('/webhook', basicAuth, async (req, res) => {
             }
         }
 
-        // === 6️⃣ SAP bilan sinxronizatsiya
         for (const lead of uniqueLeads) {
             const cleanPhone = lead.clientPhone.replace(/\D/g, '');
             const found = existingMap.get(cleanPhone);
@@ -222,10 +211,8 @@ router.post('/webhook', basicAuth, async (req, res) => {
             }
         }
 
-        // === 7️⃣ MongoDB’ga yozish
         const inserted = await LeadModel.insertMany(uniqueLeads);
 
-        // === 8️⃣ Socket orqali yuborish
         const io = req.app.get('io');
         if (io && inserted.length > 0) {
             io.emit('new_leads', inserted);
