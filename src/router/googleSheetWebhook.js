@@ -7,7 +7,7 @@ const { get } = require('lodash');
 const LeadModel = require('../models/lead-model');
 const DataRepositories = require('../repositories/dataRepositories');
 const b1Controller = require('../controllers/b1HANA');
-const b1ServiceLayer = require('../controllers/b1SL')
+const b1ServiceLayer = require('../controllers/b1SL');
 const router = express.Router();
 
 // === Auth ===
@@ -41,6 +41,53 @@ function parseSheetDate(value) {
     return parsed.isValid() ? parsed.toDate() : null;
 }
 
+// Telefonni tozalash va 998 ni olib tashlash
+function normalizePhone(input) {
+    if (!input) return null;
+    let digits = String(input).replace(/\D/g, '');
+    if (digits.startsWith('998') && digits.length > 9) digits = digits.slice(3);
+    if (digits.length === 10 && digits.startsWith('0')) digits = digits.slice(1);
+    if (digits.length !== 9) return null;
+    return digits;
+}
+
+// Operator balansini aniqlash (oxirgi 50 ta yozuv asosida)
+async function getOperatorBalance(operators) {
+    const lastLeads = await LeadModel.find({ operator: { $ne: null } })
+        .sort({ _id: -1 })
+        .limit(50)
+        .lean();
+
+    const balance = {};
+    for (const op of operators) {
+        balance[op.SlpCode] = 0;
+    }
+
+    for (const lead of lastLeads) {
+        if (balance[lead.operator] !== undefined) {
+            balance[lead.operator]++;
+        }
+    }
+
+    return balance;
+}
+
+// Eng kam yuklangan operatorni topish
+function pickLeastLoadedOperator(availableOperators, balance) {
+    if (!availableOperators.length) return null;
+
+    // Filter: faqat balansda mavjud operatorlarni olish
+    const filtered = availableOperators.filter(op => balance[op.SlpCode] !== undefined);
+    if (!filtered.length) return availableOperators[0];
+
+    // Eng kam yuklangan operatorni topish
+    filtered.sort((a, b) => balance[a.SlpCode] - balance[b.SlpCode]);
+    const chosen = filtered[0];
+
+    // Balansni yangilash
+    balance[chosen.SlpCode]++;
+    return chosen;
+}
 
 // === Main Webhook ===
 router.post('/webhook', basicAuth, async (req, res) => {
@@ -53,7 +100,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
         // === 1️⃣ MongoDB’dan oxirgi rowNumber olish
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
         const lastRow = lastLead?.n || 2;
-        const nextStart = lastRow ;
+        const nextStart = lastRow;
         const nextEnd = nextStart + 5;
 
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
@@ -76,39 +123,46 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
         // === 3️⃣ Operatorlarni olish
         const query = DataRepositories.getSalesPersons({ include: ['Operator1'] });
-        const data = await b1Controller.execute(query);
+        const operators = await b1Controller.execute(query);
+        const operatorBalance = await getOperatorBalance(operators);
 
         let counter = 1;
-        const leads = rows.map((row, i) => {
+        const leads = [];
+
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
             const rowNumber = nextStart + i;
             const parsedTime = parseSheetDate(row[3]);
             const weekday = moment(parsedTime).isoWeekday().toString();
 
-            const availableOperators = data.filter((item) =>
+            const availableOperators = operators.filter((item) =>
                 get(item, 'U_workDay', '').split(',').includes(weekday)
             );
 
-            let operator = null;
-            if (availableOperators.length > 0) {
-                const randomIndex = Math.floor(Math.random() * availableOperators.length);
-                operator = availableOperators[randomIndex];
-            }
+            // ⚖️ Eng kam yuklangan operatorni tanlash
+            const operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
 
             let clientName = row[0]?.trim() || '';
             clientName = clientName.replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
             if (!clientName) clientName = `Mijoz_${counter++}`;
 
-            let clientPhone = (row[1] || '').replace(/\D/g, '').slice(0, 12);
+            const clientPhone = normalizePhone(row[1]);
+            if (!clientPhone) continue;
 
-            return {
+            leads.push({
                 n: rowNumber,
                 clientName,
                 clientPhone,
                 source: row[2]?.trim() || '',
                 time: parsedTime,
                 operator: operator?.SlpCode || null,
-            };
-        }).filter((lead) => lead.clientPhone);
+            });
+        }
+
+        if (!leads.length) {
+            console.log('⚠️ No valid leads after normalization.');
+            return res.status(200).json({ message: 'No valid leads.' });
+        }
 
         // === 4️⃣ Dublikatlarni tekshirish
         const uniqueLeads = [];
@@ -126,45 +180,42 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: 'No unique new leads.' });
         }
 
-        // === 5️⃣ SAP’da mavjudlarini bitta IN so‘rov bilan tekshirish
-        const phones = uniqueLeads.map((l) => l.clientPhone?.replace(/\D/g, '')).filter(Boolean);
+        // === 5️⃣ SAP’da mavjudlarini tekshirish
+        const phones = uniqueLeads.map((l) => l.clientPhone).filter(Boolean);
         let existingMap = new Map();
 
         if (phones.length > 0) {
             const phoneList = phones.map((p) => `'${p}'`).join(', ');
             const sapQuery = `
-        SELECT "CardCode", "CardName", "Phone1", "Phone2"
-        FROM ${DataRepositories.db}.OCRD
-        WHERE "Phone1" IN (${phoneList}) OR "Phone2" IN (${phoneList})
-      `;
+                SELECT "CardCode", "CardName", "Phone1", "Phone2"
+                FROM ${DataRepositories.db}.OCRD
+                WHERE "Phone1" IN (${phoneList}) OR "Phone2" IN (${phoneList})
+            `;
             const existingRecords = await b1Controller.execute(sapQuery);
-            existingMap = new Map();
             for (const r of existingRecords) {
                 const phone = (r.Phone1 || r.Phone2 || '').replace(/\D/g, '');
                 existingMap.set(phone, { CardCode: r.CardCode, CardName: r.CardName });
             }
         }
 
-        // === 6️⃣ SAP bilan sinxronizatsiya qilish
+        // === 6️⃣ SAP bilan sinxronizatsiya
         for (const lead of uniqueLeads) {
             const cleanPhone = lead.clientPhone.replace(/\D/g, '');
             const found = existingMap.get(cleanPhone);
 
             if (found) {
-                // SAP’da mavjud
                 lead.cardCode = found.CardCode;
                 lead.cardName = found.CardName;
                 console.log(`🔁 Existing BP found: ${found.CardCode} (${found.CardName})`);
             } else {
-                // SAP’da yo‘q → yangi yaratish
                 const newCode = await b1ServiceLayer.createBusinessPartner({
-                    Phone1:cleanPhone,
-                    CardName: lead.clientName
+                    Phone1: cleanPhone,
+                    CardName: lead.clientName,
                 });
                 if (newCode) {
                     lead.cardCode = newCode.CardCode;
                     lead.cardName = newCode.CardName;
-                    console.log(`🆕 Created new BP: ${newCode}`);
+                    console.log(`🆕 Created new BP: ${newCode.CardCode}`);
                 } else {
                     console.log(`⚠️ Failed to create BP for ${lead.clientName}`);
                 }
@@ -183,7 +234,6 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
         console.log(`📥 ${inserted.length} new rows inserted successfully.`);
         return res.status(200).json({ message: `Inserted ${inserted.length} new rows.` });
-
     } catch (error) {
         console.error('❌ Webhook error:', error);
         return res.status(500).json({ message: 'Internal server error' });

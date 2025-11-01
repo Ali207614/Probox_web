@@ -469,13 +469,13 @@ class b1HANA {
             if (operators2?.length) filter.operator2 = { $in: operators2 };
 
             if (meetingDateStart || meetingDateEnd) {
-                if(meeting === 'true'){
-                    filter.time = {};
-                }
-                else{
-                    filter.meetingDate = {};
-                    filter.meetingConfirmed = false
-                }
+                let field;
+                if (meeting === 'time') field = 'time';
+                else if (meeting === 'meetingDate') field = 'meetingDate';
+                else if (meeting === 'meetingConfirmedDate') field = 'meetingConfirmedDate';
+                else field = 'meetingDate'; // default fallback
+
+                filter[field] = {};
 
                 const parseDate = (value) => {
                     if (!value) return null;
@@ -486,24 +486,17 @@ class b1HANA {
 
                 const start = parseDate(meetingDateStart);
                 const end = parseDate(meetingDateEnd);
+
                 if (start) {
-                    if(meeting === 'true'){
-                        filter.time.$gte = start;
-                    }
-                    else{
-                        filter.meetingDate.$gte = start;
-                    }
+                    filter[field].$gte = start;
                 }
+
                 if (end) {
                     end.setHours(23, 59, 59, 999);
-                    if(meeting === 'true'){
-                        filter.time.$lte = end;
-                    }
-                    else{
-                        filter.meetingDate.$lte = end;
-                    }
+                    filter[field].$lte = end;
                 }
             }
+
 
 
             if (purchase !== undefined)
@@ -594,7 +587,6 @@ class b1HANA {
             if (aliment !== undefined)
                 filter.aliment = aliment === 'true' || aliment === true;
 
-            // 🔢 Jami son va ma’lumotlarni olish
             const total = await LeadModel.countDocuments(filter);
 
             const rawData = await LeadModel.find(filter)
@@ -627,6 +619,7 @@ class b1HANA {
                 seller: item.seller || null,
                 passportId: item.passportId || '',
                 jshshir2: item.jshshir2 || '',
+                meetingDate: item.meetingDate ? moment(item.meetingDate).format('YYYY.MM.DD') : null,
                 score: item.score ?? null,
                 mib: item.mib ?? null,
                 aliment: item.aliment ?? null,

@@ -9,12 +9,33 @@ const b1Controller = require('../controllers/b1HANA');
 require('dotenv').config();
 
 
+function normalizePhone(input) {
+    if (!input) return null;
+    let digits = String(input).replace(/\D/g, '');
+
+    if (digits.startsWith('998') && digits.length > 9) {
+        digits = digits.slice(3);
+    }
+
+    if (digits.length === 10 && digits.startsWith('0')) {
+        digits = digits.slice(1);
+    }
+    return digits;
+}
+
+function chunk(arr, size) {
+    const out = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+}
+
 async function main(io) {
     try {
         const sheetId = process.env.SHEET_ID;
         const saKeyPath = process.env.SA_KEY_PATH || '../sa.json';
         if (!sheetId) throw new Error('❌ Missing SHEET_ID in .env');
 
+        // === 1️⃣ Google Sheets bilan ulanish
         const auth = new GoogleAuth({
             keyFile: path.resolve(saKeyPath),
             scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
@@ -24,77 +45,77 @@ async function main(io) {
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
         const lastRow = lastLead?.n || 1;
         const nextStart = lastRow;
-        const nextEnd = nextStart + 10;
-
+        const nextEnd = nextStart + 20;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
         const rows = response.data.values || [];
-
         if (!rows.length) {
+            console.log('⚠️ No rows found in Google Sheet.');
             return;
         }
 
         const query = DataRepositories.getSalesPersons({ include: ['Operator1'] });
         const operators = await b1Controller.execute(query);
+        const allOperatorCodes = operators.map((op) => op.SlpCode);
+        if (!allOperatorCodes.length) throw new Error('❌ No operators found in SAP.');
 
+        const leads = [];
         let counter = 1;
-        const leads = rows
-            .map((row, i) => {
-                const rowNumber = nextStart + i;
-                const parsedTime = parseSheetDate(row[3]);
-                const weekday = moment(parsedTime).isoWeekday().toString();
 
-                const availableOperators = operators.filter((item) =>
-                    get(item, 'U_workDay', '').split(',').includes(weekday)
-                );
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const rowNumber = nextStart + i;
+            const parsedTime = parseSheetDate(row[3]);
+            const weekday = moment(parsedTime).isoWeekday().toString();
 
-                const operator =
-                    availableOperators.length > 0
-                        ? availableOperators[Math.floor(Math.random() * availableOperators.length)]
-                        : null;
+            let clientName = row[0]?.trim() || '';
+            clientName = clientName.replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
+            if (!clientName) clientName = `Mijoz_${counter++}`;
 
-                let clientName = row[0]?.trim() || '';
-                clientName = clientName.replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
-                if (!clientName) clientName = `Mijoz_${counter++}`;
+            const clientPhone = normalizePhone(row[1]);
+            if (!clientPhone) continue;
 
-                const clientPhone = (row[1] || '').replace(/\D/g, '').slice(0, 12);
-
-                return {
-                    n: rowNumber,
-                    clientName,
-                    clientPhone,
-                    source: row[2]?.trim() || '',
-                    time: parsedTime,
-                    operator: operator?.SlpCode || null,
-                    cardCode: null,
-                    cardName: null,
-                };
-            })
-            .filter((lead) => lead.clientPhone);
+            leads.push({
+                n: rowNumber,
+                clientName,
+                clientPhone,
+                source: row[2]?.trim() || '',
+                time: parsedTime,
+                weekday,
+                cardCode: null,
+                cardName: null,
+            });
+        }
 
         if (!leads.length) {
-            console.log('⚠️ No valid leads with phone numbers.');
+            console.log('⚠️ No valid leads after normalization.');
             return;
         }
 
-        const phones = leads.map((l) => l.clientPhone?.replace(/\D/g, '')).filter(Boolean);
+        const phones = Array.from(new Set(leads.map((l) => l.clientPhone)));
         let existingMap = new Map();
 
         if (phones.length > 0) {
-            const phoneList = phones.map((p) => `'${p}'`).join(', ');
-            const sapQuery = `
-        SELECT "CardCode", "CardName", "Phone1", "Phone2"
-        FROM ${DataRepositories.db}.OCRD
-        WHERE "Phone1" IN (${phoneList}) OR "Phone2" IN (${phoneList})
-      `;
-            const existingRecords = await b1Controller.execute(sapQuery);
+            const chunks = chunk(phones, 300); // 300 tadan bo‘laklash
+            for (const group of chunks) {
+                const likeParts = group
+                    .map((p) => `("Phone1" LIKE '%${p}' OR "Phone2" LIKE '%${p}')`)
+                    .join(' OR ');
 
-            for (const r of existingRecords) {
-                const phone1 = (r.Phone1 || '').replace(/\D/g, '');
-                const phone2 = (r.Phone2 || '').replace(/\D/g, '');
-                if (phone1) existingMap.set(phone1, { cardCode: r.CardCode, cardName: r.CardName });
-                if (phone2) existingMap.set(phone2, { cardCode: r.CardCode, cardName: r.CardName });
+                const sapQuery = `
+          SELECT "CardCode", "CardName", "Phone1", "Phone2"
+          FROM ${DataRepositories.db}.OCRD
+          WHERE ${likeParts}
+        `;
+                const existingRecords = await b1Controller.execute(sapQuery);
+
+                for (const r of existingRecords) {
+                    const phone1 = normalizePhone(r.Phone1);
+                    const phone2 = normalizePhone(r.Phone2);
+                    if (phone1) existingMap.set(phone1, { cardCode: r.CardCode, cardName: r.CardName });
+                    if (phone2) existingMap.set(phone2, { cardCode: r.CardCode, cardName: r.CardName });
+                }
             }
         }
 
@@ -112,7 +133,6 @@ async function main(io) {
                 clientPhone: lead.clientPhone,
                 clientName: lead.clientName,
                 source: lead.source,
-                cardCode: lead.cardCode,
             });
             if (!exists) uniqueLeads.push(lead);
         }
@@ -122,14 +142,19 @@ async function main(io) {
             return;
         }
 
-        const notInSap = uniqueLeads.filter((lead) => !lead.cardCode);
-        console.log(`🆕 SAP’da topilmagan yangi clientlar soni: ${notInSap.length}`);
+        const totalLeads = uniqueLeads.length;
+        let index = 0;
+        for (const lead of uniqueLeads) {
+            lead.operator = allOperatorCodes[index % allOperatorCodes.length];
+            index++;
+        }
 
+        const notInSap = uniqueLeads.filter((lead) => !lead.cardCode);
         const inserted = await LeadModel.insertMany(uniqueLeads);
         console.log(`📥 ${inserted.length} new leads inserted into MongoDB.`);
+        console.log(`🆕 SAP’da topilmagan yangi clientlar soni: ${notInSap.length}`);
 
         if (io && inserted.length > 0) {
-            io.emit('new_leads', inserted);
             io.emit('new_leads_summary', {
                 total: inserted.length,
                 notInSap: notInSap.length,
@@ -137,7 +162,13 @@ async function main(io) {
             console.log('📡 Socket broadcast: new_leads + summary sent to all clients');
         }
 
-        console.log('✅ Lead sync completed (CardCode/CardName included).');
+        const operatorStats = {};
+        for (const lead of uniqueLeads) {
+            operatorStats[lead.operator] = (operatorStats[lead.operator] || 0) + 1;
+        }
+        console.table(operatorStats);
+
+        console.log('✅ Lead sync completed (balanced operator assignment + 998 normalized).');
     } catch (err) {
         console.error('❌ Error in Google Sheet sync:', err.message || err);
     }

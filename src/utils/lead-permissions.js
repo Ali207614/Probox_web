@@ -1,4 +1,5 @@
-module.exports = {
+// permissions.js
+const permissions = {
     Operator1: [
         'called',
         'callTime',
@@ -8,7 +9,7 @@ module.exports = {
         'rejectionReason',
         'passportVisit',
         'jshshir',
-        'idX'
+        'idX',
     ],
     Operator2: [
         'called2',
@@ -18,7 +19,7 @@ module.exports = {
         'rejectionReason2',
         'paymentInterest',
         'branch',
-        'meetingHappened'
+        'meetingHappened',
     ],
     Seller: [
         'meetingConfirmed',
@@ -31,7 +32,7 @@ module.exports = {
         'jshshir2',
         'branch2',
         'seller',
-        'source2'
+        'source2',
     ],
     Scoring: [
         'clientFullName',
@@ -52,6 +53,21 @@ module.exports = {
         'finalLimit',
         'finalPercentage',
         'scoring',
-        'acceptReason'
-    ]
+        'acceptReason',
+    ],
 };
+
+// === Qo‘shimcha rollar ===
+permissions.OperatorM = [
+    ...permissions.Operator1,
+    ...permissions.Operator2,
+];
+
+permissions.CEO = [
+    ...permissions.Operator1,
+    ...permissions.Operator2,
+    ...permissions.Seller,
+    ...permissions.Scoring,
+];
+
+module.exports = permissions;
