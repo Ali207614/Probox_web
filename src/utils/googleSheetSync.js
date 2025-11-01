@@ -44,7 +44,7 @@ async function main(io) {
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
         const lastRow = lastLead?.n || 1;
         const nextStart = lastRow;
-        const nextEnd = nextStart + 10000;
+        const nextEnd = nextStart +15000;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
