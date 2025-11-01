@@ -35,7 +35,6 @@ async function main(io) {
         const saKeyPath = process.env.SA_KEY_PATH || '../sa.json';
         if (!sheetId) throw new Error('❌ Missing SHEET_ID in .env');
 
-        // === 1️⃣ Google Sheets bilan ulanish
         const auth = new GoogleAuth({
             keyFile: path.resolve(saKeyPath),
             scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
@@ -45,7 +44,7 @@ async function main(io) {
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
         const lastRow = lastLead?.n || 1;
         const nextStart = lastRow;
-        const nextEnd = nextStart + 20;
+        const nextEnd = nextStart + 10000;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
@@ -61,7 +60,6 @@ async function main(io) {
         if (!allOperatorCodes.length) throw new Error('❌ No operators found in SAP.');
 
         const leads = [];
-        let counter = 1;
 
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
@@ -71,8 +69,11 @@ async function main(io) {
 
             let clientName = row[0]?.trim() || '';
             clientName = clientName.replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
-            if (!clientName) clientName = `Mijoz_${counter++}`;
 
+            if (!clientName) {
+                const timestamp = moment().format('YYYYMMDD_HHmmss');
+                clientName = `Mijoz_${timestamp}_${rowNumber}`;
+            }
             const clientPhone = normalizePhone(row[1]);
             if (!clientPhone) continue;
 
