@@ -115,20 +115,13 @@ class b1SL {
     }
 
     createBusinessPartner = async ({ Phone1, Phone2, CardName }) => {
-        // 🔹 1. CardCode ni timestamp asosida yaratamiz (YYYYMMDDHHmmss)
-        const timestamp = moment().format('YYYYMMDDHHmmss');
-        const CardCode = `BP${timestamp}`; // Misol: BP20251103184522
+        const rand = String.fromCharCode(65 + Math.floor(Math.random() * 26)); // A–Z
+        const CardCode = `BP${moment().format('YYMMDDHHmmss')}${rand}`; // 15 belgi
 
-        // 🔹 2. Body yig‘amiz
-        let body = {
-            CardCode, // SAP’da unikal bo‘ladi
-            CardName,
-        };
-
+        let body = { CardCode, CardName };
         if (Phone1) body = { ...body, Phone1 };
         if (Phone2) body = { ...body, Phone2 };
 
-        // 🔹 3. Request
         const axios = Axios.create({
             baseURL: `${this.api}`,
             timeout: 30000,
@@ -138,29 +131,28 @@ class b1SL {
                     get(getSession(), 'Cookie[1]', ''),
                 'SessionId': get(getSession(), 'SessionId', ''),
             },
-            httpsAgent: new https.Agent({
-                rejectUnauthorized: false,
-            }),
+            httpsAgent: new https.Agent({ rejectUnauthorized: false }),
         });
 
         return axios
             .post(`/BusinessPartners`, body)
-            .then(async ({ data }) => {
-                return data;
-            })
+            .then(async ({ data }) => data)
             .catch(async (err) => {
                 if (get(err, 'response.status') == 401) {
                     const token = await this.auth();
-                    if (token.status) {
+                    if (token.status)
                         return await this.createBusinessPartner({ Phone1, Phone2, CardName });
-                    }
                     return { status: false, message: token.message };
                 } else {
                     console.log(get(err, 'response.data.error.message.value'), ' bu SAP ERROR');
-                    return { status: false, message: get(err, 'response.data.error.message.value') };
+                    return {
+                        status: false,
+                        message: get(err, 'response.data.error.message.value'),
+                    };
                 }
             });
     };
+
 
 }
 
