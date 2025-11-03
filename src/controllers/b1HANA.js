@@ -442,15 +442,18 @@ class b1HANA {
 
             const filter = {};
 
-            // 🔍 Qidiruv (clientName, clientPhone, comment)
-            if (search) {
-                filter.$or = [
-                    { clientName: { $regex: search, $options: 'i' } },
-                    { clientPhone: { $regex: search, $options: 'i' } },
-                    { comment: { $regex: search, $options: 'i' } },
-                ];
+            function escapeRegex(str) {
+                return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             }
 
+            if (search) {
+                const safeSearch = escapeRegex(search.trim());
+                filter.$or = [
+                    { clientName: { $regex: safeSearch, $options: 'i' } },
+                    { clientPhone: { $regex: safeSearch, $options: 'i' } },
+                    { comment: { $regex: safeSearch, $options: 'i' } },
+                ];
+            }
             // 🔁 String array parser
             const parseArray = (val) => {
                 if (!val) return null;
