@@ -156,9 +156,14 @@ async function main(io) {
         let index = 0;
         console.log(operators)
 
+
         for (const lead of uniqueLeads) {
             const weekday = getWeekdaySafe(lead.time)
 
+            if (lead.source?.trim() === 'Organika') {
+                lead.operator = null;
+                continue;
+            }
             const availableOperators = operators.filter((op) => {
                 if (!op.U_workDay) return false;
                 const workDays = op.U_workDay;

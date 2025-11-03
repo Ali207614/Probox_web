@@ -149,13 +149,16 @@ router.post('/webhook', basicAuth, async (req, res) => {
             const parsedTime = parseSheetDate(row[3]);
             const weekday = getWeekdaySafe(parsedTime);
 
-            const availableOperators = operators.filter((item) => {
-                const days = parseWorkDays(get(item, 'U_workDay', ''));
-                return days.includes(weekday);
-            });
+            const source = (row[2] || '').trim();
 
-
-            const operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
+            let operator = null;
+            if (source !== 'Organika') {
+                const availableOperators = operators.filter((item) => {
+                    const days = parseWorkDays(get(item, 'U_workDay', ''));
+                    return days.includes(weekday);
+                });
+                operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
+            }
 
             let clientName = row[0]?.trim() || '';
             clientName = clientName.replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
@@ -172,11 +175,12 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 n: rowNumber,
                 clientName,
                 clientPhone,
-                source: row[2]?.trim() || '',
+                source,
                 time: parsedTime,
                 operator: operator?.SlpCode || null,
             });
         }
+
 
         if (!leads.length) {
             console.log('⚠️ No valid leads after normalization.');
