@@ -118,7 +118,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
         const lastRow =( lastLead?.n > 51 ? lastLead?.n - 50 : 2 ) || 2;
         const nextStart = lastRow;
-        const nextEnd = nextStart + 10;
+        const nextEnd = nextStart + 70;
 
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
