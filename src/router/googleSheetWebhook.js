@@ -33,8 +33,13 @@ function parseSheetDate(value) {
         const excelEpoch = new Date(Date.UTC(1899, 11, 30));
         return new Date(excelEpoch.getTime() + value * 86400000);
     }
-    const str = String(value).trim().replace(/\//g, '.');
-    const parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY', 'YYYY-MM-DDTHH:mm:ss.SSSZ'], true);
+
+    const str = String(value).trim().replace(/[\/\\]/g, '.');
+    let parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY', 'YYYY-MM-DDTHH:mm:ss.SSSZ'], true);
+    if (!parsed.isValid()) {
+        parsed = moment(str, ['DD.MM.YYYY HH:mm', 'DD.MM.YYYY HH.mm'], false);
+    }
+
     return parsed.isValid() ? parsed.toDate() : null;
 }
 
@@ -70,18 +75,38 @@ async function getOperatorBalance(operators) {
 function pickLeastLoadedOperator(availableOperators, balance) {
     if (!availableOperators.length) return null;
 
-    // Filter: faqat balansda mavjud operatorlarni olish
     const filtered = availableOperators.filter(op => balance[op.SlpCode] !== undefined);
-    if (!filtered.length) return availableOperators[0];
+    const pool = filtered.length ? filtered : availableOperators;
 
-    // Eng kam yuklangan operatorni topish
-    filtered.sort((a, b) => balance[a.SlpCode] - balance[b.SlpCode]);
-    const chosen = filtered[0];
+    pool.sort((a, b) => {
+        const aLoad = balance[a.SlpCode] ?? 0;
+        const bLoad = balance[b.SlpCode] ?? 0;
+        return aLoad - bLoad;
+    });
 
-    // Balansni yangilash
-    balance[chosen.SlpCode]++;
+    const chosen = pool[0];
+    balance[chosen.SlpCode] = (balance[chosen.SlpCode] ?? 0) + 1;
     return chosen;
 }
+
+function getWeekdaySafe(dateLike) {
+    const m = moment(dateLike);
+    if (!m.isValid()) {
+        return moment().isoWeekday().toString(); // '1'..'7'
+    }
+    return m.isoWeekday().toString();
+}
+
+function parseWorkDays(raw) {
+    if (!raw) return [];
+    const normalized = String(raw)
+        .replace(/[،，؛;|\t]/g, ',')
+        .replace(/\s+/g, '')
+        .replace(/[^1-7,]/g, '');
+    const uniq = Array.from(new Set(normalized.split(',').filter(Boolean)));
+    return uniq;
+}
+
 
 router.post('/webhook', basicAuth, async (req, res) => {
     try {
@@ -122,11 +147,13 @@ router.post('/webhook', basicAuth, async (req, res) => {
             const row = rows[i];
             const rowNumber = nextStart + i;
             const parsedTime = parseSheetDate(row[3]);
-            const weekday = moment(parsedTime).isoWeekday().toString();
+            const weekday = getWeekdaySafe(parsedTime);
 
-            const availableOperators = operators.filter((item) =>
-                get(item, 'U_workDay', '').split(',').includes(weekday)
-            );
+            const availableOperators = operators.filter((item) => {
+                const days = parseWorkDays(get(item, 'U_workDay', ''));
+                return days.includes(weekday);
+            });
+
 
             const operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
 

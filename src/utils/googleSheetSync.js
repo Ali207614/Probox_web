@@ -29,6 +29,14 @@ function chunk(arr, size) {
     return out;
 }
 
+function getWeekdaySafe(dateLike) {
+    const m = moment(dateLike);
+    if (!m.isValid()) {
+        return moment().isoWeekday().toString(); // '1'..'7'
+    }
+    return m.isoWeekday().toString();
+}
+
 async function main(io) {
     try {
         const sheetId = process.env.SHEET_ID;
@@ -42,7 +50,7 @@ async function main(io) {
         const sheets = google.sheets({ version: 'v4', auth });
 
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
-        const lastRow = lastLead?.n || 1;
+        const lastRow = (lastLead?.n > 50 ? lastLead?.n - 50 : 1) || 1;
         const nextStart = lastRow;
         const nextEnd = nextStart +15000;
 
@@ -134,6 +142,7 @@ async function main(io) {
                 clientPhone: lead.clientPhone,
                 clientName: lead.clientName,
                 source: lead.source,
+                n: lead.n,
             });
             if (!exists) uniqueLeads.push(lead);
         }
@@ -145,10 +154,26 @@ async function main(io) {
 
         const totalLeads = uniqueLeads.length;
         let index = 0;
+        console.log(operators)
+
         for (const lead of uniqueLeads) {
-            lead.operator = allOperatorCodes[index % allOperatorCodes.length];
+            const weekday = getWeekdaySafe(lead.time)
+
+            const availableOperators = operators.filter((op) => {
+                if (!op.U_workDay) return false;
+                const workDays = op.U_workDay;
+                return workDays.includes(weekday);
+            });
+
+            if (!availableOperators.length) {
+                lead.operator = null;
+                continue;
+            }
+
+            lead.operator = availableOperators[index % availableOperators.length].SlpCode;
             index++;
         }
+
 
         const notInSap = uniqueLeads.filter((lead) => !lead.cardCode);
         const inserted = await LeadModel.insertMany(uniqueLeads);
