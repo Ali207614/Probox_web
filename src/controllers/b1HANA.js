@@ -841,6 +841,7 @@ class b1HANA {
             if (region) filter.region = { $regex: region, $options: 'i' };
 
             const total = await BranchModel.countDocuments(filter);
+            console.log(total)
 
             const branches = await BranchModel.find(filter)
                 .sort({ createdAt: -1 })
