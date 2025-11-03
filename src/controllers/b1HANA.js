@@ -853,7 +853,8 @@ class b1HANA {
                 .lean();
 
             const data = branches.map((b) => ({
-                id: b._id,
+                _id: b._id,
+                id: b.id,
                 name: b.name,
                 region: b.region || null,
                 address: b.address || null,
