@@ -91,7 +91,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
         }
 
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
-        const lastRow = lastLead?.n || 2;
+        const lastRow =( lastLead?.n > 51 ? lastLead?.n - 50 : 2 ) || 2;
         const nextStart = lastRow;
         const nextEnd = nextStart + 10;
 
@@ -162,6 +162,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 clientName: lead.clientName,
                 clientPhone: lead.clientPhone,
                 source: lead.source,
+                n: lead.n
             });
             if (!exists) uniqueLeads.push(lead);
         }
@@ -201,7 +202,8 @@ router.post('/webhook', basicAuth, async (req, res) => {
                     Phone1: cleanPhone,
                     CardName: lead.clientName,
                 });
-                if (newCode) {
+
+                if (newCode?.CardCode) {
                     lead.cardCode = newCode.CardCode;
                     lead.cardName = newCode.CardName;
                     console.log(`🆕 Created new BP: ${newCode.CardCode}`);

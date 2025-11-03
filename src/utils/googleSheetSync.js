@@ -98,7 +98,7 @@ async function main(io) {
         let existingMap = new Map();
 
         if (phones.length > 0) {
-            const chunks = chunk(phones, 300); // 300 tadan bo‘laklash
+            const chunks = chunk(phones, 300);
             for (const group of chunks) {
                 const likeParts = group
                     .map((p) => `("Phone1" LIKE '%${p}' OR "Phone2" LIKE '%${p}')`)

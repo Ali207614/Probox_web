@@ -150,6 +150,7 @@ class b1SL {
                     }
                     return { status: false, message: token.message }
                 } else {
+                    console.log(get(err, 'response.data.error.message.value') ," bu SAP ERROR")
                     return { status: false, message: get(err, 'response.data.error.message.value') }
                 }
             });
