@@ -40,8 +40,9 @@ function getWeekdaySafe(dateLike) {
 async function main(io) {
     try {
         const sheetId = process.env.SHEET_ID;
-        const saKeyPath = process.env.SA_KEY_PATH || '../sa.json';
-        if (!sheetId) throw new Error('❌ Missing SHEET_ID in .env');
+        const saKeyPath = process.env.SA_KEY_PATH;
+
+        if (!saKeyPath) throw new Error('❌ Missing SA_KEY_PATH in .env');
 
         const auth = new GoogleAuth({
             keyFile: path.resolve(saKeyPath),
