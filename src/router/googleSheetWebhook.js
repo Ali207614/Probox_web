@@ -157,6 +157,10 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 clientName = `Mijoz_${timestamp}_${rowNumber}`;
             }
 
+            if (clientName.length > 30) {
+                clientName = clientName.slice(0, 30).trim() + '...';
+            }
+
             const clientPhone = normalizePhone(row[1]);
             if (!clientPhone) continue;
 
