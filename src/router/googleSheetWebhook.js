@@ -150,7 +150,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
                     return days.includes(weekday);
                 });
                 console.log(availableOperators.map(el => {
-                    return {SlpName:el.SlpName , SlpCode: el.SlpCode}
+                    return {SlpName:el.SlpName , SlpCode: el.SlpCode , U_weekDay: el.U_weekDay}
                 }) ,' bu bolingan operatorlar')
                 operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
             }
