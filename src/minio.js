@@ -42,17 +42,12 @@ async function ensureBucket(bucket) {
 
 async function getPublicUrl(bucket, key, expires = 3600 * 24 * 7) {
     const url = await minioClient.presignedGetObject(bucket, key, expires);
-
     let fixedUrl = url
         .replace('127.0.0.1', process.env.MINIO_END_POINT)
-        .replace('localhost', process.env.MINIO_END_POINT);
-
-    fixedUrl = fixedUrl.replace(':9000', '');
-
-    fixedUrl = fixedUrl.replace(/\/leads\/leads\//g, '/leads/');
-
-
+        .replace('localhost', process.env.MINIO_END_POINT)
+        .replace(':9000', '');
     return fixedUrl;
 }
+
 
 module.exports = { minioClient, ensureBucket, getPublicUrl };
