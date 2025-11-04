@@ -438,6 +438,8 @@ class b1HANA {
                 finalLimitMax,
                 finalPercentageMin,
                 finalPercentageMax,
+                scoring,
+                seller
             } = req.query;
 
             const filter = {};
@@ -466,10 +468,16 @@ class b1HANA {
             const operators = parseArray(operator);
             const operators2 = parseArray(operator2);
 
+            const scorings = parseArray(scoring);
+            const sellers = parseArray(seller);
+
+
             if (sources?.length) filter.source = { $in: sources };
             if (branches?.length) filter.branch = { $in: branches };
             if (operators?.length) filter.operator = { $in: operators };
             if (operators2?.length) filter.operator2 = { $in: operators2 };
+            if (scorings?.length) filter.scoring = { $in: scorings };
+            if (sellers?.length) filter.seller = { $in: sellers };
 
             if (meetingDateStart || meetingDateEnd) {
                 let field;
@@ -703,24 +711,33 @@ class b1HANA {
             if (validData.passportVisit && ['Passport', 'Visit'].includes(validData.passportVisit)) {
                 const weekday = moment().isoWeekday().toString();
 
-                const query = DataRepositories.getSalesPersons({
-                    include: ['Operator2'],
-                });
-                const data = await this.execute(query);
+                const operator2Query = DataRepositories.getSalesPersons({ include: ['Operator2'] });
+                const operator2Data = await this.execute(operator2Query);
 
-                const availableOperators = data.filter((item) =>
-                    (item.U_workDay || '').split(',').includes(weekday)
+                const availableOperator2s = operator2Data.filter((item) =>
+                    (item?.U_workDay || '').split(',').includes(weekday)
                 );
 
-                if (availableOperators.length > 0) {
-                    const randomIndex = Math.floor(Math.random() * availableOperators.length);
-                    const selectedOperator = availableOperators[randomIndex];
-
-                    validData.operator2 = selectedOperator?.SlpCode || null;
+                if (availableOperator2s.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * availableOperator2s.length);
+                    const selectedOperator2 = availableOperator2s[randomIndex];
+                    validData.operator2 = selectedOperator2?.SlpCode || null;
                 } else {
                     console.warn('No available Operator2 found for today');
                 }
+
+                const scoringQuery = DataRepositories.getSalesPersons({ include: ['Scoring'] });
+                const scoringData = await this.execute(scoringQuery);
+
+                if (scoringData.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * scoringData.length);
+                    const selectedScoring = scoringData[randomIndex];
+                    validData.scoring = selectedScoring?.SlpCode || null;
+                } else {
+                    console.warn('No Scoring operator found');
+                }
             }
+
 
             const updated = await LeadModel.findByIdAndUpdate(id, validData, {
                 new: true,
@@ -791,7 +808,6 @@ class b1HANA {
                 percentage: lead.percentage ?? null,
                 meetingConfirmed: lead.meetingConfirmed ?? null,
                 meetingConfirmedDate: formatDate(lead.meetingConfirmedDate),
-                consultant: lead.consultant || '',
                 purchase: lead.purchase ?? null,
                 purchaseDate: formatDate(lead.purchaseDate),
                 saleType: lead.saleType || '',

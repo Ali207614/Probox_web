@@ -24,7 +24,6 @@ const permissions = {
     Seller: [
         'meetingConfirmed',
         'meetingConfirmedDate',
-        'consultant',
         'purchase',
         'purchaseDate',
         'saleType',
@@ -61,6 +60,8 @@ const permissions = {
 permissions.OperatorM = [
     ...permissions.Operator1,
     ...permissions.Operator2,
+    'operator',
+    'operator2'
 ];
 
 permissions.CEO = [
