@@ -10,6 +10,9 @@ const permissions = {
         'passportVisit',
         'jshshir',
         'idX',
+        'region',
+        'district',
+        'address',
     ],
     Operator2: [
         'called2',
@@ -20,6 +23,9 @@ const permissions = {
         'paymentInterest',
         'branch',
         'meetingHappened',
+        'region',
+        'district',
+        'address',
     ],
     Seller: [
         'meetingConfirmed',
@@ -32,6 +38,9 @@ const permissions = {
         'branch2',
         'seller',
         'source2',
+        'region',
+        'district',
+        'address',
     ],
     Scoring: [
         'clientFullName',
