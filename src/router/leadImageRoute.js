@@ -27,9 +27,21 @@ async function uploadToMinio(cardCode, file) {
         'Cache-Control': 'public, max-age=31536000',
     });
 
-    const url = await minioClient.presignedGetObject(BUCKET, key, 3600 * 24 * 7); // 7 kunlik URL
+    // 7 kunlik presigned URL
+    let url = await minioClient.presignedGetObject(BUCKET, key, 3600 * 24 * 7);
+
+    // 🔧 URL ichidagi 'localhost' yoki '127.0.0.1' ni tashqi domen bilan almashtiramiz
+    const publicHost = process.env.MINIO_PUBLIC_HOST || process.env.MINIO_END_POINT;
+    if (publicHost) {
+        url = url
+            .replace('127.0.0.1', publicHost)
+            .replace('localhost', publicHost)
+            .replace(':9000', '/leads'); // Nginx proksisi orqali kirish uchun
+    }
+
     return { key, url, fileName: file.originalname, mimeType: file.mimetype, size: file.size };
 }
+
 
 // === POST /api/lead-images/:cardCode ===
 // Bir nechta rasm yuklash
