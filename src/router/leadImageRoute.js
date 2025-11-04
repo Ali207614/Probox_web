@@ -36,7 +36,7 @@ async function uploadToMinio(cardCode, file) {
         url = url
             .replace('127.0.0.1', publicHost)
             .replace('localhost', publicHost)
-            .replace(':9000', '/leads'); // Nginx proksisi orqali kirish uchun
+           //.replace(':9000', '/leads'); // Nginx proksisi orqali kirish uchun
     }
 
     return { key, url, fileName: file.originalname, mimeType: file.mimetype, size: file.size };
