@@ -13,6 +13,7 @@ const permissions = {
         'region',
         'district',
         'address',
+        'comment'
     ],
     Operator2: [
         'called2',
@@ -26,6 +27,7 @@ const permissions = {
         'region',
         'district',
         'address',
+        'comment'
     ],
     Seller: [
         'meetingConfirmed',
@@ -41,6 +43,7 @@ const permissions = {
         'region',
         'district',
         'address',
+        'comment'
     ],
     Scoring: [
         'clientFullName',
@@ -62,6 +65,7 @@ const permissions = {
         'finalPercentage',
         'scoring',
         'acceptReason',
+        'comment'
     ],
 };
 

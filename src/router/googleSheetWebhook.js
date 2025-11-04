@@ -140,6 +140,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
             const rowNumber = nextStart + i;
             const parsedTime = parseSheetDate(row[3]);
             const weekday = getWeekdaySafe(parsedTime);
+            console.log(weekday ,' bu hafta kuni')
             const source = (row[2] || '').trim();
 
             let operator = null;
@@ -148,6 +149,9 @@ router.post('/webhook', basicAuth, async (req, res) => {
                     const days = parseWorkDays(get(item, 'U_workDay', ''));
                     return days.includes(weekday);
                 });
+                console.log(availableOperators.map(el => {
+                    return {SlpName:el.SlpName , SlpCode: el.SlpCode}
+                }) ,' bu bolingan operatorlar')
                 operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
             }
 

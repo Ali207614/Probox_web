@@ -55,6 +55,7 @@ const LeadSchema = new Schema(
         katmPayment: { type: Number, description: 'KATM to‘lov miqdori (Scoring ozgariradi)' },
         paymentHistory: { type: String, description: 'To‘lovlar tarixi (Scoring ozgariradi)' },
         acceptReason:{type: String,description:"Ruxsat berilgan sababi (Scoring ozgariradi)"},
+        comment:{type: String,description:"Ruxsat berilgan sababi (Scoring ozgariradi)"},
         mib: { type: Boolean, description: 'MIB mavjudmi? (Scoring ozgariradi)' },
         mibIrresponsible: { type: Boolean, description: 'MIB mas’uliyatsiz deb belgilanganmi? (Scoring ozgariradi)' },
         aliment: { type: Boolean, description: 'Aliment to‘laydimi? (Scoring ozgariradi)' },
