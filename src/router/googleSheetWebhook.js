@@ -217,14 +217,23 @@ router.post('/webhook', basicAuth, async (req, res) => {
             }
         }
 
-        // === INSERT (unique n)
-        let inserted = [];
-        try {
-            inserted = await LeadModel.insertMany(leads, { ordered: false });
-        } catch (err) {
-            if (err.code === 11000) {
-                console.warn('Duplicate row(s) skipped.');
-            } else throw err;
+        const inserted = [];
+
+        for (const lead of uniqueLeads) {
+            try {
+                const doc = await LeadModel.findOneAndUpdate(
+                    { n: lead.n },
+                    { $setOnInsert: lead },
+                    { upsert: true, new: false }
+                );
+                if (!doc) inserted.push(lead);
+            } catch (err) {
+                if (err.code === 11000) {
+                    console.warn('Duplicate skipped:', lead.n);
+                } else {
+                    throw err;
+                }
+            }
         }
 
         const io = req.app.get('io');
