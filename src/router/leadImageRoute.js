@@ -14,34 +14,24 @@ const BUCKET = process.env.MINIO_BUCKET;
 async function uploadToMinio(cardCode, file) {
     const ext = mime.extension(file.mimetype) || 'jpg';
     const fileName = `${crypto.randomUUID().replace(/-/g, '')}.${ext}`;
-    const key = `${cardCode}/${fileName}`;
 
-    // sharp bilan siqish (800px maksimal)
+    // BU juda muhim: bucket = 'leads', key = 'leads/ZM0001/file.jpg' emas,
+    // sen menda rasm yo‘li leads/leads/ZM0001/... deding,
+    // demak bucket 'leads', key 'leads/ZM0001/...'
+    const key = `leads/${cardCode}/${fileName}`;
+
     const buffer = await sharp(file.buffer)
         .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 80 })
         .toBuffer();
 
-    // MinIO'ga joylash
     await minioClient.putObject(BUCKET, key, buffer, {
         'Content-Type': file.mimetype,
         'Cache-Control': 'public, max-age=31536000',
     });
 
-    // presigned URL (getPublicUrl bilan)
-    let url = await getPublicUrl(BUCKET, key);
-
-    // ⚙️ Agar public host ENV orqali berilgan bo‘lsa, almashtiramiz
-    const publicHost = process.env.MINIO_PUBLIC_HOST || process.env.MINIO_END_POINT;
-    if (publicHost) {
-        url = url
-            .replace('127.0.0.1', publicHost)
-            .replace('localhost', publicHost)
-            .replace(':9000', ''); // ⚠️ portni olib tashlash zarur
-    }
-
-    // Ortiqcha “/leads/leads/” holatini tozalaymiz (xavfsiz usul)
-    url = url.replace('/leads/leads/', '/leads/');
+    // URL faqat getPublicUrl orqali
+    const url = await getPublicUrl(BUCKET, key);
 
     return {
         key,

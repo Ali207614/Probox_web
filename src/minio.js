@@ -1,22 +1,29 @@
 require('dotenv').config();
 const { Client } = require('minio');
 
-// === Ichki ulanish (backend <-> MinIO) ===
-// (har doim lokal port orqali ishlaydi)
-const minioClient = new Client({
+const accessKey = process.env.MINIO_ACCESS_KEY || 'minioadmin';
+const secretKey = process.env.MINIO_SECRET_KEY || 'minioadmin';
+
+// === Ichki client (faqat backend <-> MinIO uchun) ===
+const internalMinio = new Client({
     endPoint: process.env.MINIO_INTERNAL_HOST || '127.0.0.1',
     port: Number(process.env.MINIO_PORT) || 9000,
-    useSSL: process.env.MINIO_USE_SSL === 'true',
-    accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-    secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
+    useSSL: process.env.MINIO_USE_SSL === 'true', // sende false
+    accessKey,
+    secretKey,
 });
 
-// === Public (frontend uchun presigned URL’larda ishlatiladi) ===
-const PUBLIC_BASE_URL =
-    process.env.MINIO_PUBLIC_BASE_URL ||
-    `https://${process.env.MINIO_END_POINT || 'work-api.probox.uz'}/leads`;
+// === Public client (faqat presigned URL uchun) ===
+// Bu client real foydalanuvchi ko‘radigan host/port bilan bo‘lishi shart!
+const publicMinio = new Client({
+    endPoint: process.env.MINIO_PUBLIC_HOST || process.env.MINIO_END_POINT || 'work-api.probox.uz',
+    port: 443,
+    useSSL: true,
+    accessKey,
+    secretKey,
+});
 
-// === Bucket mavjudligini tekshirish ===
+// === Bucket mavjudligini tekshirish (ichki client bilan) ===
 async function ensureBucket(bucket) {
     try {
         console.log('🔍 Checking MinIO connection...');
@@ -27,11 +34,11 @@ async function ensureBucket(bucket) {
             bucket,
         });
 
-        const exists = await minioClient.bucketExists(bucket);
+        const exists = await internalMinio.bucketExists(bucket);
         if (exists) {
             console.log(`✅ Bucket '${bucket}' already exists`);
         } else {
-            await minioClient.makeBucket(bucket, 'us-east-1');
+            await internalMinio.makeBucket(bucket, 'us-east-1');
             console.log(`🪣 Bucket '${bucket}' created`);
         }
     } catch (err) {
@@ -40,14 +47,15 @@ async function ensureBucket(bucket) {
     }
 }
 
+// === Presigned URL (public client bilan) ===
 async function getPublicUrl(bucket, key, expires = 3600 * 24 * 7) {
-    const url = await minioClient.presignedGetObject(bucket, key, expires);
-    let fixedUrl = url
-        .replace('127.0.0.1', process.env.MINIO_END_POINT)
-        .replace('localhost', process.env.MINIO_END_POINT)
-        .replace(':9000', '');
-    return fixedUrl;
+    // BU yerda hech qanday replace YUQ!
+    const url = await publicMinio.presignedGetObject(bucket, key, expires);
+    return url;
 }
 
-
-module.exports = { minioClient, ensureBucket, getPublicUrl };
+module.exports = {
+    minioClient: internalMinio,
+    ensureBucket,
+    getPublicUrl,
+};
