@@ -74,7 +74,7 @@ server.listen(port, () => {
             }
         });
 
-        //await ensureBucket(process.env.MINIO_BUCKET);
+        await ensureBucket(process.env.MINIO_BUCKET);
     } catch (err) {
         console.error('❌ Initial sync failed:', err.message);
     }
