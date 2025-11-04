@@ -14,7 +14,7 @@ const BUCKET = process.env.MINIO_BUCKET;
 async function uploadToMinio(cardCode, file) {
     const ext = mime.extension(file.mimetype) || 'jpg';
     const fileName = `${crypto.randomUUID().replace(/-/g, '')}.${ext}`;
-    const key = `leads/${cardCode}/${fileName}`;
+    const key = `${cardCode}/${fileName}`;
 
     // sharp bilan siqish (800px maksimal)
     const buffer = await sharp(file.buffer)
