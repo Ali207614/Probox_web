@@ -44,20 +44,19 @@ async function ensureBucket(bucket) {
 async function getPublicUrl(bucket, key, expires = 3600 * 24 * 7) {
     const url = await minioClient.presignedGetObject(bucket, key, expires);
 
-    // 1️⃣ Ichki hostni public domen bilan almashtiramiz
+    // 1️⃣ localhost → public domen
     let fixedUrl = url
-        .replace('127.0.0.1', process.env.MINIO_END_POINT || 'work-api.probox.uz')
-        .replace('localhost', process.env.MINIO_END_POINT || 'work-api.probox.uz');
+        .replace('127.0.0.1', process.env.MINIO_END_POINT)
+        .replace('localhost', process.env.MINIO_END_POINT);
 
-    // 2️⃣ Portni olib tashlaymiz (Nginx 443 orqali proxylaydi)
+    // 2️⃣ portni olib tashlaymiz
     fixedUrl = fixedUrl.replace(':9000', '');
 
-    // 3️⃣ Agar /leads/ bo‘limi mavjud bo‘lmasa, qo‘shamiz
-    if (!fixedUrl.includes('/leads/')) {
-        fixedUrl = fixedUrl.replace(/(https:\/\/[^/]+)/, `$1/leads`);
-    }
+    // 3️⃣ ortiqcha "leads/" yo‘q bo‘lishi uchun qo‘shimcha filter
+    fixedUrl = fixedUrl.replace('/leads/leads/', '/leads/');
 
     return fixedUrl;
 }
+
 
 module.exports = { minioClient, ensureBucket, getPublicUrl };

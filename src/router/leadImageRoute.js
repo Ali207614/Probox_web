@@ -3,7 +3,7 @@ const multer = require('multer');
 const sharp = require('sharp');
 const mime = require('mime-types');
 const crypto = require('crypto');
-const { minioClient } = require('../minio');
+const { minioClient, getPublicUrl } = require('../minio');
 const LeadImageModel = require('../models/lead-image-model');
 
 const router = express.Router();
@@ -16,32 +16,42 @@ async function uploadToMinio(cardCode, file) {
     const fileName = `${crypto.randomUUID().replace(/-/g, '')}.${ext}`;
     const key = `leads/${cardCode}/${fileName}`;
 
-    // sharp bilan siqish
+    // sharp bilan siqish (800px maksimal)
     const buffer = await sharp(file.buffer)
         .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 80 })
         .toBuffer();
 
+    // MinIO'ga joylash
     await minioClient.putObject(BUCKET, key, buffer, {
         'Content-Type': file.mimetype,
         'Cache-Control': 'public, max-age=31536000',
     });
 
-    // 7 kunlik presigned URL
-    let url = await minioClient.presignedGetObject(BUCKET, key, 3600 * 24 * 7);
+    // presigned URL (getPublicUrl bilan)
+    let url = await getPublicUrl(BUCKET, key);
 
-    // 🔧 URL ichidagi 'localhost' yoki '127.0.0.1' ni tashqi domen bilan almashtiramiz
+    // ⚙️ Agar public host ENV orqali berilgan bo‘lsa, almashtiramiz
     const publicHost = process.env.MINIO_PUBLIC_HOST || process.env.MINIO_END_POINT;
     if (publicHost) {
         url = url
             .replace('127.0.0.1', publicHost)
             .replace('localhost', publicHost)
-           //.replace(':9000', '/leads'); // Nginx proksisi orqali kirish uchun
+            .replace(':9000', ''); // ⚠️ portni olib tashlash zarur
     }
 
-    return { key, url, fileName: file.originalname, mimeType: file.mimetype, size: file.size };
-}
+    // Ortiqcha “/leads/leads/” holatini tozalaymiz (xavfsiz usul)
+    url = url.replace('/leads/leads/', '/leads/');
 
+    return {
+        key,
+        url,
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        cardCode,
+    };
+}
 
 // === POST /api/lead-images/:cardCode ===
 // Bir nechta rasm yuklash
@@ -50,17 +60,19 @@ router.post('/:cardCode', upload.array('images', 10), async (req, res) => {
         const { cardCode } = req.params;
         const files = req.files;
 
-        if (!cardCode) return res.status(400).json({ message: 'cardCode is required' });
-        if (!files || !files.length) return res.status(400).json({ message: 'images are required' });
+        if (!cardCode)
+            return res.status(400).json({ message: 'cardCode is required' });
+        if (!files?.length)
+            return res.status(400).json({ message: 'images are required' });
 
         const allowed = ['image/png', 'image/jpeg', 'image/jpg'];
         const invalid = files.filter((f) => !allowed.includes(f.mimetype));
-        if (invalid.length > 0) return res.status(400).json({ message: 'Only PNG, JPG, JPEG allowed' });
+        if (invalid.length > 0)
+            return res.status(400).json({ message: 'Only PNG, JPG, JPEG allowed' });
 
         const uploadedImages = [];
         for (const file of files) {
             const uploaded = await uploadToMinio(cardCode, file);
-            uploaded.cardCode = cardCode;
             uploadedImages.push(uploaded);
         }
 
