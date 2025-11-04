@@ -486,34 +486,49 @@ class b1HANA {
                 else if (meeting === 'meetingConfirmedDate') field = 'meetingConfirmedDate';
                 else field = 'meetingDate'; // default fallback
 
-                filter[field] = {};
-
+                // Sana parsing uchun yordamchi funksiya
                 const parseDate = (value) => {
                     if (!value) return null;
-                    const normalized = value.trim().replace(/\./g, '-');
-                    const d = new Date(normalized);
-                    return isNaN(d.getTime()) ? null : d;
+                    const clean = value.trim().replace(/\//g, '.');
+                    const date = moment(clean, ['DD.MM.YYYY', 'YYYY.MM.DD'], true);
+                    return date.isValid() ? date.toDate() : null;
                 };
 
                 const start = parseDate(meetingDateStart);
                 const end = parseDate(meetingDateEnd);
 
-                if (start) {
-                    filter[field].$gte = start;
-                }
+                // Agar "time" maydoni string bo‘lsa, regex orqali qidiramiz
+                if (field === 'time') {
+                    const startStr = moment(meetingDateStart, ['DD.MM.YYYY', 'YYYY.MM.DD']).format('YYYY.MM.DD');
+                    const endStr = moment(meetingDateEnd, ['DD.MM.YYYY', 'YYYY.MM.DD']).format('YYYY.MM.DD');
 
-                if (end) {
-                    end.setHours(23, 59, 59, 999);
-                    filter[field].$lte = end;
+                    if (startStr && endStr && startStr === endStr) {
+                        filter.time = { $regex: new RegExp(`^${startStr}`, 'i') };
+                    } else if (startStr && endStr) {
+                        filter.$or = [
+                            { time: { $regex: new RegExp(`^${startStr}`, 'i') } },
+                            { time: { $regex: new RegExp(`^${endStr}`, 'i') } }
+                        ];
+                    } else if (startStr) {
+                        filter.time = { $regex: new RegExp(`^${startStr}`, 'i') };
+                    }
+                } else {
+                    // Date maydonlar uchun
+                    filter[field] = {};
+                    if (start) filter[field].$gte = start;
+                    if (end) {
+                        end.setHours(23, 59, 59, 999);
+                        filter[field].$lte = end;
+                    }
                 }
             }
+
 
 
 
             if (purchase !== undefined)
                 filter.purchase = purchase === 'true' || purchase === true;
 
-            // ☎️ Operator1 holatlari
             if (called !== undefined)
                 filter.called = called === 'true' || called === true;
             if (answered !== undefined)
@@ -521,13 +536,11 @@ class b1HANA {
             if (interested !== undefined)
                 filter.interested = interested === 'true' || interested === true;
 
-            // ☎️ Operator2 holatlari
             if (called2 !== undefined)
                 filter.called2 = called2 === 'true' || called2 === true;
             if (answered2 !== undefined)
                 filter.answered2 = answered2 === 'true' || answered2 === true;
 
-            // 🪪 Seller / Scoring ID bo‘yicha qidiruv
 
             if (passportId !== undefined) {
                 if (passportId === 'true' || passportId === true) {
