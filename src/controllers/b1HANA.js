@@ -486,42 +486,24 @@ class b1HANA {
                 else if (meeting === 'meetingConfirmedDate') field = 'meetingConfirmedDate';
                 else field = 'meetingDate'; // default fallback
 
-                // Sana parsing uchun yordamchi funksiya
-                const parseDate = (value) => {
-                    if (!value) return null;
-                    const clean = value.trim().replace(/\//g, '.');
-                    const date = moment(clean, ['DD.MM.YYYY', 'YYYY.MM.DD'], true);
-                    return date.isValid() ? date.toDate() : null;
+                // Sana parse funksiyasi
+                const parseDate = (val) => {
+                    if (!val) return null;
+                    const clean = val.trim().replace(/\//g, '.');
+                    const d = moment(clean, ['DD.MM.YYYY', 'YYYY.MM.DD'], true);
+                    return d.isValid() ? d.toDate() : null;
                 };
 
                 const start = parseDate(meetingDateStart);
                 const end = parseDate(meetingDateEnd);
+                if (end) end.setHours(23, 59, 59, 999);
 
-                // Agar "time" maydoni string bo‘lsa, regex orqali qidiramiz
-                if (field === 'time') {
-                    const startStr = moment(meetingDateStart, ['DD.MM.YYYY', 'YYYY.MM.DD']).format('YYYY.MM.DD');
-                    const endStr = moment(meetingDateEnd, ['DD.MM.YYYY', 'YYYY.MM.DD']).format('YYYY.MM.DD');
-
-                    if (startStr && endStr && startStr === endStr) {
-                        filter.time = { $regex: new RegExp(`^${startStr}`, 'i') };
-                    } else if (startStr && endStr) {
-                        filter.$or = [
-                            { time: { $regex: new RegExp(`^${startStr}`, 'i') } },
-                            { time: { $regex: new RegExp(`^${endStr}`, 'i') } }
-                        ];
-                    } else if (startStr) {
-                        filter.time = { $regex: new RegExp(`^${startStr}`, 'i') };
-                    }
-                } else {
-                    // Date maydonlar uchun
-                    filter[field] = {};
-                    if (start) filter[field].$gte = start;
-                    if (end) {
-                        end.setHours(23, 59, 59, 999);
-                        filter[field].$lte = end;
-                    }
-                }
+                filter[field] = {};
+                if (start) filter[field].$gte = start;
+                if (end) filter[field].$lte = end;
             }
+
+
 
 
 
