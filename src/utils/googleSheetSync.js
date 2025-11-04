@@ -155,7 +155,6 @@ async function main(io) {
 
         const totalLeads = uniqueLeads.length;
         let index = 0;
-        console.log(operators)
 
 
         for (const lead of uniqueLeads) {

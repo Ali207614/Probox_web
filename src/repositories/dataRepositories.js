@@ -747,8 +747,6 @@ ORDER BY
     getAnalytics({ startDate, endDate, invoices = [], phoneConfiscated }) {
         let salesCondition = '';
 
-        console.log(invoices.length)
-
         if (invoices.length > 0 && false) {
             const condition = invoices.map(item =>
                 `(T2."DocEntry" = '${item.DocEntry}' AND T2."InstId" = '${item.InstlmntID}')`
