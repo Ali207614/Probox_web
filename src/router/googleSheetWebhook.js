@@ -219,7 +219,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
         const inserted = [];
 
-        for (const lead of uniqueLeads) {
+        for (const lead of leads) {
             try {
                 const doc = await LeadModel.findOneAndUpdate(
                     { n: lead.n },
