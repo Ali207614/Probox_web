@@ -13,6 +13,7 @@ const router = express.Router();
 const AUTH_USER = process.env.GS_WEBHOOK_USER || 'sheetbot';
 const AUTH_PASS = process.env.GS_WEBHOOK_PASS || 'supersecret';
 
+// ==================== AUTH ====================
 function basicAuth(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Basic ')) {
@@ -27,6 +28,7 @@ function basicAuth(req, res, next) {
     next();
 }
 
+// ==================== HELPERS ====================
 function parseSheetDate(value) {
     if (!value) return null;
     if (!isNaN(value)) {
@@ -36,10 +38,7 @@ function parseSheetDate(value) {
 
     const str = String(value).trim().replace(/[\/\\]/g, '.');
     let parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY', 'YYYY-MM-DDTHH:mm:ss.SSSZ'], true);
-    if (!parsed.isValid()) {
-        parsed = moment(str, ['DD.MM.YYYY HH:mm', 'DD.MM.YYYY HH.mm'], false);
-    }
-
+    if (!parsed.isValid()) parsed = moment(str, ['DD.MM.YYYY HH:mm', 'DD.MM.YYYY HH.mm'], false);
     return parsed.isValid() ? parsed.toDate() : null;
 }
 
@@ -52,21 +51,34 @@ function normalizePhone(input) {
     return digits;
 }
 
+function getWeekdaySafe(dateLike) {
+    const m = moment(dateLike);
+    return m.isValid() ? m.isoWeekday().toString() : moment().isoWeekday().toString();
+}
+
+function parseWorkDays(raw) {
+    if (!raw) return [];
+    const normalized = String(raw)
+        .replace(/[،，؛;|\t]/g, ',')
+        .replace(/\s+/g, '')
+        .replace(/[^1-7,]/g, '');
+    return Array.from(new Set(normalized.split(',').filter(Boolean)));
+}
+
+// ==================== OPERATOR BALANCE ====================
 async function getOperatorBalance(operators) {
-    const lastLeads = await LeadModel.find({ operator: { $ne: null } })
-        .sort({ _id: -1 })
-        .limit(50)
-        .lean();
+    const today = moment().startOf('day').toDate();
+
+    const todayLeads = await LeadModel.find({
+        operator: { $ne: null },
+        createdAt: { $gte: today },
+    }).lean();
 
     const balance = {};
-    for (const op of operators) {
-        balance[op.SlpCode] = 0;
-    }
+    for (const op of operators) balance[op.SlpCode] = 0;
 
-    for (const lead of lastLeads) {
-        if (balance[lead.operator] !== undefined) {
-            balance[lead.operator]++;
-        }
+    for (const lead of todayLeads) {
+        if (balance[lead.operator] !== undefined) balance[lead.operator]++;
     }
 
     return balance;
@@ -78,36 +90,14 @@ function pickLeastLoadedOperator(availableOperators, balance) {
     const filtered = availableOperators.filter(op => balance[op.SlpCode] !== undefined);
     const pool = filtered.length ? filtered : availableOperators;
 
-    pool.sort((a, b) => {
-        const aLoad = balance[a.SlpCode] ?? 0;
-        const bLoad = balance[b.SlpCode] ?? 0;
-        return aLoad - bLoad;
-    });
+    pool.sort((a, b) => (balance[a.SlpCode] ?? 0) - (balance[b.SlpCode] ?? 0));
 
     const chosen = pool[0];
     balance[chosen.SlpCode] = (balance[chosen.SlpCode] ?? 0) + 1;
     return chosen;
 }
 
-function getWeekdaySafe(dateLike) {
-    const m = moment(dateLike);
-    if (!m.isValid()) {
-        return moment().isoWeekday().toString(); // '1'..'7'
-    }
-    return m.isoWeekday().toString();
-}
-
-function parseWorkDays(raw) {
-    if (!raw) return [];
-    const normalized = String(raw)
-        .replace(/[،，؛;|\t]/g, ',')
-        .replace(/\s+/g, '')
-        .replace(/[^1-7,]/g, '');
-    const uniq = Array.from(new Set(normalized.split(',').filter(Boolean)));
-    return uniq;
-}
-
-
+// ==================== MAIN ROUTE ====================
 router.post('/webhook', basicAuth, async (req, res) => {
     try {
         const { sheetName } = req.body;
@@ -116,12 +106,13 @@ router.post('/webhook', basicAuth, async (req, res) => {
         }
 
         const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
-        const lastRow =( lastLead?.n > 51 ? lastLead?.n - 50 : 2 ) || 2;
+        const lastRow = (lastLead?.n > 51 ? lastLead.n - 50 : 2) || 2;
         const nextStart = lastRow;
-        const nextEnd = nextStart + 70;
+        const nextEnd = nextStart + 100;
 
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
+        // === Google Sheets
         const sheetId = process.env.SHEET_ID;
         const saKeyPath = process.env.SA_KEY_PATH || './sa.json';
         const auth = new GoogleAuth({
@@ -137,6 +128,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: 'No new rows detected.' });
         }
 
+        // === Operatorlar
         const query = DataRepositories.getSalesPersons({ include: ['Operator1'] });
         const operators = await b1Controller.execute(query);
         const operatorBalance = await getOperatorBalance(operators);
@@ -148,21 +140,18 @@ router.post('/webhook', basicAuth, async (req, res) => {
             const rowNumber = nextStart + i;
             const parsedTime = parseSheetDate(row[3]);
             const weekday = getWeekdaySafe(parsedTime);
-
             const source = (row[2] || '').trim();
 
             let operator = null;
             if (source !== 'Organika') {
-                const availableOperators = operators.filter((item) => {
+                const availableOperators = operators.filter(item => {
                     const days = parseWorkDays(get(item, 'U_workDay', ''));
                     return days.includes(weekday);
                 });
                 operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
             }
 
-            let clientName = row[0]?.trim() || '';
-            clientName = clientName.replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
-
+            let clientName = (row[0] || '').trim().replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
             if (!clientName) {
                 const timestamp = moment().format('YYYYMMDD_HHmmss');
                 clientName = `Mijoz_${timestamp}_${rowNumber}`;
@@ -181,37 +170,21 @@ router.post('/webhook', basicAuth, async (req, res) => {
             });
         }
 
-
         if (!leads.length) {
             console.log('⚠️ No valid leads after normalization.');
             return res.status(200).json({ message: 'No valid leads.' });
         }
 
-        const uniqueLeads = [];
-        for (const lead of leads) {
-            const exists = await LeadModel.exists({
-                clientName: lead.clientName,
-                clientPhone: lead.clientPhone,
-                source: lead.source,
-                n: lead.n
-            });
-            if (!exists) uniqueLeads.push(lead);
-        }
-
-        if (!uniqueLeads.length) {
-            console.log('✅ No unique new leads found.');
-            return res.status(200).json({ message: 'No unique new leads.' });
-        }
-
-        const phones = uniqueLeads.map((l) => l.clientPhone).filter(Boolean);
+        // === SAP bilan tekshirish
+        const phones = leads.map(l => l.clientPhone).filter(Boolean);
         let existingMap = new Map();
 
         if (phones.length > 0) {
-            const phoneList = phones.map((p) => `'${p}'`).join(', ');
+            const phoneList = phones.map(p => `'${p}'`).join(', ');
             const sapQuery = `
-          SELECT "CardCode", "CardName", "Phone1", "Phone2"
-          FROM ${DataRepositories.db}.OCRD
-          WHERE "Phone1" IN (${phoneList}) OR "Phone2" IN (${phoneList})
+        SELECT "CardCode", "CardName", "Phone1", "Phone2"
+        FROM ${DataRepositories.db}.OCRD
+        WHERE "Phone1" IN (${phoneList}) OR "Phone2" IN (${phoneList})
       `;
             const existingRecords = await b1Controller.execute(sapQuery);
             for (const r of existingRecords) {
@@ -220,14 +193,13 @@ router.post('/webhook', basicAuth, async (req, res) => {
             }
         }
 
-        for (const lead of uniqueLeads) {
+        for (const lead of leads) {
             const cleanPhone = lead.clientPhone.replace(/\D/g, '');
             const found = existingMap.get(cleanPhone);
 
             if (found) {
                 lead.cardCode = found.CardCode;
                 lead.cardName = found.CardName;
-                console.log(`🔁 Existing BP found: ${found.CardCode} (${found.CardName})`);
             } else {
                 const newCode = await b1ServiceLayer.createBusinessPartner({
                     Phone1: cleanPhone,
@@ -237,20 +209,22 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 if (newCode?.CardCode) {
                     lead.cardCode = newCode.CardCode;
                     lead.cardName = newCode.CardName;
-                    console.log(`🆕 Created new BP: ${newCode.CardCode}`);
-                } else {
-                    console.log(`⚠️ Failed to create BP for ${lead.clientName}`);
                 }
             }
         }
 
-        const inserted = await LeadModel.insertMany(uniqueLeads);
+        // === INSERT (unique n)
+        let inserted = [];
+        try {
+            inserted = await LeadModel.insertMany(leads, { ordered: false });
+        } catch (err) {
+            if (err.code === 11000) {
+                console.warn('Duplicate row(s) skipped.');
+            } else throw err;
+        }
 
         const io = req.app.get('io');
-        if (io && inserted.length > 0) {
-            io.emit('new_leads', inserted);
-            console.log('📡 Socket broadcast: new_leads sent to all clients');
-        }
+        if (io && inserted.length > 0) io.emit('new_leads', inserted);
 
         console.log(`📥 ${inserted.length} new rows inserted successfully.`);
         return res.status(200).json({ message: `Inserted ${inserted.length} new rows.` });
