@@ -138,7 +138,10 @@ router.post('/webhook', basicAuth, async (req, res) => {
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             const rowNumber = nextStart + i;
-            const parsedTime = parseSheetDate(row[3]);
+            const parsedTime = row[3]
+                ? parseSheetDate(row[3])
+                : moment().utcOffset(5).format('YYYY-MM-DDTHH:mm:ss.SSSZ');
+
             const weekday = getWeekdaySafe(parsedTime);
             console.log(weekday ,' bu hafta kuni')
             const source = (row[2] || '').trim();

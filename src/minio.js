@@ -4,26 +4,16 @@ const { Client } = require('minio');
 const accessKey = process.env.MINIO_ACCESS_KEY || 'minioadmin';
 const secretKey = process.env.MINIO_SECRET_KEY || 'minioadmin';
 
-// === Ichki client (faqat backend <-> MinIO uchun) ===
-const internalMinio = new Client({
+// Ichki MinIO client (faqat 127.0.0.1:9000 bilan ishlaydi)
+const minioClient = new Client({
     endPoint: process.env.MINIO_INTERNAL_HOST || '127.0.0.1',
     port: Number(process.env.MINIO_PORT) || 9000,
-    useSSL: process.env.MINIO_USE_SSL === 'true', // sende false
+    useSSL: process.env.MINIO_USE_SSL === 'true',
     accessKey,
     secretKey,
 });
 
-// === Public client (faqat presigned URL uchun) ===
-// Bu client real foydalanuvchi ko‘radigan host/port bilan bo‘lishi shart!
-const publicMinio = new Client({
-    endPoint: process.env.MINIO_PUBLIC_HOST || process.env.MINIO_END_POINT || 'work-api.probox.uz',
-    port: 443,
-    useSSL: true,
-    accessKey,
-    secretKey,
-});
-
-// === Bucket mavjudligini tekshirish (ichki client bilan) ===
+// Bucket mavjudligini tekshirish
 async function ensureBucket(bucket) {
     try {
         console.log('🔍 Checking MinIO connection...');
@@ -34,11 +24,11 @@ async function ensureBucket(bucket) {
             bucket,
         });
 
-        const exists = await internalMinio.bucketExists(bucket);
+        const exists = await minioClient.bucketExists(bucket);
         if (exists) {
             console.log(`✅ Bucket '${bucket}' already exists`);
         } else {
-            await internalMinio.makeBucket(bucket, 'us-east-1');
+            await minioClient.makeBucket(bucket, 'us-east-1');
             console.log(`🪣 Bucket '${bucket}' created`);
         }
     } catch (err) {
@@ -47,15 +37,16 @@ async function ensureBucket(bucket) {
     }
 }
 
-// === Presigned URL (public client bilan) ===
+// presigned URL – faqat ichki client bilan, keyin faqat BASE ni almashtiramiz
 async function getPublicUrl(bucket, key, expires = 3600 * 24 * 7) {
-    // BU yerda hech qanday replace YUQ!
-    const url = await publicMinio.presignedGetObject(bucket, key, expires);
-    return url;
+    const url = await minioClient.presignedGetObject(bucket, key, expires);
+
+    const internalBase = `http://${process.env.MINIO_INTERNAL_HOST || '127.0.0.1'}:${process.env.MINIO_PORT || 9000}`;
+    const externalBase = `https://${process.env.MINIO_PUBLIC_HOST || process.env.MINIO_END_POINT}/leads`;
+
+    // Faqat host+port qismni almashtiramiz, path + query'ga tegmaymiz
+    const fixed = url.replace(internalBase, externalBase);
+    return fixed;
 }
 
-module.exports = {
-    minioClient: internalMinio,
-    ensureBucket,
-    getPublicUrl,
-};
+module.exports = { minioClient, ensureBucket, getPublicUrl };

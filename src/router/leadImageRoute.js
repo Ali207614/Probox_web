@@ -15,9 +15,7 @@ async function uploadToMinio(cardCode, file) {
     const ext = mime.extension(file.mimetype) || 'jpg';
     const fileName = `${crypto.randomUUID().replace(/-/g, '')}.${ext}`;
 
-    // BU juda muhim: bucket = 'leads', key = 'leads/ZM0001/file.jpg' emas,
-    // sen menda rasm yo‘li leads/leads/ZM0001/... deding,
-    // demak bucket 'leads', key 'leads/ZM0001/...'
+    // BU juda muhim: bucket = 'leads', key = 'leads/ZM0001/file.jpg'
     const key = `leads/${cardCode}/${fileName}`;
 
     const buffer = await sharp(file.buffer)
@@ -30,7 +28,6 @@ async function uploadToMinio(cardCode, file) {
         'Cache-Control': 'public, max-age=31536000',
     });
 
-    // URL faqat getPublicUrl orqali
     const url = await getPublicUrl(BUCKET, key);
 
     return {
