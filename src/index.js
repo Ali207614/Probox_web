@@ -4,57 +4,64 @@ const http = require('http');
 const mongoose = require('mongoose');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const compression = require('compression'); // 🧩 qo‘shildi
+const compression = require('compression');
 const hanaClient = require('@sap/hana-client');
 
 const { main } = require('../src/utils/googleSheetSync');
 const googleSheetRouter = require('../src/router/googleSheetWebhook');
-const router = require('../src/router/index')
+const router = require('../src/router/index');
 const { PORT, DB_URL, conn_params, CLIENT_URL } = require('./config');
 const { ensureBucket } = require('./minio');
 const leadImageRoute = require('../src/router/leadImageRoute');
 
 const app = express();
 const server = http.createServer(app);
+
+// === SOCKET.IO ===
 const io = new Server(server, {
     cors: {
-        origin: CLIENT_URL || '*', // frontend domen
+        origin: CLIENT_URL || 'https://work.probox.uz',
+        methods: ['GET', 'POST'],
+        credentials: true,
     },
 });
 
-// === Middlewares
-app.use(cors());
+// === MIDDLEWARES ===
+app.use(cors({
+    origin: CLIENT_URL || 'https://work.probox.uz',
+    credentials: true,
+}));
 app.use(express.json());
-app.use(compression()); // 🧩 barcha HTTP response’larni siqadi
+// app.use(compression()); // ⛔ Agar handshake xatolik bersa, vaqtincha o‘chirib turing
 
-// === Socket.io ni app obyektiga biriktirish (routerlarda ishlatish uchun)
+// === SOCKET.IO’ni app ga qo‘shish ===
 app.set('io', io);
 
-// === Routers
+// === ROUTES ===
 app.use('/api', googleSheetRouter);
 app.use('/api', router);
 app.use('/api/lead-images', leadImageRoute);
 
-// === MongoDB ulanish
+// === DATABASE (MongoDB) ===
 const MONGO_URI = DB_URL || process.env.MONGO_URI || 'mongodb://localhost:27017/probox';
 mongoose
     .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('🟢 MongoDB connected'))
     .catch((err) => console.error('❌ MongoDB connection error:', err));
 
-// === Socket.io hodisalarini kuzatish
+// === SOCKET.IO EVENTS ===
 io.on('connection', (socket) => {
     console.log('🟣 Client connected:', socket.id);
     socket.on('disconnect', () => console.log('🔴 Client disconnected:', socket.id));
 });
 
-// === Server ishga tushirish
+// === SERVER ===
 const port = PORT || 3019;
 server.listen(port, () => {
     console.log(`🚀 Server running on port ${port}`);
 });
 
-// === SAP HANA va Google Sheets sync
+// === SAP HANA va Google Sheet Sync ===
 (async () => {
     try {
         console.log('⏳ Running initial Google Sheet sync...');
@@ -67,7 +74,6 @@ server.listen(port, () => {
                 console.log('🟢 Hanaga ulanish muvaffaqiyatli amalga oshirildi');
                 global.connection = connection;
 
-                // faqat LEAD=true bo‘lsa, sync ishga tushadi
                 if (process.env.LEAD === 'true') {
                     await main(io);
                 }
