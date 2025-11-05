@@ -207,14 +207,41 @@ async function main(io) {
 
 
 function parseSheetDate(value) {
-    if (!value) return null;
+    // Agar qiymat umuman bo'lmasa
+    if (!value) {
+        return moment().utcOffset(5).toDate(); // bugungi sana
+    }
+
+    // Excel serial date bo‘lsa (raqam)
     if (!isNaN(value)) {
         const excelEpoch = new Date(Date.UTC(1899, 11, 30));
         return new Date(excelEpoch.getTime() + value * 86400000);
     }
+
+    // Matn formatdagi sana
     const str = String(value).trim().replace(/\//g, '.');
-    const parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY', 'YYYY-MM-DDTHH:mm:ss.SSSZ'], true);
-    return parsed.isValid() ? parsed.toDate() : null;
+
+    let parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY HH:mm', 'DD.MM.YYYY'], true);
+
+    // Agar faqat sana bo‘lsa (vaqt yo‘q) → hozirgi vaqtni qo‘shamiz
+    if (parsed.isValid() && /^\d{2}\.\d{2}\.\d{4}$/.test(str)) {
+        const now = moment();
+        parsed.set({
+            hour: now.hour(),
+            minute: now.minute(),
+            second: now.second(),
+        });
+    }
+
+    // Agar parsed noto‘g‘ri bo‘lsa → bugungi sanani qaytaramiz
+    if (!parsed.isValid()) {
+        return moment().utcOffset(5).toDate();
+    }
+
+    // Aks holda, to‘g‘ri vaqtni +05:00 offset bilan qaytaramiz
+    return parsed.utcOffset(5).toDate();
 }
+
+
 
 module.exports = { main };

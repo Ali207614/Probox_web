@@ -28,18 +28,41 @@ function basicAuth(req, res, next) {
     next();
 }
 
-// ==================== HELPERS ====================
 function parseSheetDate(value) {
-    if (!value) return null;
+    // 1️⃣ Agar qiymat yo‘q bo‘lsa — bugungi sanani qaytaradi
+    if (!value) {
+        return moment().utcOffset(5).toDate();
+    }
+
+    // 2️⃣ Excel serial date (raqam) bo‘lsa
     if (!isNaN(value)) {
         const excelEpoch = new Date(Date.UTC(1899, 11, 30));
         return new Date(excelEpoch.getTime() + value * 86400000);
     }
 
+    // 3️⃣ String formatni tozalash
     const str = String(value).trim().replace(/[\/\\]/g, '.');
-    let parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY', 'YYYY-MM-DDTHH:mm:ss.SSSZ'], true);
-    if (!parsed.isValid()) parsed = moment(str, ['DD.MM.YYYY HH:mm', 'DD.MM.YYYY HH.mm'], false);
-    return parsed.isValid() ? parsed.toDate() : null;
+
+    // 4️⃣ Ehtimoliy formatlar bilan parse qilish
+    let parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY HH:mm', 'DD.MM.YYYY'], true);
+
+    // 5️⃣ Agar faqat sana kiritilgan bo‘lsa, hozirgi vaqtni qo‘shamiz
+    if (parsed.isValid() && /^\d{2}\.\d{2}\.\d{4}$/.test(str)) {
+        const now = moment();
+        parsed.set({
+            hour: now.hour(),
+            minute: now.minute(),
+            second: now.second(),
+        });
+    }
+
+    // 6️⃣ Agar format yaroqsiz bo‘lsa, bugungi sanani qaytaramiz
+    if (!parsed.isValid()) {
+        return moment().utcOffset(5).toDate();
+    }
+
+    // 7️⃣ Yaroqli bo‘lsa — Toshkent vaqti bilan qaytaramiz
+    return parsed.utcOffset(5).toDate();
 }
 
 function normalizePhone(input) {
@@ -138,9 +161,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             const rowNumber = nextStart + i;
-            const parsedTime = row[3]
-                ? parseSheetDate(row[3])
-                : moment().utcOffset(5).format('YYYY-MM-DDTHH:mm:ss.SSSZ');
+            const parsedTime =  parseSheetDate(row[3]);
 
             const weekday = getWeekdaySafe(parsedTime);
             console.log(weekday ,' bu hafta kuni')
