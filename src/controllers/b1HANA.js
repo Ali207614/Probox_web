@@ -569,7 +569,9 @@ class b1HANA {
             if (req.user?.U_role === 'Scoring') {
                 filter.$or = [
                     { jshshir2: { $exists: true, $nin: [null, ''] } },
-                    { passportId: { $exists: true, $nin: [null, ''] } }
+                    { passportId: { $exists: true, $nin: [null, ''] } },
+                    { jshshir: { $exists: true, $nin: [null, ''] } },
+                    { idX: { $exists: true, $nin: [null, ''] } },
                 ];
             }
 
