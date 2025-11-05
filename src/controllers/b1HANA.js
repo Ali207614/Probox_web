@@ -738,6 +738,21 @@ class b1HANA {
                 }
             }
 
+            if (validData.passportVisit && validData.passportVisit === 'Passport') {
+                if (!validData.jshshir && !validData.jshshir2) {
+                    return res.status(400).json({
+                        message: 'Field "jshshir" is required when passportVisit is "Passport"',
+                        location: 'jshshir_required'
+                    });
+                }
+
+                if (!validData.idX && !validData.passportId) {
+                    return res.status(400).json({
+                        message: 'Field "idX" (passportId) is required when passportVisit is "Passport"',
+                        location: 'idX_required'
+                    });
+                }
+            }
 
             const updated = await LeadModel.findByIdAndUpdate(id, validData, {
                 new: true,

@@ -20,7 +20,7 @@ const server = http.createServer(app);
 // === SOCKET.IO ===
 const io = new Server(server, {
     cors: {
-        origin: CLIENT_URL || 'https://work.probox.uz',
+        origin: "*",
         methods: ['GET', 'POST'],
         credentials: true,
     },
@@ -28,7 +28,7 @@ const io = new Server(server, {
 
 // === MIDDLEWARES ===
 app.use(cors({
-    origin: CLIENT_URL || 'https://work.probox.uz',
+    origin: '*',
     credentials: true,
 }));
 app.use(express.json());
