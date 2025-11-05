@@ -741,14 +741,14 @@ class b1HANA {
             if (validData.passportVisit && validData.passportVisit === 'Passport') {
                 if (!validData.jshshir && !validData.jshshir2) {
                     return res.status(400).json({
-                        message: 'Field "jshshir" is required when passportVisit is "Passport"',
+                        message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
                         location: 'jshshir_required'
                     });
                 }
 
                 if (!validData.idX && !validData.passportId) {
                     return res.status(400).json({
-                        message: 'Field "idX" (passportId) is required when passportVisit is "Passport"',
+                        message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
                         location: 'idX_required'
                     });
                 }
