@@ -599,7 +599,7 @@ class b1HANA {
 
             const rawData = await LeadModel.find(filter)
                 .select(
-                    '_id  seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
+                    '_id jshshir idX  seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
                 )
                 .sort({ time: -1 })
                 .skip(skip)
@@ -610,6 +610,8 @@ class b1HANA {
                 n: item.n,
                 id: item._id,
                 clientName: item.clientName || '',
+                jsshir: item.jshshir || '',
+                idX: item.idX || '',
                 clientPhone: item.clientPhone || '',
                 source: item.source || '',
                 time: item.time ? moment(item.time).format('YYYY.MM.DD HH:mm') : null,
