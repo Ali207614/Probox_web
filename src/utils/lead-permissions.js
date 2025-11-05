@@ -67,7 +67,6 @@ const permissions = {
         'officialSalary',
         'finalLimit',
         'finalPercentage',
-        'scoring',
         'acceptReason',
         'comment'
     ],

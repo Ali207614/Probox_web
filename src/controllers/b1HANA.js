@@ -599,7 +599,7 @@ class b1HANA {
 
             const rawData = await LeadModel.find(filter)
                 .select(
-                    '_id jshshir idX  seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
+                    '_id jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
                 )
                 .sort({ time: -1 })
                 .skip(skip)
@@ -611,6 +611,7 @@ class b1HANA {
                 id: item._id,
                 clientName: item.clientName || '',
                 jsshir: item.jshshir || '',
+                branch2: item.branch2 || '',
                 idX: item.idX || '',
                 clientPhone: item.clientPhone || '',
                 source: item.source || '',
@@ -727,14 +728,14 @@ class b1HANA {
                 }
 
                 const scoringQuery = DataRepositories.getSalesPersons({ include: ['Scoring'] });
-                const scoringData = await this.execute(scoringQuery);
+                    const scoringData = await this.execute(scoringQuery);
 
-                if (scoringData.length > 0) {
-                    const randomIndex = Math.floor(Math.random() * scoringData.length);
-                    const selectedScoring = scoringData[randomIndex];
-                    validData.scoring = selectedScoring?.SlpCode || null;
-                } else {
-                    console.warn('No Scoring operator found');
+                    if (scoringData.length > 0) {
+                        const randomIndex = Math.floor(Math.random() * scoringData.length);
+                        const selectedScoring = scoringData[randomIndex];
+                        validData.scoring = selectedScoring?.SlpCode || null;
+                    } else {
+                        console.warn('No Scoring operator found');
                 }
             }
 
