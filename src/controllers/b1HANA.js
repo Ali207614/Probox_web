@@ -10,7 +10,7 @@ const InvoiceModel = require("../models/invoice-model");
 const CommentModel = require("../models/comment-model")
 const UserModel = require("../models/user-model")
 const b1Sl = require('./b1SL')
-const { shuffleArray, parseLocalDateString } = require("../helpers");
+const { shuffleArray, parseLocalDateString, addAndCondition} = require("../helpers");
 const moment = require('moment-timezone')
 const fsPromises = require('fs/promises');
 const {notIncExecutorRole} = require("../config");
@@ -567,13 +567,16 @@ class b1HANA {
             }
 
             if (req.user?.U_role === 'Scoring') {
-                filter.$or = [
-                    { jshshir2: { $exists: true, $nin: [null, ''] } },
-                    { passportId: { $exists: true, $nin: [null, ''] } },
-                    { jshshir: { $exists: true, $nin: [null, ''] } },
-                    { idX: { $exists: true, $nin: [null, ''] } },
-                ];
+                addAndCondition(filter, {
+                    $or: [
+                        { jshshir2: { $exists: true, $nin: [null, ''] } },
+                        { passportId: { $exists: true, $nin: [null, ''] } },
+                        { jshshir: { $exists: true, $nin: [null, ''] } },
+                        { idX: { $exists: true, $nin: [null, ''] } },
+                    ],
+                });
             }
+
 
 
 

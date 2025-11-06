@@ -14,6 +14,11 @@ function shuffleArray(array) {
     return array;
 }
 
+function addAndCondition(filter, condition) {
+    if (!filter.$and) filter.$and = [];
+    filter.$and.push(condition);
+}
+
 function saveSession(cookie) {
     fs.writeFileSync(
         path.join(process.cwd(), "database", "session.json"),
@@ -35,5 +40,6 @@ module.exports = {
     saveSession,
     getSession,
     shuffleArray,
-    parseLocalDateString
+    parseLocalDateString,
+    addAndCondition
 }
