@@ -19,7 +19,7 @@ const BranchModel= require('../models/branch-model')
 const ffmpeg = require('fluent-ffmpeg');
 const ffprobeStatic = require('ffprobe-static');
 const permissions = require('../utils/lead-permissions')
-const {validateFields} = require("../utils/validate-types")
+const { validateFields } = require("../utils/validate-types")
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
@@ -637,6 +637,19 @@ class b1HANA {
         }
     };
 
+    // clientName
+    // clientPhone
+    // source
+    // comment
+    // filial
+    // sotuvchi
+    // time
+
+    // clientName
+    // clientPhone
+    // source2
+
+
     updateLead = async (req, res, next) => {
         try {
             const { id } = req.params;
@@ -690,6 +703,14 @@ class b1HANA {
                 validData.jshshir = validData.jshshir2;
             } else if (validData.jshshir) {
                 validData.jshshir2 = validData.jshshir;
+            }
+
+            if (validData.meetingConfirmed == 'true') {
+                if (!validData.branch2 && !validData.seller) {
+                    return res.status(400).json({
+                        message: `Uchrashuv bo'lganda filial va sotuvchi tanlash majburiy`,
+                    });
+                }
             }
 
             if (validData.passportVisit && ['Passport', 'Visit'].includes(validData.passportVisit)) {
