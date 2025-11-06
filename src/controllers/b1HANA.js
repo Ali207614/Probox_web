@@ -434,19 +434,23 @@ class b1HANA {
                 aliment,
                 officialSalaryMin,
                 officialSalaryMax,
-                finalLimitMin,
-                finalLimitMax,
+                finalLimit, // endi yes/no/unmarked sifatida
                 finalPercentageMin,
                 finalPercentageMax,
                 scoring,
-                seller
+                seller,
             } = req.query;
 
             const filter = {};
 
-            function escapeRegex(str) {
-                return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            }
+            // === Helperlar ===
+            const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            const parseArray = (val) => {
+                if (!val) return null;
+                if (Array.isArray(val)) return val;
+                return val.split(',').map((v) => v.trim()).filter(Boolean);
+            };
 
             if (search) {
                 const safeSearch = escapeRegex(search.trim());
@@ -456,21 +460,13 @@ class b1HANA {
                     { comment: { $regex: safeSearch, $options: 'i' } },
                 ];
             }
-            // 🔁 String array parser
-            const parseArray = (val) => {
-                if (!val) return null;
-                if (Array.isArray(val)) return val;
-                return val.split(',').map((v) => v.trim()).filter(Boolean);
-            };
 
             const sources = parseArray(source);
             const branches = parseArray(branch);
             const operators = parseArray(operator);
             const operators2 = parseArray(operator2);
-
             const scorings = parseArray(scoring);
             const sellers = parseArray(seller);
-
 
             if (sources?.length) filter.source = { $in: sources };
             if (branches?.length) filter.branch = { $in: branches };
@@ -479,14 +475,27 @@ class b1HANA {
             if (scorings?.length) filter.scoring = { $in: scorings };
             if (sellers?.length) filter.seller = { $in: sellers };
 
+            function parseYesNoUnmarked(value, field, isNumeric = false) {
+                if (value === undefined) return;
+
+                if (isNumeric) {
+                    if (value === 'yes') addAndCondition(filter, { [field]: { $gt: 0 } });
+                    else if (value === 'no') addAndCondition(filter, { [field]: 0 });
+                    else if (value === 'unmarked') addAndCondition(filter, { [field]: null });
+                } else {
+                    if (value === 'yes') filter[field] = true;
+                    else if (value === 'no') filter[field] = false;
+                    else if (value === 'unmarked') addAndCondition(filter, { [field]: null });
+                }
+            }
+
             if (meetingDateStart || meetingDateEnd) {
                 let field;
                 if (meeting === 'time') field = 'time';
                 else if (meeting === 'meetingDate') field = 'meetingDate';
                 else if (meeting === 'meetingConfirmedDate') field = 'meetingConfirmedDate';
-                else field = 'meetingDate'; // default fallback
+                else field = 'meetingDate';
 
-                // Sana parse funksiyasi
                 const parseDate = (val) => {
                     if (!val) return null;
                     const clean = val.trim().replace(/\//g, '.');
@@ -503,66 +512,45 @@ class b1HANA {
                 if (end) filter[field].$lte = end;
             }
 
+            parseYesNoUnmarked(purchase, 'purchase');
+            parseYesNoUnmarked(called, 'called');
+            parseYesNoUnmarked(answered, 'answered');
+            parseYesNoUnmarked(interested, 'interested');
+            parseYesNoUnmarked(called2, 'called2');
+            parseYesNoUnmarked(answered2, 'answered2');
+            parseYesNoUnmarked(mib, 'mib');
+            parseYesNoUnmarked(aliment, 'aliment');
+            parseYesNoUnmarked(finalLimit, 'finalLimit', true);
 
-
-
-
-
-            if (purchase !== undefined)
-                filter.purchase = purchase === 'true' || purchase === true;
-
-            if (called !== undefined)
-                filter.called = called === 'true' || called === true;
-            if (answered !== undefined)
-                filter.answered = answered === 'true' || answered === true;
-            if (interested !== undefined)
-                filter.interested = interested === 'true' || interested === true;
-
-            if (called2 !== undefined)
-                filter.called2 = called2 === 'true' || called2 === true;
-            if (answered2 !== undefined)
-                filter.answered2 = answered2 === 'true' || answered2 === true;
-
-
-            if (passportId !== undefined) {
-                if (passportId === 'true' || passportId === true) {
+            if (passportId) {
+                if (passportId === 'yes') {
                     filter.passportId = { $exists: true, $nin: [null, ''] };
-                } else if (passportId === 'false' || passportId === false) {
-                        const passportIdEmptyFilter = {
-                            $or: [
-                                { passportId: { $exists: false } },
-                                { passportId: null },
-                                { passportId: '' },
-                            ],
-                        };
-
-                        // Agar allaqachon $and mavjud bo‘lsa, unga push qilamiz
-                        if (filter.$and) {
-                            filter.$and.push(passportIdEmptyFilter);
-                        } else {
-                            filter.$and = [passportIdEmptyFilter];
-                        }
+                } else if (passportId === 'no') {
+                    addAndCondition(filter, {
+                        $or: [
+                            { passportId: { $exists: false } },
+                            { passportId: null },
+                            { passportId: '' },
+                        ],
+                    });
+                } else if (passportId === 'unmarked') {
+                    addAndCondition(filter, { passportId: null });
                 }
             }
 
-            if (jshshir2 !== undefined) {
-                if (jshshir2 === 'true' || jshshir2 === true) {
+            if (jshshir2) {
+                if (jshshir2 === 'yes') {
                     filter.jshshir2 = { $exists: true, $nin: [null, ''] };
-                } else if (jshshir2 === 'false' || jshshir2 === false) {
-                    const passportIdEmptyFilter = {
+                } else if (jshshir2 === 'no') {
+                    addAndCondition(filter, {
                         $or: [
                             { jshshir2: { $exists: false } },
                             { jshshir2: null },
                             { jshshir2: '' },
                         ],
-                    };
-
-                    // Agar allaqachon $and mavjud bo‘lsa, unga push qilamiz
-                    if (filter.$and) {
-                        filter.$and.push(passportIdEmptyFilter);
-                    } else {
-                        filter.$and = [passportIdEmptyFilter];
-                    }
+                    });
+                } else if (jshshir2 === 'unmarked') {
+                    addAndCondition(filter, { jshshir2: null });
                 }
             }
 
@@ -577,9 +565,6 @@ class b1HANA {
                 });
             }
 
-
-
-
             const addRangeFilter = (field, min, max) => {
                 if (min || max) {
                     filter[field] = {};
@@ -590,16 +575,9 @@ class b1HANA {
 
             addRangeFilter('score', scoreMin, scoreMax);
             addRangeFilter('officialSalary', officialSalaryMin, officialSalaryMax);
-            addRangeFilter('finalLimit', finalLimitMin, finalLimitMax);
             addRangeFilter('finalPercentage', finalPercentageMin, finalPercentageMax);
 
-            if (mib !== undefined)
-                filter.mib = mib === 'true' || mib === true;
-            if (aliment !== undefined)
-                filter.aliment = aliment === 'true' || aliment === true;
-
             const total = await LeadModel.countDocuments(filter);
-
             const rawData = await LeadModel.find(filter)
                 .select(
                     '_id jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
@@ -634,7 +612,9 @@ class b1HANA {
                 seller: item.seller || null,
                 passportId: item.passportId || '',
                 jshshir2: item.jshshir2 || '',
-                meetingDate: item.meetingDate ? moment(item.meetingDate).format('YYYY.MM.DD') : null,
+                meetingDate: item.meetingDate
+                    ? moment(item.meetingDate).format('YYYY.MM.DD')
+                    : null,
                 score: item.score ?? null,
                 mib: item.mib ?? null,
                 aliment: item.aliment ?? null,
@@ -730,16 +710,18 @@ class b1HANA {
                     console.warn('No available Operator2 found for today');
                 }
 
-                const scoringQuery = DataRepositories.getSalesPersons({ include: ['Scoring'] });
-                    const scoringData = await this.execute(scoringQuery);
+               if(['Passport'].includes(validData.passportVisit)){
+                   const scoringQuery = DataRepositories.getSalesPersons({ include: ['Scoring'] });
+                   const scoringData = await this.execute(scoringQuery);
 
-                    if (scoringData.length > 0) {
-                        const randomIndex = Math.floor(Math.random() * scoringData.length);
-                        const selectedScoring = scoringData[randomIndex];
-                        validData.scoring = selectedScoring?.SlpCode || null;
-                    } else {
-                        console.warn('No Scoring operator found');
-                }
+                   if (scoringData.length > 0) {
+                       const randomIndex = Math.floor(Math.random() * scoringData.length);
+                       const selectedScoring = scoringData[randomIndex];
+                       validData.scoring = selectedScoring?.SlpCode || null;
+                   } else {
+                       console.warn('No Scoring operator found');
+                   }
+               }
             }
 
             if (validData.passportVisit && validData.passportVisit === 'Passport') {
@@ -806,7 +788,7 @@ class b1HANA {
                 source: lead.source || '',
                 time: formatDate(lead.time, true),
                 operator: lead.operator || '',
-                called: lead.called ?? false,
+                called: lead.called ?? null,
                 callTime: formatDate(lead.callTime, true),
                 answered: lead.answered ?? null,
                 callCount: lead.callCount ?? 0,

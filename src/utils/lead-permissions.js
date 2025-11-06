@@ -1,4 +1,3 @@
-// permissions.js
 const {validateFields} = require("./validate-types");
 const LeadModel = require("../models/lead-model");
 const moment = require("moment-timezone");
