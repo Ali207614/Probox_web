@@ -199,9 +199,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
                     const days = parseWorkDays(get(item, 'U_workDay', ''));
                     return days.includes(weekday);
                 });
-                console.log(availableOperators.map(el => {
-                    return {SlpName:el.SlpName , SlpCode: el.SlpCode , U_workDay: el.U_workDay}
-                }) ,' bu bolingan operatorlar')
+
                 operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
             }
 
