@@ -120,7 +120,6 @@ function pickLeastLoadedOperator(availableOperators, balance) {
     return chosen;
 }
 
-// ==================== MAIN ROUTE ====================
 router.post('/webhook', basicAuth, async (req, res) => {
     try {
         const { sheetName } = req.body;
@@ -128,8 +127,35 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: `Ignored — sheet "${sheetName}" is not Asosiy.` });
         }
 
-        const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
-        const lastRow = (lastLead?.n > 51 ? lastLead.n - 50 : 2) || 2;
+        const lastLead = await LeadModel.aggregate([
+            {
+                $match: {
+                    $or: [
+                        { n: { $type: "int" } },
+                        { n: { $type: "long" } },
+                        { n: { $type: "double" } },
+                        { n: { $type: "string", $regex: /^\d+$/ } },
+                    ],
+                },
+            },
+            {
+                $addFields: {
+                    nNumeric: {
+                        $cond: [
+                            { $eq: [{ $type: "$n" }, "string"] },
+                            { $toInt: "$n" },
+                            "$n",
+                        ],
+                    },
+                },
+            },
+            { $sort: { nNumeric: -1 } },
+            { $limit: 1 },
+        ]);
+
+        const nValue = lastLead?.[0]?.nNumeric || 0;
+
+        const lastRow = nValue > 51 ? nValue - 50 : 2;
         const nextStart = lastRow;
         const nextEnd = nextStart + 100;
 

@@ -39,7 +39,6 @@ function getWeekdaySafe(dateLike) {
 
 async function main(io) {
     try {
-       // await LeadModel.updateMany({}, { $set: { status: 'Active' } });
         const sheetId = process.env.SHEET_ID;
         const saKeyPath = process.env.SA_KEY_PATH;
 
@@ -51,10 +50,37 @@ async function main(io) {
         });
         const sheets = google.sheets({ version: 'v4', auth });
 
-        const lastLead = await LeadModel.findOne({}, { n: 1 }).sort({ n: -1 }).lean();
-        const lastRow = (lastLead?.n > 50 ? lastLead?.n - 50 : 1) || 1;
+        const [lastLead] = await LeadModel.aggregate([
+            {
+                $match: {
+                    $or: [
+                        { n: { $type: "int" } },
+                        { n: { $type: "long" } },
+                        { n: { $type: "double" } },
+                        { n: { $type: "string", $regex: /^\d+$/ } },
+                    ],
+                },
+            },
+            {
+                $addFields: {
+                    nNumeric: {
+                        $cond: [
+                            { $eq: [{ $type: "$n" }, "string"] },
+                            { $toInt: "$n" },
+                            "$n",
+                        ],
+                    },
+                },
+            },
+            { $sort: { nNumeric: -1 } },
+            { $limit: 1 },
+        ]);
+
+
+        const nValue = lastLead?.nNumeric || 0;
+        const lastRow = nValue > 50 ? nValue - 50 : 1;
         const nextStart = lastRow;
-        const nextEnd = nextStart +15000;
+        const nextEnd = nextStart + 15000;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
