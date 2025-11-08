@@ -167,9 +167,6 @@ async function main(io) {
         const uniqueLeads = [];
         for (const lead of leads) {
             const exists = await LeadModel.exists({
-                clientPhone: lead.clientPhone,
-                clientName: lead.clientName,
-                source: lead.source,
                 n: lead.n,
             });
             if (!exists) uniqueLeads.push(lead);
