@@ -39,6 +39,7 @@ function getWeekdaySafe(dateLike) {
 
 async function main(io) {
     try {
+        await LeadModel.updateMany({}, { $set: { status: 'Active' } });
         const sheetId = process.env.SHEET_ID;
         const saKeyPath = process.env.SA_KEY_PATH;
 

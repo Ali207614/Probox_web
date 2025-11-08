@@ -6,12 +6,12 @@ class DataRepositories {
         this.db = dbName;
     }
 
-    getSalesManager({ login = '', password = '' }) {
+    async getSalesManager({ login = '', password = '' }) {
         return `
         SELECT T0."SlpCode", T0."SlpName", T0."GroupCode", T0."Telephone", T0."U_login", T0."U_password",T0."U_role" , T0."U_branch" FROM ${this.db}.OSLP T0 where T0."U_login"= '${login}' and T0."U_password"='${password}'`;
     }
 
-    getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, search, inInv = [], notInv = [], phoneConfiscated, partial }) {
+    async getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, search, inInv = [], notInv = [], phoneConfiscated, partial }) {
 
         let statusCondition = '';
         let businessPartnerCondition = '';
@@ -182,7 +182,7 @@ class DataRepositories {
                 `;
     }
 
-    getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices, search, partial }) {
+    async getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices, search, partial }) {
         let statusCondition = '';
         let businessPartnerCondition = '';
         let seriesCondition = '';
@@ -503,7 +503,7 @@ class DataRepositories {
         `;
     }
 
-    getInvoiceSearchBPorSeriaDistribution({ startDate, endDate, limit, offset, paymentStatus, search, phone, invoices, partial }) {
+    async getInvoiceSearchBPorSeriaDistribution({ startDate, endDate, limit, offset, paymentStatus, search, phone, invoices, partial }) {
         let statusCondition = '';
         let salesCondition = `and (T1."DocEntry", T0."InstlmntID") IN (${invoices.map(item => `('${item.DocEntry}', '${item.InstlmntID}')`).join(", ")}) `
 
@@ -744,7 +744,7 @@ ORDER BY
 `
     }
 
-    getAnalytics({ startDate, endDate, invoices = [], phoneConfiscated }) {
+   async getAnalytics({ startDate, endDate, invoices = [], phoneConfiscated }) {
         let salesCondition = '';
 
         if (invoices.length > 0 && false) {
@@ -759,15 +759,10 @@ ORDER BY
                 )
             `;
         }
-        const newEndDate = moment(endDate, 'YYYY.MM.DD')
-            .endOf('month')
-            .add(10, 'days')
-            .format('YYYY.MM.DD');
-
 
        return `SELECT
-           sum(T0."InsTotal") as "InsTotal",
-           sum(T0."PaidToDate") as "PaidToDate",
+            sum(T0."InsTotal") as "InsTotal",
+            sum(T0."PaidToDate") as "PaidToDate",
             sum(T2."SumApplied") AS "SumApplied"
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
@@ -795,8 +790,8 @@ ORDER BY
         }
 
         const newEndDate = moment(endDate, 'YYYY.MM.DD')
-            .endOf('month')     // oyni oxiriga olish
-            .add(10, 'days')    // 10 kun qo‘shish
+            .endOf('month')
+            .add(10, 'days')
             .format('YYYY.MM.DD');
 
 
@@ -836,11 +831,11 @@ ORDER BY
         }
 
         const newEndDate = moment(endDate, 'YYYY.MM.DD')
-            .endOf('month')     // oyni oxiriga olish
-            .add(10, 'days')    // 10 kun qo‘shish
+            .endOf('month')
+            .add(10, 'days')
             .format('YYYY.MM.DD');
 
-        return`SELECT 
+        return `SELECT 
             T0."DocEntry",
             T0."InstlmntID",
             SUM(T2."SumApplied") as "SumApplied",
@@ -860,8 +855,6 @@ ORDER BY
        
         `
     }
-
-
 
     getDistribution({ startDate, endDate, }) {
         let statusCondition = 'AND ((T0."PaidToDate" = 0) OR (T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"))';

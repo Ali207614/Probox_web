@@ -32,7 +32,7 @@ app.use(cors({
     credentials: true,
 }));
 app.use(express.json());
-// app.use(compression()); // ⛔ Agar handshake xatolik bersa, vaqtincha o‘chirib turing
+app.use(compression());
 
 // === SOCKET.IO’ni app ga qo‘shish ===
 app.set('io', io);

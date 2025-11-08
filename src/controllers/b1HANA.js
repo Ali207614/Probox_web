@@ -20,6 +20,8 @@ const ffmpeg = require('fluent-ffmpeg');
 const ffprobeStatic = require('ffprobe-static');
 const permissions = require('../utils/lead-permissions')
 const { validateFields } = require("../utils/validate-types")
+const { generateShortId } = require("../utils/createLead");
+const assignBalancedOperator = require("../utils/assignBalancedOperator");
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
@@ -27,8 +29,7 @@ require('dotenv').config();
 class b1HANA {
     execute = async (sql) => {
         try {
-            let data = await dbService.execute(sql);
-            return data;
+            return dbService.execute(sql);
         } catch (e) {
             throw new Error(e);
         }
@@ -44,7 +45,7 @@ class b1HANA {
 
             const query = await DataRepositories.getSalesManager({ login, password });
             let user = await this.execute(query);
-            if (user.length == 0) {
+            if (user.length === 0) {
                 return next(ApiError.BadRequest('Пользователь не найден'));
             }
 
@@ -277,7 +278,7 @@ class b1HANA {
                     newDueDate: 1,
                     CardCode: 1
                 }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
-                if (invoiceConfiscated.length == 0) {
+                if (invoiceConfiscated.length === 0) {
                     return res.status(200).json({
                         total: 0,
                         page: 0,
@@ -468,6 +469,11 @@ class b1HANA {
             const scorings = parseArray(scoring);
             const sellers = parseArray(seller);
 
+            const statuses = parseArray(req.query.status);
+            if (statuses?.length && !statuses.includes('unmarked')) {
+                filter.status = { $in: statuses };
+            }
+
             if (sources?.length) filter.source = { $in: sources };
             if (branches?.length) filter.branch = { $in: branches };
             if (operators?.length) filter.operator = { $in: operators };
@@ -580,7 +586,7 @@ class b1HANA {
             const total = await LeadModel.countDocuments(filter);
             const rawData = await LeadModel.find(filter)
                 .select(
-                    '_id jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
+                    '_id status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
                 )
                 .sort({ time: -1 })
                 .skip(skip)
@@ -590,6 +596,7 @@ class b1HANA {
             const data = rawData.map((item) => ({
                 n: item.n,
                 id: item._id,
+                status: item.status,
                 clientName: item.clientName || '',
                 jsshir: item.jshshir || '',
                 branch2: item.branch2 || '',
@@ -637,18 +644,101 @@ class b1HANA {
         }
     };
 
-    // clientName
-    // clientPhone
-    // source
-    // comment
-    // filial
-    // sotuvchi
-    // time
+    createLead = async (req, res, next) => {
+        try {
+            const { source, clientName, clientPhone, branch, seller, source2, comment } = req.body;
 
-    // clientName
-    // clientPhone
-    // source2
+            const startOfDay = moment().startOf('day').toDate();
+            const endOfDay = moment().endOf('day').toDate();
 
+            function validatePhone(phone) {
+                if (!phone) return false;
+                let digits = String(phone).replace(/\D/g, '');
+                if (digits.length === 9 && digits.startsWith('9')) digits = '998' + digits;
+                const isValid = /^998\d{9}$/.test(digits);
+                return isValid ? digits : false;
+            }
+
+            if (!source) {
+                return res.status(400).json({ message: 'source is required' });
+            }
+
+            const allowedSources = ['Manychat', 'Meta', 'Organika', 'Kiruvchi qongiroq', 'Community'];
+            if (!allowedSources.includes(source)) {
+                return res.status(400).json({
+                    message: `Invalid source. Allowed values: ${allowedSources.join(', ')}`,
+                });
+            }
+
+            // === 3️⃣ Telefonni validatsiya ===
+            const cleanedPhone = validatePhone(clientPhone);
+            if (!cleanedPhone) {
+                return res.status(400).json({
+                    message: "Telefon raqam formati notog'ri",
+                });
+            }
+
+            // === 4️⃣ Majburiy maydonlar manba bo‘yicha ===
+            const requiredFieldsBySource = {
+                Organika: ['clientName', 'clientPhone', 'branch2', 'seller'],
+                Community: ['clientName', 'clientPhone', 'source2'],
+                'Kiruvchi qongiroq': ['clientName', 'clientPhone', 'source2'],
+                Manychat: ['clientName', 'clientPhone'],
+                Meta: ['clientName', 'clientPhone'],
+            };
+
+            const requiredFields = requiredFieldsBySource[source] || [];
+            const missingFields = requiredFields.filter(
+                (f) => !req.body[f] || String(req.body[f]).trim() === ''
+            );
+            if (missingFields.length > 0) {
+                return res.status(400).json({
+                    message: `Majburiy maydonlarni to'ldirish kerak ${source}: ${missingFields.join(', ')}`,
+                });
+            }
+
+            const exists = await LeadModel.exists({
+                clientPhone: cleanedPhone,
+                source,
+                createdAt: { $gte: startOfDay, $lte: endOfDay },
+            });
+
+            if (exists) {
+                return res.status(409).json({
+                    message: "Bu lead allaqachon mavjud",
+                });
+            }
+
+            let operator = null;
+            if (source !== 'Organika') {
+                operator = await assignBalancedOperator();
+            }
+
+            const n = await generateShortId('PRO');
+            const time = new Date();
+
+            const lead = await LeadModel.create({
+                n,
+                source,
+                clientName,
+                clientPhone: cleanedPhone,
+                branch: branch || null,
+                seller: seller || null,
+                source2: source2 || null,
+                comment: comment || null,
+                operator,
+                time,
+            });
+
+            return res.status(201).json({
+                message: 'Lead created successfully',
+                data: lead,
+            });
+        } catch (e) {
+            console.error('Error creating lead:', e);
+            next(e);
+        }
+    }
 
     updateLead = async (req, res, next) => {
         try {
@@ -802,9 +892,10 @@ class b1HANA {
             const data = {
                 id: lead._id,
                 n: lead.n ?? null,
+                status: lead?.status,
                 comment: lead.comment ?? '',
                 limit: lead.limit ?? null,
-                clientName: lead.clientName || '',
+                clientName: lead?.clientName || '',
                 clientPhone: lead.clientPhone || '',
                 source: lead.source || '',
                 time: formatDate(lead.time, true),
@@ -1069,7 +1160,7 @@ class b1HANA {
                     CardCode: 1
                 }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
 
-                if (invoiceConfiscated.length == 0) {
+                if (invoiceConfiscated.length === 0) {
                     return res.status(200).json({
                         total: 0,
                         page: 0,
@@ -1203,7 +1294,7 @@ class b1HANA {
             const executorsQuery = await DataRepositories.getSalesPersons(notIncExecutorRole);
             let executorList = await this.execute(executorsQuery);
 
-            let SalesList = executorList.filter(el => el.U_role == 'Assistant')
+            let SalesList = executorList.filter(el => el.U_role === 'Assistant')
 
             const query = await DataRepositories.getDistribution({ startDate, endDate })
             let data = await this.execute(query)
@@ -1316,7 +1407,7 @@ class b1HANA {
     getAnalytics = async (req, res, next) => {
         try {
 
-            let { startDate, endDate, slpCode, phoneConfiscated } = req.query
+            let { startDate, endDate, slpCode } = req.query
 
             if (!startDate || !endDate) {
                 return res.status(404).json({ error: 'startDate and endDate are required' });
@@ -1334,7 +1425,6 @@ class b1HANA {
 
             const slpCodeRaw = req.query.slpCode; // "1,4,5"
             const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
-            const tz = 'Asia/Tashkent'
             if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
                 let filter = {
                     SlpCode: { $in: slpCodeArray },
@@ -1430,7 +1520,6 @@ class b1HANA {
             }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
 
 
-            let confiscatedTotal = invoiceConfiscated.length ? invoiceConfiscated.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) : 0
             const query = await DataRepositories.getAnalytics({ startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
 
             let data = await this.execute(query)
@@ -1457,7 +1546,7 @@ class b1HANA {
     getAnalyticsByDay = async (req, res, next) => {
         try {
 
-            let { startDate, endDate, slpCode, phoneConfiscated } = req.query
+            let { startDate, endDate, slpCode } = req.query
 
             if (!startDate || !endDate) {
                 return res.status(404).json({ error: 'startDate and endDate are required' });
@@ -1475,7 +1564,6 @@ class b1HANA {
 
             const slpCodeRaw = req.query.slpCode; // "1,4,5"
             const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
-            const tz = 'Asia/Tashkent'
             if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
                 let filter = {
                     SlpCode: { $in: slpCodeArray },
@@ -1615,9 +1703,8 @@ class b1HANA {
                 return acc;
             }, {});
 
-            const result = Object.values(grouped);
 
-            data = result
+            data = Object.values(grouped);
 
             data.forEach(item => {
                 const formattedDate = item.DueDate; // '2025.05.01'
@@ -2134,8 +2221,7 @@ class b1HANA {
                 }
 
                 if (newDueDate) {
-                    const parsedDate = parseLocalDateString(newDueDate);
-                    invoice.newDueDate = parsedDate;
+                    invoice.newDueDate = parseLocalDateString(newDueDate);
                 }
 
                 await invoice.save();
@@ -2250,7 +2336,7 @@ class b1HANA {
                     DocEntry,
                     InstlmntID,
                     DueDate: parseLocalDateString(DueDate),
-                    phoneConfiscated: phoneConfiscated ? true : false,
+                    phoneConfiscated: !!phoneConfiscated,
                     InsTotal: (data.length ? Number(data[0]?.InsTotal || 0) : 0)
                 });
             }
@@ -2281,7 +2367,7 @@ class b1HANA {
             let invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
 
             if (invoice) {
-                invoice.partial = partial ? true : false;
+                invoice.partial = !!partial;
                 await invoice.save();
 
             } else {
@@ -2289,7 +2375,7 @@ class b1HANA {
                     DocEntry,
                     InstlmntID,
                     DueDate: parseLocalDateString(DueDate),
-                    partial: partial ? true : false,
+                    partial: !!partial,
 
                 });
             }

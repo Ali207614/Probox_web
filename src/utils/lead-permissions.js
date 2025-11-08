@@ -76,7 +76,8 @@ permissions.OperatorM = [
     ...permissions.Operator1,
     ...permissions.Operator2,
     'operator',
-    'operator2'
+    'operator2',
+    'status'
 ];
 
 permissions.CEO = [

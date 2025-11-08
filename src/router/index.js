@@ -30,6 +30,8 @@ router.get('/search', authMiddleware, b1HANA.search);
 
 router.post('/incomingPayment', authMiddleware, b1SL.postIncomingPayment);
 
+router.post('/leads', authMiddleware, b1HANA.createLead);
+
 router.get('/test', (req, res) => {
     res.json({ message: 'ok' });
 });

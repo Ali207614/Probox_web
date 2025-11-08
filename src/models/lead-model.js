@@ -3,7 +3,7 @@ const { Schema, model } = require('mongoose');
 
 const LeadSchema = new Schema(
     {
-        n: { type: Number, description: 'Tartib raqami' },
+        n: { type: String, description: 'Tartib raqami' },
         limit: { type: Number, description: 'Ajratilgan limit yoki kredit miqdori' },
         clientName: { type: String, trim: true, description: 'Mijozning to‘liq ismi (Umumiy ozgarmaydi)' },
         clientPhone: { type: String, trim: true, description: 'Mijozning telefon raqami (Umumiy ozgarmaydi)' },
@@ -62,88 +62,18 @@ const LeadSchema = new Schema(
         officialSalary: { type: Number, description: 'Rasmiy oylik daromad (Scoring ozgariradi)' },
         finalLimit: { type: Number, description: 'Yakuniy tasdiqlangan limit (Scoring ozgariradi)' },
         finalPercentage: { type: Number, description: 'Yakuniy foiz stavkasi (Scoring ozgariradi)' },
-        status: {type: String, description:"Status" , enum: ['Archived', 'Closed']},
+        status: {
+            type: String,
+            description: "Status",
+            enum: ['Archived', 'Closed', 'Active', 'Blocked','Processing'],
+            default: 'Active',
+        },
     },
         { timestamps: true }
 );
 LeadSchema.index({ n: 1 }, { unique: true });
 
 module.exports = model('Lead', LeadSchema);
-
-
-// [
-//     {
-//         n: 9703,
-//         clientName: 'DIOR',
-//         clientPhone: '996450696',
-//         createdAt: ISODate('2025-11-05T04:52:08.293Z'),
-//         time: null
-//     },
-//     {
-//         n: 9702,
-//         clientName: 'DOSTONBEK',
-//         clientPhone: '934090911',
-//         createdAt: ISODate('2025-11-05T04:52:08.291Z'),
-//         time: null
-//     },
-//     {
-//         n: 9701,
-//         clientName: 'BOBUR',
-//         clientPhone: '900337060',
-//         createdAt: ISODate('2025-11-05T04:52:08.287Z'),
-//         time: null
-//     },
-//     {
-//         n: 9700,
-//         clientName: 'SHAHBOZ',
-//         clientPhone: '878886949',
-//         createdAt: ISODate('2025-11-05T04:31:48.040Z'),
-//         time: null
-//     },
-//     {
-//         n: 9699,
-//         clientName: 'BERIP OLINSA OYIGA QANCHA DAN...',
-//         clientPhone: '915053030',
-//         createdAt: ISODate('2025-11-05T04:16:51.223Z'),
-//         time: null
-//     },
-//     {
-//         n: 9698,
-//         clientName: '?????',
-//         clientPhone: '900479080',
-//         createdAt: ISODate('2025-11-05T04:11:58.189Z'),
-//         time: null
-//     },
-//     {
-//         n: 9696,
-//         clientName: 'FOTIMA',
-//         clientPhone: '998288879',
-//         createdAt: ISODate('2025-11-05T04:07:00.077Z'),
-//         time: null
-//     },
-//     {
-//         n: 9695,
-//         clientName: '??????',
-//         clientPhone: '979812002',
-//         createdAt: ISODate('2025-11-05T04:07:00.073Z'),
-//         time: null
-//     },
-//     {
-//         n: 9694,
-//         clientName: '???????',
-//         clientPhone: '998800571',
-//         createdAt: ISODate('2025-11-05T03:57:13.579Z'),
-//         time: null
-//     },
-//     {
-//         n: 9693,
-//         clientName: '?????????',
-//         clientPhone: '990109798',
-//         createdAt: ISODate('2025-11-05T03:57:13.575Z'),
-//         time: null
-//     }
-// ]
-
 
 
 
