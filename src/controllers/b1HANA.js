@@ -646,7 +646,7 @@ class b1HANA {
 
     createLead = async (req, res, next) => {
         try {
-            const { source, clientName, clientPhone, branch, seller, source2, comment } = req.body;
+            const { source, clientName, clientPhone, branch2, seller, source2, comment } = req.body;
 
             const startOfDay = moment().startOf('day').toDate();
             const endOfDay = moment().endOf('day').toDate();
@@ -717,18 +717,25 @@ class b1HANA {
             const n = await generateShortId('PRO');
             const time = new Date();
 
-            const lead = await LeadModel.create({
+
+
+            let dataObj = {
                 n,
                 source,
                 clientName,
                 clientPhone: cleanedPhone,
-                branch: branch || null,
+                branch2: branch2 || null,
                 seller: seller || null,
                 source2: source2 || null,
                 comment: comment || null,
                 operator,
                 time,
-            });
+            }
+
+            if(source === 'Organika'){
+                dataObj= {...dataObj ,meetingConfirmed: true,meetingConfirmedDate: new Date(),branch2: branch2, seller: seller }
+            }
+            const lead = await LeadModel.create(dataObj);
 
             return res.status(201).json({
                 message: 'Lead created successfully',
