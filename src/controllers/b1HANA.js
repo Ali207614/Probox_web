@@ -586,7 +586,7 @@ class b1HANA {
             const total = await LeadModel.countDocuments(filter);
             const rawData = await LeadModel.find(filter)
                 .select(
-                    '_id status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
+                    '_id isBlocked status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
                 )
                 .sort({ time: -1 })
                 .skip(skip)
@@ -597,10 +597,10 @@ class b1HANA {
                 n: item.n,
                 id: item._id,
                 status: item.status,
+                isBlocked: item?.isBlocked ?? false,
                 clientName: item.clientName || '',
                 jsshir: item.jshshir || '',
                 branch2: item.branch2 || '',
-                idX: item.idX || '',
                 clientPhone: item.clientPhone || '',
                 source: item.source || '',
                 time: item.time ? moment(item.time).format('YYYY.MM.DD HH:mm') : null,
@@ -618,7 +618,6 @@ class b1HANA {
                 scoring: item.scoring || null,
                 seller: item.seller || null,
                 passportId: item.passportId || '',
-                jshshir2: item.jshshir2 || '',
                 meetingDate: item.meetingDate
                     ? moment(item.meetingDate).format('YYYY.MM.DD')
                     : null,
@@ -753,6 +752,11 @@ class b1HANA {
             const { U_role } = req.user;
             const body = req.body;
 
+            const existingLead = await LeadModel.findById(id).lean();
+            if (!existingLead) {
+                return res.status(404).json({ message: 'Lead not found' });
+            }
+
             if (!permissions[U_role]) {
                 return res.status(403).json({
                     message: `Role ${U_role} is not allowed to update leads`,
@@ -810,36 +814,40 @@ class b1HANA {
                 }
             }
 
+            const isAlreadyPassport = existingLead.passportVisit === 'Passport' || existingLead.passportVisit === 'Visit'
+
             if (validData.passportVisit && ['Passport', 'Visit'].includes(validData.passportVisit)) {
                 const weekday = moment().isoWeekday().toString();
 
-                const operator2Query = DataRepositories.getSalesPersons({ include: ['Operator2'] });
-                const operator2Data = await this.execute(operator2Query);
+                if (!isAlreadyPassport) {
+                    const operator2Query = DataRepositories.getSalesPersons({ include: ['Operator2'] });
+                    const operator2Data = await this.execute(operator2Query);
 
-                const availableOperator2s = operator2Data.filter((item) =>
-                    (item?.U_workDay || '').split(',').includes(weekday)
-                );
+                    const availableOperator2s = operator2Data.filter((item) =>
+                        (item?.U_workDay || '').split(',').includes(weekday)
+                    );
 
-                if (availableOperator2s.length > 0) {
-                    const randomIndex = Math.floor(Math.random() * availableOperator2s.length);
-                    const selectedOperator2 = availableOperator2s[randomIndex];
-                    validData.operator2 = selectedOperator2?.SlpCode || null;
-                } else {
-                    console.warn('No available Operator2 found for today');
+                    if (availableOperator2s.length > 0) {
+                        const randomIndex = Math.floor(Math.random() * availableOperator2s.length);
+                        const selectedOperator2 = availableOperator2s[randomIndex];
+                        validData.operator2 = selectedOperator2?.SlpCode || null;
+                    } else {
+                        console.warn('No available Operator2 found for today');
+                    }
                 }
 
-               if(['Passport'].includes(validData.passportVisit)){
-                   const scoringQuery = DataRepositories.getSalesPersons({ include: ['Scoring'] });
-                   const scoringData = await this.execute(scoringQuery);
+                if (existingLead.passportVisit === 'Visit' && validData.passportVisit === 'Passport') {
+                    const scoringQuery = DataRepositories.getSalesPersons({ include: ['Scoring'] });
+                    const scoringData = await this.execute(scoringQuery);
 
-                   if (scoringData.length > 0) {
-                       const randomIndex = Math.floor(Math.random() * scoringData.length);
-                       const selectedScoring = scoringData[randomIndex];
-                       validData.scoring = selectedScoring?.SlpCode || null;
-                   } else {
-                       console.warn('No Scoring operator found');
-                   }
-               }
+                    if (scoringData.length > 0) {
+                        const randomIndex = Math.floor(Math.random() * scoringData.length);
+                        const selectedScoring = scoringData[randomIndex];
+                        validData.scoring = selectedScoring?.SlpCode || null;
+                        } else {
+                            console.warn('No Scoring operator found');
+                        }
+                }
             }
 
             if (validData.passportVisit && validData.passportVisit === 'Passport') {
@@ -900,6 +908,7 @@ class b1HANA {
                 id: lead._id,
                 n: lead.n ?? null,
                 status: lead?.status,
+                isBlocked: lead?.isBlocked ?? false,
                 comment: lead.comment ?? '',
                 limit: lead.limit ?? null,
                 clientName: lead?.clientName || '',
@@ -915,7 +924,6 @@ class b1HANA {
                 rejectionReason: lead.rejectionReason || '',
                 passportVisit: lead.passportVisit || '',
                 jshshir: lead.jshshir || '',
-                idX: lead.idX || '',
                 operator2: lead.operator2 || '',
                 source2: lead.source2 || null,
                 called2: lead.called2 ?? null,
@@ -933,7 +941,6 @@ class b1HANA {
                 purchaseDate: formatDate(lead.purchaseDate),
                 saleType: lead.saleType || '',
                 passportId: lead.passportId || '',
-                jshshir2: lead.jshshir2 || '',
                 scoring: lead.scoring || null,
                 seller: lead.seller || null,
                 branch2: lead.branch2 || '',

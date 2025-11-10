@@ -2,6 +2,7 @@ const {validateFields} = require("./validate-types");
 const LeadModel = require("../models/lead-model");
 const moment = require("moment-timezone");
 const DataRepositories = require("../repositories/dataRepositories");
+
 const permissions = {
     Operator1: [
         'called',
@@ -12,7 +13,7 @@ const permissions = {
         'rejectionReason',
         'passportVisit',
         'jshshir',
-        'idX',
+        'passportId',
         'region',
         'district',
         'address',
@@ -38,8 +39,8 @@ const permissions = {
         'purchase',
         'purchaseDate',
         'saleType',
+        'jshshir',
         'passportId',
-        'jshshir2',
         'branch2',
         'seller',
         'source2',
@@ -77,7 +78,8 @@ permissions.OperatorM = [
     ...permissions.Operator2,
     'operator',
     'operator2',
-    'status'
+    'status',
+    'isBlocked'
 ];
 
 permissions.CEO = [
@@ -85,6 +87,8 @@ permissions.CEO = [
     ...permissions.Operator2,
     ...permissions.Seller,
     ...permissions.Scoring,
+    'isBlocked',
+    'status',
 ];
 
 module.exports = permissions;

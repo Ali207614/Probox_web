@@ -32,6 +32,7 @@ const LeadSchema = new Schema(
         meetingHappened: { type: Boolean, description: 'Uchrashuv bo‘ldimi? (Operator2 true/false ozgaradi)' },
         percentage: { type: Number, description: 'Foiz stavkasi' },
         meetingConfirmed: { type: Boolean, description: 'Uchrashuv tasdiqlandi (Sotuvchi ozgaradi)' },
+        isBlocked: { type: Boolean, description: 'Blok bolganlari' },
         meetingConfirmedDate: { type: Date, description: 'Tasdiqlangan sana (Sotuvchi  ozgaradi)' },
         consultant: { type: String, description: 'Maslahatchi (konsultant) ismi (Sotuvchi tanladi )' },
         purchase: { type: Boolean, description: 'Xarid amalga oshdimi? (Sotuvchi ozgaradi)' },
