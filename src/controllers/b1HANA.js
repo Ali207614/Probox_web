@@ -846,7 +846,7 @@ class b1HANA {
             ) {
                 const weekday = moment().isoWeekday().toString();
 
-                if (!isAlreadyPassport) {
+                if (!existingLead.operator2) {
                     const operator2Query = DataRepositories.getSalesPersons({
                         include: ['Operator2'],
                     });
@@ -868,8 +868,7 @@ class b1HANA {
                 }
 
                 if (
-                    existingLead.passportVisit === 'Visit' &&
-                    validData.passportVisit === 'Passport'
+                    !existingLead.scoring
                 ) {
                     const scoringQuery = DataRepositories.getSalesPersons({
                         include: ['Scoring'],
@@ -887,20 +886,21 @@ class b1HANA {
             }
 
             if (validData.passportVisit && validData.passportVisit === 'Passport') {
-                if (!validData.jshshir) {
+                if (!validData.jshshir || !validData.jshshir2) {
                     return res.status(400).json({
-                        message: 'Passport tanlanganda JSHSHIR va IDX kiritilishi majburiy',
-                        location: 'jshshir_required',
+                        message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
+                        location: 'jshshir_required'
                     });
                 }
 
-                if (!validData.passportId) {
+                if (!validData.idX || !validData.passportId) {
                     return res.status(400).json({
-                        message: 'Passport tanlanganda JSHSHIR va IDX kiritilishi majburiy',
-                        location: 'idX_required',
+                        message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
+                        location: 'idX_required'
                     });
                 }
             }
+
 
             if (
                 validData.jshshir ||
