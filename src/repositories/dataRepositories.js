@@ -856,6 +856,26 @@ ORDER BY
         `
     }
 
+    getBusinessPartners({ jshshir, passport, phone }) {
+        return `
+            SELECT
+                T0."U_blocked",
+                T0."CardCode",
+                T0."CardName",
+                T0."Phone1",
+                T0."Phone2",
+                T0."U_jshshir",
+                T0."Cellular"
+            FROM ${this.db}.OCRD T0
+            WHERE
+                (${jshshir ? `T0."U_jshshir" = '${jshshir}'` : '1=0'})
+               OR (${passport ? `T0."Cellular" = '${passport}'` : '1=0'})
+                LIMIT 1
+        `;
+    }
+
+
+
     getDistribution({ startDate, endDate, }) {
         let statusCondition = 'AND ((T0."PaidToDate" = 0) OR (T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"))';
         const INVOICE_TYPE = 13;

@@ -680,8 +680,8 @@ class b1HANA {
             // === 4️⃣ Majburiy maydonlar manba bo‘yicha ===
             const requiredFieldsBySource = {
                 Organika: ['clientName', 'clientPhone', 'branch2', 'seller'],
-                Community: ['clientName', 'clientPhone', 'source2'],
-                'Kiruvchi qongiroq': ['clientName', 'clientPhone', 'source2'],
+                Community: ['clientName', 'clientPhone'],
+                'Kiruvchi qongiroq': ['clientName', 'clientPhone'],
                 Manychat: ['clientName', 'clientPhone'],
                 Meta: ['clientName', 'clientPhone'],
             };
@@ -790,6 +790,7 @@ class b1HANA {
                 });
             }
 
+            // === Normalize fields
             if (validData?.clientFullName) {
                 validData.clientName = validData.clientFullName;
             }
@@ -800,10 +801,31 @@ class b1HANA {
                 validData.passportId = validData.idX;
             }
 
-            if (validData.jshshir2 ) {
+            if (validData.jshshir2) {
                 validData.jshshir = validData.jshshir2;
             } else if (validData.jshshir) {
                 validData.jshshir2 = validData.jshshir;
+            }
+
+            // === Validation checks
+            if (validData.jshshir) {
+                const jshshirStr = String(validData.jshshir);
+                if (!/^\d{14}$/.test(jshshirStr)) {
+                    return res.status(400).json({
+                        message: 'JSHSHIR must be 14 digits long and contain only numbers',
+                        location: 'jshshir_invalid',
+                    });
+                }
+            }
+
+            if (validData.passportId) {
+                const passportStr = String(validData.passportId);
+                if (!/^[A-Z]{2}\d{7}$/.test(passportStr)) {
+                    return res.status(400).json({
+                        message: 'Passport ID must start with 2 letters followed by 7 digits',
+                        location: 'passport_invalid',
+                    });
+                }
             }
 
             if (validData.meetingConfirmed == 'true') {
@@ -814,13 +836,20 @@ class b1HANA {
                 }
             }
 
-            const isAlreadyPassport = existingLead.passportVisit === 'Passport' || existingLead.passportVisit === 'Visit'
+            const isAlreadyPassport =
+                existingLead.passportVisit === 'Passport' ||
+                existingLead.passportVisit === 'Visit';
 
-            if (validData.passportVisit && ['Passport', 'Visit'].includes(validData.passportVisit)) {
+            if (
+                validData.passportVisit &&
+                ['Passport', 'Visit'].includes(validData.passportVisit)
+            ) {
                 const weekday = moment().isoWeekday().toString();
 
                 if (!isAlreadyPassport) {
-                    const operator2Query = DataRepositories.getSalesPersons({ include: ['Operator2'] });
+                    const operator2Query = DataRepositories.getSalesPersons({
+                        include: ['Operator2'],
+                    });
                     const operator2Data = await this.execute(operator2Query);
 
                     const availableOperator2s = operator2Data.filter((item) =>
@@ -828,7 +857,9 @@ class b1HANA {
                     );
 
                     if (availableOperator2s.length > 0) {
-                        const randomIndex = Math.floor(Math.random() * availableOperator2s.length);
+                        const randomIndex = Math.floor(
+                            Math.random() * availableOperator2s.length
+                        );
                         const selectedOperator2 = availableOperator2s[randomIndex];
                         validData.operator2 = selectedOperator2?.SlpCode || null;
                     } else {
@@ -836,33 +867,69 @@ class b1HANA {
                     }
                 }
 
-                if (existingLead.passportVisit === 'Visit' && validData.passportVisit === 'Passport') {
-                    const scoringQuery = DataRepositories.getSalesPersons({ include: ['Scoring'] });
+                if (
+                    existingLead.passportVisit === 'Visit' &&
+                    validData.passportVisit === 'Passport'
+                ) {
+                    const scoringQuery = DataRepositories.getSalesPersons({
+                        include: ['Scoring'],
+                    });
                     const scoringData = await this.execute(scoringQuery);
 
                     if (scoringData.length > 0) {
                         const randomIndex = Math.floor(Math.random() * scoringData.length);
                         const selectedScoring = scoringData[randomIndex];
                         validData.scoring = selectedScoring?.SlpCode || null;
-                        } else {
-                            console.warn('No Scoring operator found');
-                        }
+                    } else {
+                        console.warn('No Scoring operator found');
+                    }
                 }
             }
 
             if (validData.passportVisit && validData.passportVisit === 'Passport') {
                 if (!validData.jshshir && !validData.jshshir2) {
                     return res.status(400).json({
-                        message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
-                        location: 'jshshir_required'
+                        message: 'Passport tanlanganda JSHSHIR va IDX kiritilishi majburiy',
+                        location: 'jshshir_required',
                     });
                 }
 
                 if (!validData.idX && !validData.passportId) {
                     return res.status(400).json({
-                        message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
-                        location: 'idX_required'
+                        message: 'Passport tanlanganda JSHSHIR va IDX kiritilishi majburiy',
+                        location: 'idX_required',
                     });
+                }
+            }
+
+            if (
+                validData.jshshir ||
+                validData.passportId ||
+                validData.clientPhone ||
+                existingLead.clientPhone
+            ) {
+                try {
+                    const jshshir = validData.jshshir || validData.jshshir2 || null;
+                    const passport = validData.passportId || validData.idX || null;
+                    const phoneRaw =
+                        validData.clientPhone || existingLead.clientPhone || '';
+                    const phone = phoneRaw.replace(/\D/g, '');
+                    const query = DataRepositories.getBusinessPartners({ jshshir, passport, phone: `%${phone}` })
+                    console.log(query)
+                    const sapResult = await this.execute(query);
+                    console.log(sapResult)
+                    if (sapResult.length > 0) {
+                        const record = sapResult[0];
+                        validData.isBlocked = record.U_blocked === 'yes';
+                        validData.cardCode = record.CardCode;
+                        validData.cardName = record.CardName;
+
+                        console.log(`SAP match found → ${record.CardCode} | ${record.CardName}`);
+                    } else {
+                        console.log(`SAP: No record found for ${jshshir || passport || phone}`);
+                    }
+                } catch (sapErr) {
+                    console.warn('SAP check failed:', sapErr.message);
                 }
             }
 
