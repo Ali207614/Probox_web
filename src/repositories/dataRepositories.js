@@ -869,8 +869,7 @@ ORDER BY
             FROM ${this.db}.OCRD T0
             WHERE
                 (${jshshir ? `T0."U_jshshir" = '${jshshir}'` : '1=0'})
-               OR (${passport ? `T0."Cellular" = '${passport}'` : '1=0'})
-                LIMIT 1
+               OR (${passport ? `T0."Cellular" = '${passport}'` : '1=0'}) and  T0."U_blocked" = 'yes'
         `;
     }
 

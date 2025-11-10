@@ -887,14 +887,14 @@ class b1HANA {
             }
 
             if (validData.passportVisit && validData.passportVisit === 'Passport') {
-                if (!validData.jshshir && !validData.jshshir2) {
+                if (!validData.jshshir) {
                     return res.status(400).json({
                         message: 'Passport tanlanganda JSHSHIR va IDX kiritilishi majburiy',
                         location: 'jshshir_required',
                     });
                 }
 
-                if (!validData.idX && !validData.passportId) {
+                if (!validData.passportId) {
                     return res.status(400).json({
                         message: 'Passport tanlanganda JSHSHIR va IDX kiritilishi majburiy',
                         location: 'idX_required',
@@ -915,9 +915,7 @@ class b1HANA {
                         validData.clientPhone || existingLead.clientPhone || '';
                     const phone = phoneRaw.replace(/\D/g, '');
                     const query = DataRepositories.getBusinessPartners({ jshshir, passport, phone: `%${phone}` })
-                    console.log(query)
                     const sapResult = await this.execute(query);
-                    console.log(sapResult)
                     if (sapResult.length > 0) {
                         const record = sapResult[0];
                         validData.isBlocked = record.U_blocked === 'yes';
