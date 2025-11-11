@@ -13,7 +13,7 @@ const router = require('../src/router/index');
 const { PORT, DB_URL, conn_params, CLIENT_URL } = require('./config');
 const { ensureBucket } = require('./minio');
 const leadImageRoute = require('../src/router/leadImageRoute');
-
+const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
