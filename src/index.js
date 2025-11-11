@@ -42,11 +42,8 @@ app.use('/api', googleSheetRouter);
 app.use('/api', router);
 app.use('/api/lead-images', leadImageRoute);
 
-app.use('/api/images', express.static(path.resolve(__dirname, 'uploads'), {
-    etag: true,
-    lastModified: true,
-    maxAge: '1d',
-}));
+app.use('/api/images', express.static(path.resolve(__dirname, '../uploads')));
+
 
 // === DATABASE (MongoDB) ===
 const MONGO_URI = DB_URL || process.env.MONGO_URI || 'mongodb://localhost:27017/probox';
