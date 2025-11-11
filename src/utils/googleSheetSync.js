@@ -178,8 +178,8 @@ async function main(io) {
         }
 
         const totalLeads = uniqueLeads.length;
-        let index = 0;
 
+        let lastAssignedIndex = 0;
 
         for (const lead of uniqueLeads) {
             const weekday = getWeekdaySafe(lead.time)
@@ -188,19 +188,17 @@ async function main(io) {
                 lead.operator = null;
                 continue;
             }
-            const availableOperators = operators.filter((op) => {
-                if (!op.U_workDay) return false;
-                const workDays = op.U_workDay;
-                return workDays.includes(weekday);
-            });
+            const availableOperators = operators.filter((op) =>
+                op?.U_workDay?.includes(weekday)
+            );
 
             if (!availableOperators.length) {
                 lead.operator = null;
                 continue;
             }
 
-            lead.operator = availableOperators[index % availableOperators.length].SlpCode;
-            index++;
+            lead.operator = availableOperators[lastAssignedIndex % availableOperators.length].SlpCode;
+            lastAssignedIndex++;
         }
 
 

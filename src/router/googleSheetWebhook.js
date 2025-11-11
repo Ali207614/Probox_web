@@ -10,15 +10,19 @@ const b1Controller = require('../controllers/b1HANA');
 const b1ServiceLayer = require('../controllers/b1SL');
 const router = express.Router();
 
+// ==================== CONFIG ====================
 const AUTH_USER = process.env.GS_WEBHOOK_USER || 'sheetbot';
 const AUTH_PASS = process.env.GS_WEBHOOK_PASS || 'supersecret';
+const SHEET_ID = process.env.SHEET_ID;
+const SA_KEY_PATH = process.env.SA_KEY_PATH || './sa.json';
 
-// ==================== AUTH ====================
+// ==================== BASIC AUTH ====================
 function basicAuth(req, res, next) {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Basic ')) {
+    if (!authHeader?.startsWith('Basic ')) {
         return res.status(401).json({ message: 'Missing or invalid Authorization header' });
     }
+
     const base64Credentials = authHeader.split(' ')[1];
     const credentials = Buffer.from(base64Credentials, 'base64').toString('ascii');
     const [username, password] = credentials.split(':');
@@ -28,48 +32,31 @@ function basicAuth(req, res, next) {
     next();
 }
 
+// ==================== HELPERS ====================
 function parseSheetDate(value) {
-    // 1️⃣ Agar qiymat yo‘q bo‘lsa — bugungi sanani qaytaradi
-    if (!value) {
-        return moment().utcOffset(5).toDate();
-    }
+    if (!value) return moment().utcOffset(5).toDate();
 
-    // 2️⃣ Excel serial date (raqam) bo‘lsa
     if (!isNaN(value)) {
         const excelEpoch = new Date(Date.UTC(1899, 11, 30));
         return new Date(excelEpoch.getTime() + value * 86400000);
     }
 
-    // 3️⃣ String formatni tozalash
     const str = String(value).trim().replace(/[\/\\]/g, '.');
-
-    // 4️⃣ Ehtimoliy formatlar bilan parse qilish
     let parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY HH:mm', 'DD.MM.YYYY'], true);
 
-    // 5️⃣ Agar faqat sana kiritilgan bo‘lsa, hozirgi vaqtni qo‘shamiz
     if (parsed.isValid() && /^\d{2}\.\d{2}\.\d{4}$/.test(str)) {
         const now = moment();
-        parsed.set({
-            hour: now.hour(),
-            minute: now.minute(),
-            second: now.second(),
-        });
+        parsed.set({ hour: now.hour(), minute: now.minute(), second: now.second() });
     }
 
-    // 6️⃣ Agar format yaroqsiz bo‘lsa, bugungi sanani qaytaramiz
-    if (!parsed.isValid()) {
-        return moment().utcOffset(5).toDate();
-    }
-
-    // 7️⃣ Yaroqli bo‘lsa — Toshkent vaqti bilan qaytaramiz
-    return parsed.utcOffset(5).toDate();
+    return parsed.isValid() ? parsed.utcOffset(5).toDate() : moment().utcOffset(5).toDate();
 }
 
 function normalizePhone(input) {
     if (!input) return null;
     let digits = String(input).replace(/\D/g, '');
-    if (digits.startsWith('998') && digits.length > 9) digits = digits.slice(3);
-    if (digits.length === 10 && digits.startsWith('0')) digits = digits.slice(1);
+    if (digits.startsWith('998')) digits = digits.slice(3);
+    if (digits.startsWith('0')) digits = digits.slice(1);
     if (digits.length !== 9) return null;
     return digits;
 }
@@ -90,36 +77,44 @@ function parseWorkDays(raw) {
 
 // ==================== OPERATOR BALANCE ====================
 async function getOperatorBalance(operators) {
-    const today = moment().startOf('day').toDate();
+    const startOfDay = moment().startOf('day').toDate();
+    const endOfDay = moment().endOf('day').toDate();
 
     const todayLeads = await LeadModel.find({
-        operator: { $ne: null },
-        createdAt: { $gte: today },
+        operator: { $in: operators.map(o => o.SlpCode) },
+        createdAt: { $gte: startOfDay, $lte: endOfDay },
     }).lean();
 
     const balance = {};
-    for (const op of operators) balance[op.SlpCode] = 0;
-
-    for (const lead of todayLeads) {
+    operators.forEach(op => (balance[op.SlpCode] = 0));
+    todayLeads.forEach(lead => {
         if (balance[lead.operator] !== undefined) balance[lead.operator]++;
-    }
+    });
 
     return balance;
 }
 
+let lastAssignedIndex = 0; // xotirada navbat
+
 function pickLeastLoadedOperator(availableOperators, balance) {
     if (!availableOperators.length) return null;
 
-    const filtered = availableOperators.filter(op => balance[op.SlpCode] !== undefined);
-    const pool = filtered.length ? filtered : availableOperators;
+    const pool = availableOperators.filter(op => balance[op.SlpCode] !== undefined);
+    if (!pool.length) return null;
 
-    pool.sort((a, b) => (balance[a.SlpCode] ?? 0) - (balance[b.SlpCode] ?? 0));
+    const minCount = Math.min(...pool.map(op => balance[op.SlpCode] || 0));
+    const leastLoaded = pool.filter(op => (balance[op.SlpCode] || 0) === minCount);
 
-    const chosen = pool[0];
-    balance[chosen.SlpCode] = (balance[chosen.SlpCode] ?? 0) + 1;
+    // Round-robin navbat
+    const chosen = leastLoaded[lastAssignedIndex % leastLoaded.length];
+    lastAssignedIndex++;
+
+    // Balansni yangilaymiz
+    balance[chosen.SlpCode] = (balance[chosen.SlpCode] || 0) + 1;
     return chosen;
 }
 
+// ==================== ROUTE ====================
 router.post('/webhook', basicAuth, async (req, res) => {
     try {
         const { sheetName } = req.body;
@@ -127,25 +122,22 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: `Ignored — sheet "${sheetName}" is not Asosiy.` });
         }
 
-        const lastLead = await LeadModel.aggregate([
+        // === Oxirgi lead raqamini topamiz
+        const [lastLead] = await LeadModel.aggregate([
             {
                 $match: {
                     $or: [
-                        { n: { $type: "int" } },
-                        { n: { $type: "long" } },
-                        { n: { $type: "double" } },
-                        { n: { $type: "string", $regex: /^\d+$/ } },
+                        { n: { $type: 'int' } },
+                        { n: { $type: 'long' } },
+                        { n: { $type: 'double' } },
+                        { n: { $type: 'string', $regex: /^\d+$/ } },
                     ],
                 },
             },
             {
                 $addFields: {
                     nNumeric: {
-                        $cond: [
-                            { $eq: [{ $type: "$n" }, "string"] },
-                            { $toInt: "$n" },
-                            "$n",
-                        ],
+                        $cond: [{ $eq: [{ $type: '$n' }, 'string'] }, { $toInt: '$n' }, '$n'],
                     },
                 },
             },
@@ -153,25 +145,21 @@ router.post('/webhook', basicAuth, async (req, res) => {
             { $limit: 1 },
         ]);
 
-        const nValue = lastLead?.[0]?.nNumeric || 0;
-
-        const lastRow = nValue > 51 ? nValue - 50 : 2;
-        const nextStart = lastRow;
+        const nValue = lastLead?.nNumeric || 0;
+        const nextStart = nValue > 50 ? nValue - 50 : 2;
         const nextEnd = nextStart + 100;
-
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
         // === Google Sheets
-        const sheetId = process.env.SHEET_ID;
-        const saKeyPath = process.env.SA_KEY_PATH || './sa.json';
         const auth = new GoogleAuth({
-            keyFile: path.resolve(saKeyPath),
+            keyFile: path.resolve(SA_KEY_PATH),
             scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
         });
         const sheets = google.sheets({ version: 'v4', auth });
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
-        const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
+        const response = await sheets.spreadsheets.values.get({ spreadsheetId: SHEET_ID, range });
         const rows = response.data.values || [];
+
         if (!rows.length) {
             console.log('⚠️ No new rows found.');
             return res.status(200).json({ message: 'No new rows detected.' });
@@ -187,10 +175,8 @@ router.post('/webhook', basicAuth, async (req, res) => {
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             const rowNumber = nextStart + i;
-            const parsedTime =  parseSheetDate(row[3]);
-
+            const parsedTime = parseSheetDate(row[3]);
             const weekday = getWeekdaySafe(parsedTime);
-            console.log(weekday ,' bu hafta kuni')
             const source = (row[2] || '').trim();
 
             let operator = null;
@@ -203,15 +189,9 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
             }
 
-            let clientName = (row[0] || '').trim().replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
-            if (!clientName) {
-                const timestamp = moment().format('YYYYMMDD_HHmmss');
-                clientName = `Mijoz_${timestamp}_${rowNumber}`;
-            }
-
-            if (clientName.length > 30) {
-                clientName = clientName.slice(0, 30).trim() + '...';
-            }
+            let clientName = (row[0] || '').trim().replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '');
+            if (!clientName) clientName = `Mijoz_${moment().format('YYYYMMDD_HHmmss')}_${rowNumber}`;
+            if (clientName.length > 30) clientName = clientName.slice(0, 30).trim() + '...';
 
             const clientPhone = normalizePhone(row[1]);
             if (!clientPhone) continue;
@@ -233,7 +213,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
         // === SAP bilan tekshirish
         const phones = leads.map(l => l.clientPhone).filter(Boolean);
-        let existingMap = new Map();
+        const existingMap = new Map();
 
         if (phones.length > 0) {
             const phoneList = phones.map(p => `'${p}'`).join(', ');
@@ -257,14 +237,13 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 lead.cardCode = found.CardCode;
                 lead.cardName = found.CardName;
             } else {
-                const newCode = await b1ServiceLayer.createBusinessPartner({
+                const newBP = await b1ServiceLayer.createBusinessPartner({
                     Phone1: cleanPhone,
                     CardName: lead.clientName,
                 });
-
-                if (newCode?.CardCode) {
-                    lead.cardCode = newCode.CardCode;
-                    lead.cardName = newCode.CardName;
+                if (newBP?.CardCode) {
+                    lead.cardCode = newBP.CardCode;
+                    lead.cardName = newBP.CardName;
                 }
             }
         }
@@ -289,7 +268,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
         }
 
         const io = req.app.get('io');
-        if (io && inserted.length > 0) io.emit('new_leads', inserted);
+        if (io && inserted.length > 0) io.emit('new_leads', {...inserted, SlpCode: inserted.operator});
 
         console.log(`📥 ${inserted.length} new rows inserted successfully.`);
         return res.status(200).json({ message: `Inserted ${inserted.length} new rows.` });

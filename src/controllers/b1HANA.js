@@ -435,16 +435,16 @@ class b1HANA {
                 aliment,
                 officialSalaryMin,
                 officialSalaryMax,
-                finalLimit, // endi yes/no/unmarked sifatida
+                finalLimit,
                 finalPercentageMin,
                 finalPercentageMax,
                 scoring,
                 seller,
+                isBlocked
             } = req.query;
 
             const filter = {};
 
-            // === Helperlar ===
             const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
             const parseArray = (val) => {
@@ -527,6 +527,7 @@ class b1HANA {
             parseYesNoUnmarked(mib, 'mib');
             parseYesNoUnmarked(aliment, 'aliment');
             parseYesNoUnmarked(finalLimit, 'finalLimit', true);
+            parseYesNoUnmarked(isBlocked, 'isBlocked');
 
             if (passportId) {
                 if (passportId === 'yes') {
@@ -716,8 +717,6 @@ class b1HANA {
             const n = await generateShortId('PRO');
             const time = new Date();
 
-
-
             let dataObj = {
                 n,
                 source,
@@ -733,7 +732,11 @@ class b1HANA {
 
             if(source === 'Organika'){
                 dataObj= {...dataObj ,meetingConfirmed: true,meetingConfirmedDate: new Date(),branch2: branch2, seller: seller }
+
             }
+            const io = req.app.get('io');
+            if (io) io.emit('new_leads', {...dataObj,SlpCode:dataObj.seller || dataObj.operator})
+
             const lead = await LeadModel.create(dataObj);
 
             return res.status(201).json({
@@ -812,7 +815,7 @@ class b1HANA {
                 const jshshirStr = String(validData.jshshir);
                 if (!/^\d{14}$/.test(jshshirStr)) {
                     return res.status(400).json({
-                        message: 'JSHSHIR must be 14 digits long and contain only numbers',
+                        message: 'JSSHR 14 raqamdan iborat bo\'lishi kerak',
                         location: 'jshshir_invalid',
                     });
                 }
@@ -822,7 +825,7 @@ class b1HANA {
                 const passportStr = String(validData.passportId);
                 if (!/^[A-Z]{2}\d{7}$/.test(passportStr)) {
                     return res.status(400).json({
-                        message: 'Passport ID must start with 2 letters followed by 7 digits',
+                        message: 'Passport 2 ta harf va 7 raqamdan iborat bo\'lishi kerak',
                         location: 'passport_invalid',
                     });
                 }
@@ -836,9 +839,21 @@ class b1HANA {
                 }
             }
 
-            const isAlreadyPassport =
-                existingLead.passportVisit === 'Passport' ||
-                existingLead.passportVisit === 'Visit';
+            if (validData.passportVisit && validData.passportVisit === 'Passport') {
+                if (!validData.jshshir || !validData.jshshir2) {
+                    return res.status(400).json({
+                        message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
+                        location: 'jshshir_required'
+                    });
+                }
+
+                if (!validData.idX || !validData.passportId) {
+                    return res.status(400).json({
+                        message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
+                        location: 'idX_required'
+                    });
+                }
+            }
 
             if (
                 validData.passportVisit &&
@@ -879,27 +894,21 @@ class b1HANA {
                         const randomIndex = Math.floor(Math.random() * scoringData.length);
                         const selectedScoring = scoringData[randomIndex];
                         validData.scoring = selectedScoring?.SlpCode || null;
+                        const io = req.app.get('io');
+                        if (io) io.emit('scoring_lead', { n: existingLead.n,
+                            _id:existingLead._id,
+                            source:existingLead.source,
+                            clientName:existingLead.clientName ,
+                            time: existingLead.time,
+                            clientPhone :existingLead.clientPhone ,
+                            SlpCode: validData.scoring
+                        });
                     } else {
                         console.warn('No Scoring operator found');
                     }
                 }
             }
 
-            if (validData.passportVisit && validData.passportVisit === 'Passport') {
-                if (!validData.jshshir || !validData.jshshir2) {
-                    return res.status(400).json({
-                        message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
-                        location: 'jshshir_required'
-                    });
-                }
-
-                if (!validData.idX || !validData.passportId) {
-                    return res.status(400).json({
-                        message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
-                        location: 'idX_required'
-                    });
-                }
-            }
 
 
             if (
