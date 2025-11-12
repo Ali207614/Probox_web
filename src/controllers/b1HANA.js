@@ -646,7 +646,7 @@ class b1HANA {
 
     createLead = async (req, res, next) => {
         try {
-            const { source, clientName, clientPhone, branch2, seller, source2, comment } = req.body;
+            const { source, clientName, clientPhone, branch2, seller, source2, comment , operator1 } = req.body;
 
             const startOfDay = moment().startOf('day').toDate();
             const endOfDay = moment().endOf('day').toDate();
@@ -670,7 +670,6 @@ class b1HANA {
                 });
             }
 
-            // === 3️⃣ Telefonni validatsiya ===
             const cleanedPhone = validatePhone(clientPhone);
             if (!cleanedPhone) {
                 return res.status(400).json({
@@ -678,11 +677,10 @@ class b1HANA {
                 });
             }
 
-            // === 4️⃣ Majburiy maydonlar manba bo‘yicha ===
             const requiredFieldsBySource = {
                 Organika: ['clientName', 'clientPhone', 'branch2', 'seller'],
                 Community: ['clientName', 'clientPhone'],
-                'Kiruvchi qongiroq': ['clientName', 'clientPhone'],
+                'Kiruvchi qongiroq': ['clientName', 'clientPhone','operator1'],
                 Manychat: ['clientName', 'clientPhone'],
                 Meta: ['clientName', 'clientPhone'],
             };
@@ -709,7 +707,7 @@ class b1HANA {
                 });
             }
 
-            let operator = null;
+            let operator = operator1 || null;
             if (source !== 'Organika') {
                 operator = await assignBalancedOperator();
             }
