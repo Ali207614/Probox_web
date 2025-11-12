@@ -810,7 +810,7 @@ class b1HANA {
 
             // === Validation checks
             if (validData.jshshir) {
-                const jshshirStr = String(validData.jshshir);
+                const jshshirStr = String(validData.jshshir).trim();
                 if (!/^\d{14}$/.test(jshshirStr)) {
                     return res.status(400).json({
                         message: 'JSSHR 14 raqamdan iborat bo\'lishi kerak',
@@ -820,7 +820,7 @@ class b1HANA {
             }
 
             if (validData.passportId) {
-                const passportStr = String(validData.passportId);
+                const passportStr = String(validData.passportId).trim();
                 if (!/^[A-Z]{2}\d{7}$/.test(passportStr)) {
                     return res.status(400).json({
                         message: 'Passport 2 ta harf va 7 raqamdan iborat bo\'lishi kerak',
