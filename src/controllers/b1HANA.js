@@ -742,7 +742,7 @@ class b1HANA {
             }
 
             let operator = operator1 || null;
-            if (source !== 'Organika' && operator === null) {
+            if (source !== 'Organika' && !operator) {
                 operator = await assignBalancedOperator();
             }
 
