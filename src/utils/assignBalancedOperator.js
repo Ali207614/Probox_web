@@ -1,7 +1,6 @@
 const moment = require('moment');
 const LeadModel = require('../models/lead-model');
 
-
 let lastAssignedIndex = 0;
 
 async function assignBalancedOperator() {
@@ -14,7 +13,14 @@ async function assignBalancedOperator() {
         throw new Error('No operators found in SAP');
     }
 
-    const weekday = moment().isoWeekday().toString();
+    const now = moment();
+    let weekday;
+    console.log(now.hour())
+    if (now.hour() >= 19) {
+        weekday = moment().add(1, 'day').isoWeekday().toString();
+    } else {
+        weekday = moment().isoWeekday().toString();
+    }
 
     const availableOperators = operators.filter(
         (op) => op?.U_workDay && op.U_workDay.includes(weekday)
@@ -60,6 +66,5 @@ async function assignBalancedOperator() {
 
     return leastLoaded[0].SlpCode;
 }
-
 
 module.exports = assignBalancedOperator;

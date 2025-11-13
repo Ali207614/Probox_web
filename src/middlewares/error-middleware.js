@@ -8,7 +8,8 @@ module.exports = function (err, req, res, next) {
     else if (err instanceof multer.MulterError || err.message === 'Invalid file type') {
         return res.status(400).json({ message: err.message });
     }
+    console.error();
 
-    return res.status(500).json({ message: 'Непредвиденная ошибка' })
+    return res.status(500).json({ message: err?.message || 'Непредвиденная ошибка' })
 
 };

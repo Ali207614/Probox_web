@@ -6,7 +6,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const compression = require('compression');
 const hanaClient = require('@sap/hana-client');
-
+const ErrorMiddleware = require('./middlewares/error-middleware');
 const { main } = require('../src/utils/googleSheetSync');
 const googleSheetRouter = require('../src/router/googleSheetWebhook');
 const router = require('../src/router/index');
@@ -27,6 +27,7 @@ const io = new Server(server, {
 });
 
 // === MIDDLEWARES ===
+
 app.use(cors({
     origin: '*',
     credentials: true,
@@ -44,7 +45,7 @@ app.use('/api/lead-images', leadImageRoute);
 
 app.use('/api/images', express.static(path.resolve(__dirname, '../uploads')));
 
-
+app.use(ErrorMiddleware)
 // === DATABASE (MongoDB) ===
 const MONGO_URI = DB_URL || process.env.MONGO_URI || 'mongodb://localhost:27017/probox';
 mongoose

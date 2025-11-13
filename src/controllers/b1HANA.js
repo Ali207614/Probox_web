@@ -10,7 +10,7 @@ const InvoiceModel = require("../models/invoice-model");
 const CommentModel = require("../models/comment-model")
 const UserModel = require("../models/user-model")
 const b1Sl = require('./b1SL')
-const { shuffleArray, parseLocalDateString, addAndCondition} = require("../helpers");
+const { shuffleArray, parseLocalDateString, addAndCondition,groupSearchResults } = require("../helpers");
 const moment = require('moment-timezone')
 const fsPromises = require('fs/promises');
 const {notIncExecutorRole} = require("../config");
@@ -32,6 +32,40 @@ class b1HANA {
             return dbService.execute(sql);
         } catch (e) {
             throw new Error(e);
+        }
+    };
+
+    getItems = async (req, res, next) => {
+        try {
+            const {
+                search,
+                whsCode,
+                limit = 20,
+                offset = 0,
+                ...filters
+            } = req.query;
+
+            if (!whsCode) {
+                return next(ApiError.BadRequest('WhsCode is required'));
+            }
+
+            const query = DataRepositories.getItems({
+                search,
+                filters,
+                limit,
+                offset,
+                whsCode
+            });
+
+            const rows = await this.execute(query);
+
+            res.json({
+                total: rows.length,
+                items: rows
+            });
+        }
+        catch (e) {
+            next(e);
         }
     };
 
@@ -708,7 +742,7 @@ class b1HANA {
             }
 
             let operator = operator1 || null;
-            if (source !== 'Organika') {
+            if (source !== 'Organika' && operator === null) {
                 operator = await assignBalancedOperator();
             }
 
@@ -2079,6 +2113,8 @@ class b1HANA {
 
     updateComment = async (req, res, next) => {
         try {
+
+
             const { id } = req.params;
             const { Comments } = req.body;
             const files = req.files;
@@ -2087,6 +2123,16 @@ class b1HANA {
             if (!existing) {
                 return res.status(404).json({ message: 'Comment not found' });
             }
+
+            const getFilename = (value) => {
+                if (!value) return null;
+
+                if (typeof value === 'string') return value;
+
+                if (typeof value === 'object' && value.url) return value.url;
+
+                return null;
+            };
 
             const hasComment = !!Comments;
             const hasImage = files?.image?.length > 0;
@@ -2113,25 +2159,29 @@ class b1HANA {
                 updatePayload.Image = null;
                 updatePayload.Audio = null;
 
-                // Eski fayllarni o‘chirish
-                if (existing.Image) {
-                    await fsPromises.unlink(path.join(uploadsDir, existing.Image)).catch(() => {});
+                const oldImage = getFilename(existing.Image);
+                const oldAudio = getFilename(existing.Audio);
+
+                if (oldImage) {
+                    await fsPromises.unlink(path.join(uploadsDir, oldImage)).catch(() => {});
                 }
-                if (existing.Audio) {
-                    await fsPromises.unlink(path.join(uploadsDir, existing.Audio)).catch(() => {});
+                if (oldAudio) {
+                    await fsPromises.unlink(path.join(uploadsDir, oldAudio)).catch(() => {});
                 }
             }
+
 
             if (hasImage) {
                 const file = files.image[0];
 
+                const oldImage = getFilename(existing.Image);
+                const oldAudio = getFilename(existing.Audio);
 
-                // Eski fayllarni o‘chirish
-                if (existing.Image) {
-                    await fsPromises.unlink(path.join(file.destination, existing.Image)).catch(() => {});
+                if (oldImage) {
+                    await fsPromises.unlink(path.join(file.destination, oldImage)).catch(() => {});
                 }
-                if (existing.Audio) {
-                    await fsPromises.unlink(path.join(file.destination, existing.Audio)).catch(() => {});
+                if (oldAudio) {
+                    await fsPromises.unlink(path.join(file.destination, oldAudio)).catch(() => {});
                 }
 
                 updatePayload.Image = file.filename;
@@ -2141,20 +2191,24 @@ class b1HANA {
             if (hasAudio) {
                 const file = files.audio[0];
 
-                if (existing.Audio) {
-                    await fsPromises.unlink(path.join(file.destination, existing.Audio)).catch(() => {});
+                const oldImage = getFilename(existing.Image);
+                const oldAudio = getFilename(existing.Audio);
+
+                if (oldAudio) {
+                    await fsPromises.unlink(path.join(file.destination, oldAudio)).catch(() => {});
                 }
-                if (existing.Image) {
-                    await fsPromises.unlink(path.join(file.destination, existing.Image)).catch(() => {});
+                if (oldImage) {
+                    await fsPromises.unlink(path.join(file.destination, oldImage)).catch(() => {});
                 }
 
                 updatePayload.Audio = {
                     url: file.filename,
-                    duration: get(req,'body.audioDuration', 0),
+                    duration: get(req, 'body.audioDuration', 0),
                 };
                 updatePayload.Image = null;
                 updatePayload.Comments = null;
             }
+
 
 
             updatePayload.updatedAt = new Date();

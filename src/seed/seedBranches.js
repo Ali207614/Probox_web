@@ -1,25 +1,25 @@
 const mongoose = require('mongoose');
 const Branch = require('../models/branch-model'); // kerakli yo‘lni moslang
-
+require('dotenv').config();
 (async () => {
     try {
         // === 1️⃣ MongoDB ga ulanish
-        await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/Probox_web', {
+        await mongoose.connect(process.env.DB_URL, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         });
 
         console.log('🟢 MongoDB connected.');
 
-        // === 2️⃣ Avval eski filiallarni tozalaymiz (ixtiyoriy)
+
         await Branch.deleteMany({});
-        console.log('🧹 Eski filiallar o‘chirildi.');
+
 
         // === 3️⃣ Yangi filiallarni qo‘shamiz
         const branches = [
-            { id: 1, name: 'Qoratosh', region: 'Toshkent', address: 'Qoratosh ko‘chasi', phone: '+998901111111' },
-            { id: 2, name: 'Sag‘bon', region: 'Toshkent', address: 'Sag‘bon ko‘chasi', phone: '+998902222222' },
-            { id: 3, name: 'Parkent', region: 'Toshkent', address: 'Parkent ko‘chasi', phone: '+998903333333' },
+            { id: 1, code:'02', name: 'Qoratosh', region: 'Toshkent', address: 'Qoratosh ko‘chasi', phone: '+998901111111' },
+            { id: 2, code:'01', name: 'Sag‘bon', region: 'Toshkent', address: 'Sag‘bon ko‘chasi', phone: '+998902222222' },
+            { id: 3, code:'04', name: 'Parkent', region: 'Toshkent', address: 'Parkent ko‘chasi', phone: '+998903333333' },
         ];
 
         const inserted = await Branch.insertMany(branches);

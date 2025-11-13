@@ -10,13 +10,11 @@ const b1Controller = require('../controllers/b1HANA');
 const b1ServiceLayer = require('../controllers/b1SL');
 const router = express.Router();
 
-// ==================== CONFIG ====================
 const AUTH_USER = process.env.GS_WEBHOOK_USER || 'sheetbot';
 const AUTH_PASS = process.env.GS_WEBHOOK_PASS || 'supersecret';
 const SHEET_ID = process.env.SHEET_ID;
 const SA_KEY_PATH = process.env.SA_KEY_PATH || './sa.json';
 
-// ==================== BASIC AUTH ====================
 function basicAuth(req, res, next) {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Basic ')) {
@@ -32,7 +30,6 @@ function basicAuth(req, res, next) {
     next();
 }
 
-// ==================== HELPERS ====================
 function parseSheetDate(value) {
     if (!value) return moment().utcOffset(5).toDate();
 
@@ -62,9 +59,19 @@ function normalizePhone(input) {
 }
 
 function getWeekdaySafe(dateLike) {
-    const m = moment(dateLike);
-    return m.isValid() ? m.isoWeekday().toString() : moment().isoWeekday().toString();
+    let m = moment(dateLike);
+
+    if (!m.isValid()) {
+        m = moment();
+    }
+
+    if (m.hour() >= 19) {
+        return m.add(1, 'day').isoWeekday().toString();
+    }
+
+    return m.isoWeekday().toString();
 }
+
 
 function parseWorkDays(raw) {
     if (!raw) return [];
@@ -75,7 +82,6 @@ function parseWorkDays(raw) {
     return Array.from(new Set(normalized.split(',').filter(Boolean)));
 }
 
-// ==================== OPERATOR BALANCE ====================
 async function getOperatorBalance(operators) {
     const startOfDay = moment().startOf('day').toDate();
     const endOfDay = moment().endOf('day').toDate();
@@ -94,7 +100,7 @@ async function getOperatorBalance(operators) {
     return balance;
 }
 
-let lastAssignedIndex = 0; // xotirada navbat
+let lastAssignedIndex = 0;
 
 function pickLeastLoadedOperator(availableOperators, balance) {
     if (!availableOperators.length) return null;
@@ -105,16 +111,13 @@ function pickLeastLoadedOperator(availableOperators, balance) {
     const minCount = Math.min(...pool.map(op => balance[op.SlpCode] || 0));
     const leastLoaded = pool.filter(op => (balance[op.SlpCode] || 0) === minCount);
 
-    // Round-robin navbat
     const chosen = leastLoaded[lastAssignedIndex % leastLoaded.length];
     lastAssignedIndex++;
 
-    // Balansni yangilaymiz
     balance[chosen.SlpCode] = (balance[chosen.SlpCode] || 0) + 1;
     return chosen;
 }
 
-// ==================== ROUTE ====================
 router.post('/webhook', basicAuth, async (req, res) => {
     try {
         const { sheetName } = req.body;
@@ -122,7 +125,6 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: `Ignored — sheet "${sheetName}" is not Asosiy.` });
         }
 
-        // === Oxirgi lead raqamini topamiz
         const [lastLead] = await LeadModel.aggregate([
             {
                 $match: {
@@ -165,7 +167,6 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: 'No new rows detected.' });
         }
 
-        // === Operatorlar
         const query = DataRepositories.getSalesPersons({ include: ['Operator1'] });
         const operators = await b1Controller.execute(query);
         const operatorBalance = await getOperatorBalance(operators);
@@ -211,7 +212,6 @@ router.post('/webhook', basicAuth, async (req, res) => {
             return res.status(200).json({ message: 'No valid leads.' });
         }
 
-        // === SAP bilan tekshirish
         const phones = leads.map(l => l.clientPhone).filter(Boolean);
         const existingMap = new Map();
 

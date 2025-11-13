@@ -14,6 +14,8 @@ router.use('/google-sheet', googleSheetWebhook);
 
 router.get('/executors', authMiddleware, b1HANA.executors)
 
+router.get('/items', authMiddleware, b1HANA.getItems)
+
 router.get('/branches', authMiddleware, b1HANA.findAllBranch)
 
 router.get('/rate', authMiddleware, b1HANA.getRate)

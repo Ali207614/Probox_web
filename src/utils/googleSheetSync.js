@@ -30,10 +30,17 @@ function chunk(arr, size) {
 }
 
 function getWeekdaySafe(dateLike) {
-    const m = moment(dateLike);
+    let m = moment(dateLike);
+
     if (!m.isValid()) {
-        return moment().isoWeekday().toString(); // '1'..'7'
+        m = moment();
     }
+
+    const hour = m.hour();
+    if (hour >= 19) {
+        return m.add(1, 'day').isoWeekday().toString();
+    }
+
     return m.isoWeekday().toString();
 }
 

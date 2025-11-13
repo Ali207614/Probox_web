@@ -34,6 +34,32 @@ function getSession() {
     return docs
 }
 
+function groupSearchResults(rows) {
+    const map = {};
+
+    for (const row of rows) {
+        if (!map[row.ItemCode]) {
+            map[row.ItemCode] = {
+                ItemCode: row.ItemCode,
+                ItemName: row.ItemName,
+                U_Model: row.U_Model,
+                PhonePrice: row.PhonePrice,
+                LastPrice: row.LastPrice,
+                warehouses: []
+            };
+        }
+
+        map[row.ItemCode].warehouses.push({
+            WhsCode: row.WhsCode,
+            OnHand: row.OnHand,
+            WhsName: row.WhsName
+        });
+    }
+
+    return Object.values(map);
+}
+
+
 
 
 module.exports = {
@@ -42,5 +68,5 @@ module.exports = {
     shuffleArray,
     parseLocalDateString,
     addAndCondition,
-
+    groupSearchResults
 }
