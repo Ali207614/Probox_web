@@ -45,10 +45,6 @@ class b1HANA {
                 ...filters
             } = req.query;
 
-            if (!whsCode) {
-                return next(ApiError.BadRequest('WhsCode is required'));
-            }
-
             const query = DataRepositories.getItems({
                 search,
                 filters,
@@ -506,7 +502,8 @@ class b1HANA {
                 finalPercentageMax,
                 scoring,
                 seller,
-                isBlocked
+                isBlocked,
+                meetingHappened
             } = req.query;
 
             const filter = {};
@@ -519,12 +516,20 @@ class b1HANA {
                 return val.split(',').map((v) => v.trim()).filter(Boolean);
             };
 
+            const normalizePhone = (str) => {
+                if (!str) return '';
+                return str.replace(/\D+/g, '');
+            };
+
             if (search) {
                 const safeSearch = escapeRegex(search.trim());
+                const phoneSearch = normalizePhone(search);
+
                 filter.$or = [
                     { clientName: { $regex: safeSearch, $options: 'i' } },
-                    { clientPhone: { $regex: safeSearch, $options: 'i' } },
                     { comment: { $regex: safeSearch, $options: 'i' } },
+                    { clientPhone: { $regex: safeSearch.replace(/\s+/g, ''), $options: 'i' } },
+                    { clientPhone: { $regex: phoneSearch, $options: '' } },
                 ];
             }
 
@@ -594,6 +599,7 @@ class b1HANA {
             parseYesNoUnmarked(aliment, 'aliment');
             parseYesNoUnmarked(finalLimit, 'finalLimit', true);
             parseYesNoUnmarked(isBlocked, 'isBlocked');
+            parseYesNoUnmarked(meetingHappened, 'meetingHappened');
 
             if (passportId) {
                 if (passportId === 'yes') {
@@ -653,7 +659,7 @@ class b1HANA {
             const total = await LeadModel.countDocuments(filter);
             const rawData = await LeadModel.find(filter)
                 .select(
-                    '_id cardCode invoiceCreated invoiceDocEntry invoiceDocNum invoiceCreatedAt isBlocked status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
+                    '_id meetingHappened cardCode invoiceCreated invoiceDocEntry invoiceDocNum invoiceCreatedAt isBlocked status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
                 )
                 .sort({ time: -1 })
                 .skip(skip)
@@ -663,6 +669,7 @@ class b1HANA {
             const data = rawData.map((item) => ({
                 n: item.n,
                 id: item._id,
+                meetingHappened: item.meetingHappened || null,
                 cardCode:item?.cardCode || null,
                 invoiceCreated:item.invoiceCreated || null,
                 invoiceDocEntry:item.invoiceDocEntry || null,

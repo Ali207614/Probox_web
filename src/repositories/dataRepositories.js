@@ -918,39 +918,33 @@ ORDER BY
 
     getItemSeries({ itemCode, whsCode,}){
         return `
-SELECT 
-    R."ItemCode",
-    R."DistNumber",
-    R."SysNumber",
-    Q."Quantity"    
-FROM ${this.db}.OSRN R
-JOIN  ${this.db}.OSRQ Q ON Q."ItemCode" = R."ItemCode" 
-           AND Q."SysNumber" = R."SysNumber" and Q."WhsCode" ='${whsCode}'
-WHERE 
-    R."ItemCode" = '${itemCode}'
-    AND Q."Quantity" > 0;`
+            SELECT 
+                R."ItemCode",
+                R."DistNumber",
+                R."SysNumber",
+                Q."Quantity"    
+            FROM ${this.db}.OSRN R
+            JOIN  ${this.db}.OSRQ Q ON Q."ItemCode" = R."ItemCode" 
+                       AND Q."SysNumber" = R."SysNumber" and Q."WhsCode" ='${whsCode}'
+            WHERE 
+                R."ItemCode" = '${itemCode}'
+                AND Q."Quantity" > 0;`
     }
 
 
-    getItems({
+           getItems({
                  search,
                  filters = {},
                  limit = 50,
                  offset = 0,
-                 sortBy = '"ItemCode"',
-                 sortOrder = 'ASC',
                  whsCode
              }) {
         let whereClauses = ['1=1'];
 
-        if (!whsCode) {
-            throw new Error('Warehouse (whsCode) is required');
+        if (whsCode) {
+            whereClauses.push(`T0."WhsCode" = '${whsCode}'`);
         }
 
-        // Majburiy warehouse filter
-        whereClauses.push(`T0."WhsCode" = '${whsCode}'`);
-
-        // Search LOWER
         if (search) {
             const s = search.toLowerCase();
             whereClauses.push(`
