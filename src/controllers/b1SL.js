@@ -153,6 +153,62 @@ class b1SL {
             });
     };
 
+    createInvoice = async (req, res, next) => {
+        const leadId = req.body.leadId;
+        delete req.body.leadId;
+
+        const body = req.body;
+
+        const axiosInstance = Axios.create({
+            baseURL: `${this.api}`,
+            timeout: 30000,
+            headers: {
+                'Cookie':
+                    get(getSession(), 'Cookie[0]', '') +
+                    get(getSession(), 'Cookie[1]', ''),
+                'SessionId': get(getSession(), 'SessionId', ''),
+            },
+            httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+        });
+
+        try {
+            const { data } = await axiosInstance.post(`/Invoice`, body);
+
+            // ✔ SUCCESS → lead update qilish
+            if (leadId) {
+                await LeadModel.updateOne(
+                    { _id: leadId },
+                    {
+                        $set: {
+                            invoiceCreated: true,
+                            invoiceDocEntry: data?.DocEntry || null,
+                            invoiceDocNum: data?.DocNum || null,
+                            invoiceCreatedAt: new Date(),
+                        },
+                    }
+                );
+            }
+
+            return {
+                status: true,
+                invoice: data,
+            };
+
+        } catch (err) {
+            if (get(err, 'response.status') == 401) {
+                const token = await this.auth();
+                if (token.status) return await this.createInvoice(req, res, next);
+                return { status: false, message: token.message };
+            }
+
+            console.log(get(err, 'response.data.error.message.value'), ' SAP ERROR');
+
+            return {
+                status: false,
+                message: get(err, 'response.data.error.message.value'),
+            };
+        }
+    };
 
 }
 

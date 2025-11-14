@@ -16,6 +16,8 @@ router.get('/executors', authMiddleware, b1HANA.executors)
 
 router.get('/items', authMiddleware, b1HANA.getItems)
 
+router.get('/item-series', authMiddleware, b1HANA.getItemSeries)
+
 router.get('/branches', authMiddleware, b1HANA.findAllBranch)
 
 router.get('/rate', authMiddleware, b1HANA.getRate)

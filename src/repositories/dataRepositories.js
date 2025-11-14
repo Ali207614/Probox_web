@@ -916,6 +916,21 @@ ORDER BY
 
     }
 
+    getItemSeries({ itemCode, whsCode,}){
+        return `
+SELECT 
+    R."ItemCode",
+    R."DistNumber",
+    R."SysNumber",
+    Q."Quantity"    
+FROM ${this.db}.OSRN R
+JOIN  ${this.db}.OSRQ Q ON Q."ItemCode" = R."ItemCode" 
+           AND Q."SysNumber" = R."SysNumber" and Q."WhsCode" ='${whsCode}'
+WHERE 
+    R."ItemCode" = '${itemCode}'
+    AND Q."Quantity" > 0;`
+    }
+
 
     getItems({
                  search,

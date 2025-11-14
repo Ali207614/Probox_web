@@ -57,6 +57,38 @@ class b1HANA {
                 whsCode
             });
 
+            console.log(query)
+
+            const rows = await this.execute(query);
+
+            res.json({
+                total: rows.length,
+                items: rows
+            });
+        }
+        catch (e) {
+            next(e);
+        }
+    };
+
+    getItemSeries = async (req, res, next) => {
+        try {
+            const {
+                itemCode,
+                whsCode,
+            } = req.query;
+
+            if (!whsCode || !itemCode) {
+                return next(ApiError.BadRequest('WhsCode/ItemCode is required '));
+            }
+
+            const query = DataRepositories.getItemSeries({
+                whsCode,
+                itemCode,
+            });
+
+            console.log(query)
+
             const rows = await this.execute(query);
 
             res.json({
@@ -621,7 +653,7 @@ class b1HANA {
             const total = await LeadModel.countDocuments(filter);
             const rawData = await LeadModel.find(filter)
                 .select(
-                    '_id isBlocked status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
+                    '_id cardCode invoiceCreated invoiceDocEntry invoiceDocNum invoiceCreatedAt isBlocked status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
                 )
                 .sort({ time: -1 })
                 .skip(skip)
@@ -631,6 +663,11 @@ class b1HANA {
             const data = rawData.map((item) => ({
                 n: item.n,
                 id: item._id,
+                cardCode:item?.cardCode || null,
+                invoiceCreated:item.invoiceCreated || null,
+                invoiceDocEntry:item.invoiceDocEntry || null,
+                invoiceDocNum:item.invoiceDocNum || null,
+                invoiceCreatedAt:item.invoiceCreatedAt || null,
                 status: item.status,
                 isBlocked: item?.isBlocked ?? false,
                 clientName: item.clientName || '',
@@ -1016,6 +1053,11 @@ class b1HANA {
                 id: lead._id,
                 n: lead.n ?? null,
                 status: lead?.status,
+                cardCode:lead?.cardCode || null,
+                invoiceCreated : lead?.invoiceCreated || null,
+                invoiceDocEntry :lead?.invoiceDocEntry || null,
+                invoiceDocNum :lead?.invoiceDocNum || null,
+                invoiceCreatedAt:lead?.invoiceCreatedAt || null,
                 isBlocked: lead?.isBlocked ?? false,
                 comment: lead.comment ?? '',
                 limit: lead.limit ?? null,
@@ -1107,6 +1149,7 @@ class b1HANA {
             const data = branches.map((b) => ({
                 _id: b._id,
                 id: b.id,
+                code:b?.code,
                 name: b.name,
                 region: b.region || null,
                 address: b.address || null,

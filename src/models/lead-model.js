@@ -69,6 +69,26 @@ const LeadSchema = new Schema(
             enum: ['Archived', 'Closed', 'Active', 'Blocked','Processing'],
             default: 'Active',
         },
+        invoiceCreated: {
+            type: Boolean,
+            default: false,
+            description: "Invoice SAP B1 orqali muvaffaqiyatli yaratildimi"
+        },
+        invoiceDocEntry: {
+            type: String,
+            default: null,
+            description: "SAP Invoice DocEntry"
+        },
+        invoiceDocNum: {
+            type: String,
+            default: null,
+            description: "SAP Invoice DocNum"
+        },
+        invoiceCreatedAt: {
+            type: Date,
+            default: null,
+            description: "Invoice yaratilgan sana"
+        }
     },
         { timestamps: true }
 );
