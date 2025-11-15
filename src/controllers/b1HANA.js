@@ -659,7 +659,7 @@ class b1HANA {
             const total = await LeadModel.countDocuments(filter);
             const rawData = await LeadModel.find(filter)
                 .select(
-                    '_id acceptReason meetingHappened cardCode invoiceCreated invoiceDocEntry invoiceDocNum invoiceCreatedAt isBlocked status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
+                    '_id acceptedReason meetingHappened cardCode invoiceCreated invoiceDocEntry invoiceDocNum invoiceCreatedAt isBlocked status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
                 )
                 .sort({ time: -1 })
                 .skip(skip)
@@ -669,7 +669,7 @@ class b1HANA {
             const data = rawData.map((item) => ({
                 n: item.n,
                 id: item._id,
-                acceptReason: item?.acceptReason || null,
+                acceptedReason: item?.acceptedReason || null,
                 meetingHappened: item.meetingHappened || null,
                 cardCode:item?.cardCode || null,
                 invoiceCreated:item.invoiceCreated || null,
@@ -1062,7 +1062,7 @@ class b1HANA {
                 n: lead.n ?? null,
                 status: lead?.status,
                 cardCode:lead?.cardCode || null,
-                acceptReason: lead?.acceptReason || null,
+                acceptedReason: lead?.acceptedReason || null,
                 invoiceCreated : lead?.invoiceCreated || null,
                 invoiceDocEntry :lead?.invoiceDocEntry || null,
                 invoiceDocNum :lead?.invoiceDocNum || null,

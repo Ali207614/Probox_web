@@ -68,6 +68,7 @@ const permissions = {
         'finalLimit',
         'finalPercentage',
         'acceptReason',
+        "acceptedReason",
         'comment'
     ],
 };
