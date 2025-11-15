@@ -525,14 +525,20 @@ class b1HANA {
                 const safeSearch = escapeRegex(search.trim());
                 const phoneSearch = normalizePhone(search);
 
-                filter.$or = [
-                    { clientName: { $regex: safeSearch, $options: 'i' } },
-                    { comment: { $regex: safeSearch, $options: 'i' } },
-                    { clientPhone: { $regex: safeSearch.replace(/\s+/g, ''), $options: 'i' } },
-                    { clientPhone: { $regex: phoneSearch, $options: '' } },
-                ];
+                // agar raqam bo‘lsa → faqat telefon bo‘yicha
+                if (/^\d+$/.test(phoneSearch) && phoneSearch.length >= 2) {
+                    filter.$or = [
+                        { clientPhone: { $regex: phoneSearch, $options: '' } },
+                    ];
+                }
+                // aks holda → text qidirish
+                else {
+                    filter.$or = [
+                        { clientName: { $regex: safeSearch, $options: 'i' } },
+                        { comment: { $regex: safeSearch, $options: 'i' } },
+                    ];
+                }
             }
-
             const sources = parseArray(source);
             const branches = parseArray(branch);
             const operators = parseArray(operator);
