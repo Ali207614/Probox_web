@@ -932,7 +932,7 @@ ORDER BY
     }
 
 
-           getItems({
+    getItems({
                  search,
                  filters = {},
                  limit = 50,
@@ -940,12 +940,39 @@ ORDER BY
                  whsCode
              }) {
         let whereClauses = ['1=1'];
+        let imeiJoin = '';
+        let imeiWhere = '';
 
+        // Warehouse filter
         if (whsCode) {
             whereClauses.push(`T0."WhsCode" = '${whsCode}'`);
         }
 
-        if (search) {
+        const isIMEI = search && /^\d+$/.test(search);
+
+        if (isIMEI) {
+            // If IMEI search, build dynamic whsCode condition
+            const whsCondition = whsCode
+                ? `AND Q."WhsCode" = '${whsCode}'`
+                : ``;
+
+            // Dynamic JOIN for IMEI search
+            imeiJoin = `
+            LEFT JOIN ${this.db}."OSRN" R
+                ON R."ItemCode" = T1."ItemCode"
+            LEFT JOIN ${this.db}."OSRQ" Q
+                ON Q."ItemCode" = R."ItemCode"
+                AND Q."SysNumber" = R."SysNumber"
+                ${whsCondition}
+        `;
+
+            // WHERE part specifically for IMEI
+            imeiWhere = `
+            AND R."DistNumber" = '${search}'
+            AND Q."Quantity" > 0
+        `;
+        }
+        else if (search) {
             const s = search.toLowerCase();
             whereClauses.push(`
             (
@@ -956,83 +983,70 @@ ORDER BY
         `);
         }
 
-        if (filters.model) {
-            whereClauses.push(`T1."U_Model" = '${filters.model}'`);
-        }
+        // Filters
+        if (filters.model) whereClauses.push(`T1."U_Model" = '${filters.model}'`);
+        if (filters.deviceType) whereClauses.push(`T1."U_DeviceType" = '${filters.deviceType}'`);
+        if (filters.memory) whereClauses.push(`T1."U_Memory" = '${filters.memory}'`);
+        if (filters.simType) whereClauses.push(`T1."U_Sim_type" = '${filters.simType}'`);
+        if (filters.condition) whereClauses.push(`T1."U_PROD_CONDITION" = '${filters.condition}'`);
+        if (filters.color) whereClauses.push(`T1."U_Color" = '${filters.color}'`);
 
-        if (filters.deviceType) {
-            whereClauses.push(`T1."U_DeviceType" = '${filters.deviceType}'`);
-        }
-
-        if (filters.memory) {
-            whereClauses.push(`T1."U_Memory" = '${filters.memory}'`);
-        }
-
-        if (filters.simType) {
-            whereClauses.push(`T1."U_Sim_type" = '${filters.simType}'`);
-        }
-
-        if (filters.condition) {
-            whereClauses.push(`T1."U_PROD_CONDITION" = '${filters.condition}'`);
-        }
-
-        if (filters.color) {
-            whereClauses.push(`T1."U_Color" = '${filters.color}'`);
-        }
-
-        const whereQuery = 'WHERE ' + whereClauses.join(' AND ');
+        const whereQuery = 'WHERE ' + whereClauses.join(' AND ') + imeiWhere;
 
         return `
-        SELECT
-            T0."ItemCode",
-            T0."WhsCode",
-            CAST(T0."OnHand" AS INTEGER) as "OnHand",
-            T1."ItemName",
-            T1."U_Color",
-            T1."U_Condition",
-            T1."U_Model",
-            T1."U_DeviceType",
-            T1."U_Memory",
-            T1."U_Sim_type",
-            T1."U_PROD_CONDITION",
-            T2."WhsName",
-            OIVL1."Price" AS "Price",
-            P."U_price" AS "PhonePrice",
-            P."U_price_percentage" AS "PhonePercentage"
+            SELECT
+                T0."ItemCode",
+                T0."WhsCode",
+                CAST(T0."OnHand" AS INTEGER) as "OnHand",
+                T1."ItemName",
+                T1."U_Color",
+                T1."U_Condition",
+                T1."U_Model",
+                T1."U_DeviceType",
+                T1."U_Memory",
+                T1."U_Sim_type",
+                T1."U_PROD_CONDITION",
+                T2."WhsName",
+                OIVL1."Price" AS "Price",
+                P."U_price" AS "PhonePrice",
+                P."U_price_percentage" AS "PhonePercentage"
 
-        FROM ${this.db}."OITW" T0
-        INNER JOIN ${this.db}."OITM" T1 
-            ON T0."ItemCode" = T1."ItemCode"
-        INNER JOIN ${this.db}."OWHS" T2 
-            ON T0."WhsCode" = T2."WhsCode"
+            FROM ${this.db}."OITW" T0
+                     INNER JOIN ${this.db}."OITM" T1
+                                ON T0."ItemCode" = T1."ItemCode"
+                     INNER JOIN ${this.db}."OWHS" T2
+                                ON T0."WhsCode" = T2."WhsCode"
+
+                ${imeiJoin}  -- IMEI bo'lsa qo‘shiladi, bo‘lmasa bo‘sh bo‘ladi
 
         LEFT JOIN ${this.db}."@PHONE_PRICE" P
             ON  P."U_model"        = T1."U_Model"
-            AND P."U_device_type"  = T1."U_DeviceType"
-            AND P."U_memory"       = T1."U_Memory"
-            AND P."U_sim_type"     = T1."U_Sim_type"
-            AND P."U_condition"    = T1."U_PROD_CONDITION"
+                AND P."U_device_type"  = T1."U_DeviceType"
+                AND P."U_memory"       = T1."U_Memory"
+                AND P."U_sim_type"     = T1."U_Sim_type"
+                AND P."U_condition"    = T1."U_PROD_CONDITION"
 
-        LEFT JOIN (
-            SELECT "ItemCode", "Price"
-            FROM (
-                     SELECT
-                         "ItemCode",
-                         "Price",
-                         ROW_NUMBER() OVER (PARTITION BY "ItemCode" ORDER BY "DocDate" DESC, "TransSeq" DESC) AS rn
-                     FROM ${this.db}."OIVL"
-                     WHERE "TransType" = 18
-                 ) x
-            WHERE rn = 1
-        ) OIVL1 ON OIVL1."ItemCode" = T1."ItemCode"
+                LEFT JOIN (
+                SELECT "ItemCode", "Price"
+                FROM (
+                SELECT
+                "ItemCode",
+                "Price",
+                ROW_NUMBER() OVER (PARTITION BY "ItemCode" ORDER BY "DocDate" DESC, "TransSeq" DESC) AS rn
+                FROM ${this.db}."OIVL"
+                WHERE "TransType" = 18
+                ) x
+                WHERE rn = 1
+                ) OIVL1 ON OIVL1."ItemCode" = T1."ItemCode"
 
-        ${whereQuery}
+                ${whereQuery}
 
-        ORDER BY CAST(T0."OnHand" AS INTEGER) DESC
+            ORDER BY CAST(T0."OnHand" AS INTEGER) DESC
 
-        LIMIT ${limit} OFFSET ${offset};
-    `;
+                LIMIT ${limit} OFFSET ${offset};
+        `;
     }
+
 
 }
 
