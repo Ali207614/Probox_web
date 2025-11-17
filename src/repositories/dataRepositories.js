@@ -950,7 +950,7 @@ ORDER BY
 
         const isIMEI = search && /^\d+$/.test(search);
 
-        if (isIMEI) {
+        if (isIMEI && search.length >= 4) {
             // If IMEI search, build dynamic whsCode condition
             const whsCondition = whsCode
                 ? `AND Q."WhsCode" = '${whsCode}'`
