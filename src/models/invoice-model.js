@@ -15,6 +15,8 @@ const InvoiceSchema = new Schema(
         InsTotal: { type: Number, required: false },
         phoneConfiscated: { type: Boolean, default: false },
         partial: { type: Boolean, default: false },
+        newTime: { type: Date, required: false },
+        notificationSent: { type: Boolean, required: false },
         images: [Schema.Types.Mixed],
     },
     {

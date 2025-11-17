@@ -992,9 +992,10 @@ ORDER BY
         if (filters.color) whereClauses.push(`T1."U_Color" = '${filters.color}'`);
 
         const whereQuery = 'WHERE ' + whereClauses.join(' AND ') + imeiWhere;
-
+        const imeiSelect = isIMEI ? `R."DistNumber" AS "IMEI",` : '';
         return `
             SELECT
+                ${imeiSelect}
                 T0."ItemCode",
                 T0."WhsCode",
                 CAST(T0."OnHand" AS INTEGER) as "OnHand",
@@ -1010,7 +1011,6 @@ ORDER BY
                 OIVL1."Price" AS "Price",
                 P."U_price" AS "PhonePrice",
                 P."U_price_percentage" AS "PhonePercentage"
-
             FROM ${this.db}."OITW" T0
                      INNER JOIN ${this.db}."OITM" T1
                                 ON T0."ItemCode" = T1."ItemCode"

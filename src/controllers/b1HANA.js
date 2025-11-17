@@ -525,7 +525,6 @@ class b1HANA {
                 const safeSearch = escapeRegex(search.trim());
                 const phoneSearch = normalizePhone(search);
 
-                // agar raqam bo‘lsa → faqat telefon bo‘yicha
                 if (/^\d+$/.test(phoneSearch) && phoneSearch.length >= 2) {
                     filter.$or = [
                         { clientPhone: { $regex: phoneSearch, $options: '' } },
@@ -2404,10 +2403,33 @@ class b1HANA {
     updateExecutor = async (req, res, next) => {
         try {
             const { DocEntry, InstlmntID } = req.params;
-            const { slpCode, DueDate, newDueDate = '', Phone1, Phone2, CardCode = '' } = req.body;
+            const { slpCode, DueDate, newDueDate = '', Phone1, Phone2, CardCode = '', newTime } = req.body;
+
             if (!DueDate) {
                 return res.status(400).send({
                     message: "Missing required fields: slpCode and/or DueDate and/or newDueDate"
+                });
+            }
+
+            function validateHourTime(timeStr) {
+                if (!timeStr) return null;
+
+                const regex = /^([01]\d|2[0-3]):00$/;
+                if (!regex.test(timeStr)) {
+                    throw new Error("Invalid time format. Only HH:00 allowed, e.g. 01:00, 15:00, 23:00");
+                }
+
+                return timeStr;
+            }
+
+
+            let validatedNewTime = null;
+            try {
+                validatedNewTime = validateHourTime(newTime);
+            } catch (err) {
+                return res.status(400).json({
+                    message: err.message,
+                    location: "invalid_time_format",
                 });
             }
 
@@ -2417,11 +2439,16 @@ class b1HANA {
                 if (slpCode) {
                     invoice.SlpCode = slpCode;
                     invoice.CardCode = CardCode;
-                    invoice.DueDate= parseLocalDateString(DueDate)
+                    invoice.DueDate = parseLocalDateString(DueDate);
                 }
 
                 if (newDueDate) {
                     invoice.newDueDate = parseLocalDateString(newDueDate);
+                }
+
+                if (validatedNewTime) {
+                    invoice.newTime = validatedNewTime;
+                    invoice.notificationSent = false;
                 }
 
                 await invoice.save();
@@ -2432,32 +2459,36 @@ class b1HANA {
                     CardCode,
                     SlpCode: (slpCode || ''),
                     newDueDate: newDueDate ? parseLocalDateString(newDueDate) : '',
-                    DueDate: parseLocalDateString(DueDate)
+                    DueDate: parseLocalDateString(DueDate),
+                    newTime: validatedNewTime || null,
+                    notificationSent :false
                 });
             }
 
             if (CardCode && (Phone1 || Phone2)) {
-                let data = await b1Sl.updateBusinessPartner({ Phone1, Phone2, CardCode })
+                const data = await b1Sl.updateBusinessPartner({ Phone1, Phone2, CardCode });
                 if (data) {
-                    return res.status(200).send({
+                    return res.status(200).json({
                         message: invoice ? "Invoice updated successfully." : "Invoice created successfully.",
                         Phone1,
                         Phone2,
                         CardCode,
                         DueDate,
-                        newDueDate
+                        newDueDate,
+                        newTime: validatedNewTime
                     });
                 }
             }
 
-
-            return res.status(200).send({
+            return res.status(200).json({
                 message: invoice ? "Invoice updated successfully." : "Invoice created successfully.",
                 DocEntry,
                 InstlmntID,
                 slpCode,
+                newTime: validatedNewTime,
                 _id: invoice._id,
             });
+
         } catch (e) {
             next(e);
         }

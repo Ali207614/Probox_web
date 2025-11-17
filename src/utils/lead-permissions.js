@@ -69,7 +69,8 @@ const permissions = {
         'finalPercentage',
         'acceptReason',
         "acceptedReason",
-        'comment'
+        'comment',
+        'status'
     ],
 };
 
