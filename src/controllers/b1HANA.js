@@ -53,7 +53,6 @@ class b1HANA {
                 whsCode
             });
 
-            console.log(query)
 
             const rows = await this.execute(query);
 
@@ -82,8 +81,6 @@ class b1HANA {
                 whsCode,
                 itemCode,
             });
-
-            console.log(query)
 
             const rows = await this.execute(query);
 
@@ -490,7 +487,7 @@ class b1HANA {
                 called2,
                 answered2,
                 passportId,
-                jshshir2,
+                jshshir,
                 scoreMin,
                 scoreMax,
                 mib,
@@ -622,29 +619,27 @@ class b1HANA {
                 }
             }
 
-            if (jshshir2) {
-                if (jshshir2 === 'yes') {
-                    filter.jshshir2 = { $exists: true, $nin: [null, ''] };
-                } else if (jshshir2 === 'no') {
+            if (jshshir) {
+                if (jshshir === 'yes') {
+                    filter.jshshir = { $exists: true, $nin: [null, ''] };
+                } else if (jshshir === 'no') {
                     addAndCondition(filter, {
                         $or: [
-                            { jshshir2: { $exists: false } },
-                            { jshshir2: null },
-                            { jshshir2: '' },
+                            { jshshir: { $exists: false } },
+                            { jshshir: null },
+                            { jshshir: '' },
                         ],
                     });
-                } else if (jshshir2 === 'unmarked') {
-                    addAndCondition(filter, { jshshir2: null });
+                } else if (jshshir === 'unmarked') {
+                    addAndCondition(filter, { jshshir: null });
                 }
             }
 
             if (req.user?.U_role === 'Scoring') {
                 addAndCondition(filter, {
                     $or: [
-                        { jshshir2: { $exists: true, $nin: [null, ''] } },
                         { passportId: { $exists: true, $nin: [null, ''] } },
                         { jshshir: { $exists: true, $nin: [null, ''] } },
-                        { idX: { $exists: true, $nin: [null, ''] } },
                     ],
                 });
             }
@@ -967,7 +962,7 @@ class b1HANA {
                 }
 
                 if (
-                    !existingLead.scoring
+                    !existingLead.scoring && validData.passportVisit === 'Passport'
                 ) {
                     const scoringQuery = DataRepositories.getSalesPersons({
                         include: ['Scoring'],
@@ -1152,7 +1147,6 @@ class b1HANA {
             if (region) filter.region = { $regex: region, $options: 'i' };
 
             const total = await BranchModel.countDocuments(filter);
-            console.log(total)
 
             const branches = await BranchModel.find(filter)
                 .sort({ createdAt: -1 })
@@ -2403,7 +2397,7 @@ class b1HANA {
     updateExecutor = async (req, res, next) => {
         try {
             const { DocEntry, InstlmntID } = req.params;
-            const { slpCode, DueDate, newDueDate = '', Phone1, Phone2, CardCode = '', newTime } = req.body;
+            const { slpCode, DueDate, newDueDate = '', Phone1, Phone2, CardCode = '' } = req.body;
 
             if (!DueDate) {
                 return res.status(400).send({
@@ -2424,13 +2418,15 @@ class b1HANA {
 
 
             let validatedNewTime = null;
-            try {
-                validatedNewTime = validateHourTime(newTime);
-            } catch (err) {
-                return res.status(400).json({
-                    message: err.message,
-                    location: "invalid_time_format",
-                });
+            if(newDueDate) {
+                try {
+                    validatedNewTime = validateHourTime(newDueDate);
+                } catch (err) {
+                    return res.status(400).json({
+                        message: err.message,
+                        location: "invalid_time_format",
+                    });
+                }
             }
 
             let invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
@@ -2443,13 +2439,10 @@ class b1HANA {
                 }
 
                 if (newDueDate) {
-                    invoice.newDueDate = parseLocalDateString(newDueDate);
-                }
-
-                if (validatedNewTime) {
-                    invoice.newTime = validatedNewTime;
+                    invoice.newDueDate = validatedNewTime;
                     invoice.notificationSent = false;
                 }
+
 
                 await invoice.save();
             } else {
@@ -2458,9 +2451,8 @@ class b1HANA {
                     InstlmntID,
                     CardCode,
                     SlpCode: (slpCode || ''),
-                    newDueDate: newDueDate ? parseLocalDateString(newDueDate) : '',
+                    newDueDate: validatedNewTime || null,
                     DueDate: parseLocalDateString(DueDate),
-                    newTime: validatedNewTime || null,
                     notificationSent :false
                 });
             }
