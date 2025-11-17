@@ -2407,90 +2407,95 @@ class b1HANA {
 
             if (!DueDate) {
                 return res.status(400).send({
-                    message: "Missing required fields: slpCode and/or DueDate and/or newDueDate"
+                    message: "Missing required fields: DueDate"
                 });
             }
 
-            function validateHourTime(timeStr) {
-                if (!timeStr) return null;
+            // === VALIDATOR: Sana + soat (HH:00) bo‘lishi shart ===
+            function validateDateTime(dateTimeStr) {
+                if (!dateTimeStr) return null;
 
-                const regex = /^([01]\d|2[0-3]):00$/;
-                if (!regex.test(timeStr)) {
-                    throw new Error("Invalid time format. Only HH:00 allowed, e.g. 01:00, 15:00, 23:00");
+
+                const normalMatch = dateTimeStr.match(/^(\d{4}\.\d{2}\.\d{2}) (\d{2}):(\d{2})$/);
+                if (normalMatch) {
+                    const [_, datePart, hour, minute] = normalMatch;
+
+                    if (minute !== "00") {
+                        throw new Error("Minutes must be 00. Example: 2025.11.17 16:00");
+                    }
+
+                    // "2025.11.17" → "2025-11-17" ga o‘tkazamiz
+                    const datePartISO = datePart.replace(/\./g, '-');
+
+                    const d = new Date(`${datePartISO}T${hour}:${minute}:00`);
+                    if (isNaN(d.getTime())) {
+                        throw new Error("Invalid date format");
+                    }
+                    return d;
                 }
-
-                return timeStr;
             }
 
-
-            let validatedNewTime = null;
-            if(newDueDate) {
+            // === Validate newDueDate ===
+            let validatedNewDueDate = null;
+            if (newDueDate) {
                 try {
-                    validatedNewTime = validateHourTime(newDueDate);
+                    validatedNewDueDate = validateDateTime(newDueDate);
                 } catch (err) {
                     return res.status(400).json({
                         message: err.message,
-                        location: "invalid_time_format",
+                        location: "invalid_datetime_format",
                     });
                 }
             }
 
+            // === Find or Create Invoice ===
             let invoice = await InvoiceModel.findOne({ DocEntry, InstlmntID });
 
             if (invoice) {
+                // Update existing
                 if (slpCode) {
                     invoice.SlpCode = slpCode;
                     invoice.CardCode = CardCode;
                     invoice.DueDate = parseLocalDateString(DueDate);
                 }
 
-                if (newDueDate) {
-                    invoice.newDueDate = validatedNewTime;
-                    invoice.notificationSent = false;
+                if (validatedNewDueDate) {
+                    invoice.newDueDate = validatedNewDueDate;
+                    invoice.notificationSent = false; // reset notification
                 }
 
+                if (Phone1) invoice.Phone1 = Phone1;
+                if (Phone2) invoice.Phone2 = Phone2;
 
                 await invoice.save();
             } else {
+                // Create new
                 invoice = await InvoiceModel.create({
                     DocEntry,
                     InstlmntID,
                     CardCode,
-                    SlpCode: (slpCode || ''),
-                    newDueDate: validatedNewTime || null,
+                    SlpCode: slpCode || '',
                     DueDate: parseLocalDateString(DueDate),
-                    notificationSent :false
+                    newDueDate: validatedNewDueDate,
+                    Phone1,
+                    Phone2,
+                    notificationSent: false
                 });
-            }
-
-            if (CardCode && (Phone1 || Phone2)) {
-                const data = await b1Sl.updateBusinessPartner({ Phone1, Phone2, CardCode });
-                if (data) {
-                    return res.status(200).json({
-                        message: invoice ? "Invoice updated successfully." : "Invoice created successfully.",
-                        Phone1,
-                        Phone2,
-                        CardCode,
-                        DueDate,
-                        newDueDate,
-                        newTime: validatedNewTime
-                    });
-                }
             }
 
             return res.status(200).json({
                 message: invoice ? "Invoice updated successfully." : "Invoice created successfully.",
+                invoiceId: invoice._id,
                 DocEntry,
                 InstlmntID,
-                slpCode,
-                newTime: validatedNewTime,
-                _id: invoice._id,
+                newDueDate: validatedNewDueDate,
             });
 
         } catch (e) {
             next(e);
         }
     };
+
 
     map = async (req, res, next) => {
         try {

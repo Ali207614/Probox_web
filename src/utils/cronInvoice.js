@@ -1,16 +1,34 @@
 const cron = require("node-cron");
 const InvoiceModel = require("../models/invoice-model");
 
+// Toshkent bo'yicha vaqt olish
+function getTashkentDate() {
+    return new Date(
+        new Date().toLocaleString("en-US", { timeZone: "Asia/Tashkent" })
+    );
+}
+
 cron.schedule("*/1 * * * *", async () => {
     try {
         const io = global.io;
 
-        const now = new Date();
+        const now = getTashkentDate();
 
-        const hourStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0);
-        const hourEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 1, 0, 0);
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const day = now.getDate();
+        const hour = now.getHours();   // Toshkent soati
 
-        console.log("⏳ Checking invoices for:", hourStart.toISOString(), "→", hourEnd.toISOString());
+        const hourStart = new Date(year, month, day, hour, 0, 0);
+        const hourEnd   = new Date(year, month, day, hour + 1, 0, 0);
+
+        // 🔥 LOG - Toshkent vaqtida ko‘rsatadi
+        console.log(
+            "⏳ Checking invoices for:",
+            hourStart.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" }),
+            "→",
+            hourEnd.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" })
+        );
 
         const invoices = await InvoiceModel.find({
             newDueDate: {
@@ -25,8 +43,6 @@ cron.schedule("*/1 * * * *", async () => {
             return;
         }
 
-        console.log(`🔵 ${invoices.length} invoices matched for this hour`);
-
         for (const inv of invoices) {
             io.emit("invoice:newDueDateNotification", {
                 DocEntry: inv.DocEntry,
@@ -39,7 +55,7 @@ cron.schedule("*/1 * * * *", async () => {
             await inv.save();
         }
 
-        console.log("🟢 Notifications sent & updated.");
+        console.log("🟢 Notifications sent.");
     } catch (err) {
         console.error("❌ Cron job error:", err);
     }

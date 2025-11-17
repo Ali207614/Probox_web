@@ -948,9 +948,9 @@ ORDER BY
             whereClauses.push(`T0."WhsCode" = '${whsCode}'`);
         }
 
-        const isIMEI = search && /^\d+$/.test(search);
+        const isIMEI = search && /^\d+$/.test(search) && search.length >= 4;
 
-        if (isIMEI && search.length >= 4) {
+        if (isIMEI) {
             // If IMEI search, build dynamic whsCode condition
             const whsCondition = whsCode
                 ? `AND Q."WhsCode" = '${whsCode}'`
