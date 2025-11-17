@@ -939,7 +939,7 @@ ORDER BY
                  offset = 0,
                  whsCode
              }) {
-        let whereClauses = ['1=1'];
+        let whereClauses = ['1=1', `T0."OnHand" > 0`];
         let imeiJoin = '';
         let imeiWhere = '';
 
@@ -968,7 +968,7 @@ ORDER BY
 
             // WHERE part specifically for IMEI
             imeiWhere = `
-            AND R."DistNumber" = '${search}'
+            AND R."DistNumber" LIKE '%${search}%'
             AND Q."Quantity" > 0
         `;
         }

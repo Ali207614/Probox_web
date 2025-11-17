@@ -500,7 +500,8 @@ class b1HANA {
                 scoring,
                 seller,
                 isBlocked,
-                meetingHappened
+                meetingHappened,
+                passportVisit
             } = req.query;
 
             const filter = {};
@@ -634,6 +635,11 @@ class b1HANA {
                     addAndCondition(filter, { jshshir: null });
                 }
             }
+
+            if (['Passport', 'Visit', 'Processing'].includes(passportVisit)) {
+                filter.passportVisit = passportVisit;
+            }
+
 
             if (req.user?.U_role === 'Scoring') {
                 addAndCondition(filter, {
