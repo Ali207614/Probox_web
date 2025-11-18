@@ -16,7 +16,7 @@ const leadImageRoute = require('../src/router/leadImageRoute');
 const path = require('path');
 const app = express();
 const server = http.createServer(app);
-//require("./utils/cronInvoice");
+require("./utils/cronInvoice");
 // === SOCKET.IO ===
 const io = new Server(server, {
     cors: {

@@ -1,14 +1,13 @@
 const cron = require("node-cron");
 const InvoiceModel = require("../models/invoice-model");
 
-// Toshkent bo'yicha vaqt olish
 function getTashkentDate() {
     return new Date(
         new Date().toLocaleString("en-US", { timeZone: "Asia/Tashkent" })
     );
 }
 
-cron.schedule("*/1 * * * *", async () => {
+cron.schedule("0 * * * *", async () => {
     try {
         const io = global.io;
 
@@ -17,12 +16,11 @@ cron.schedule("*/1 * * * *", async () => {
         const year = now.getFullYear();
         const month = now.getMonth();
         const day = now.getDate();
-        const hour = now.getHours();   // Toshkent soati
+        const hour = now.getHours();
 
         const hourStart = new Date(year, month, day, hour, 0, 0);
         const hourEnd   = new Date(year, month, day, hour + 1, 0, 0);
 
-        // 🔥 LOG - Toshkent vaqtida ko‘rsatadi
         console.log(
             "⏳ Checking invoices for:",
             hourStart.toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent" }),
@@ -43,14 +41,9 @@ cron.schedule("*/1 * * * *", async () => {
             return;
         }
 
-        for (const inv of invoices) {
-            io.emit("invoice:newDueDateNotification", {
-                DocEntry: inv.DocEntry,
-                InstlmntID: inv.InstlmntID,
-                newDueDate: inv.newDueDate,
-                CardCode: inv.CardCode
-            });
+        io.emit("invoice:newDueDateNotification", invoices);
 
+        for (const inv of invoices ) {
             inv.notificationSent = true;
             await inv.save();
         }

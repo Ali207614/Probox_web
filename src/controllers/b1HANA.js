@@ -882,6 +882,25 @@ class b1HANA {
                 });
             }
 
+            if (validData.interested !== undefined) {
+                const interestedBool = validData.interested === true
+
+                if (!interestedBool) {
+                    if (!validData.rejectionReason || String(validData.rejectionReason).trim() === '') {
+                        return res.status(400).json({
+                            message: "Rad etish sababini to'ldirish kerak ",
+                            location: 'rejectionReason_required',
+                        });
+                    }
+
+                    validData.status = 'Closed';
+                }
+            }
+
+            if(validData.rejectionReason2){
+                validData.status = 'Closed';
+            }
+
             // === Normalize fields
             if (validData?.clientFullName) {
                 validData.clientName = validData.clientFullName;
@@ -2417,6 +2436,7 @@ class b1HANA {
                 });
             }
 
+            console.log(req.body)
             // === VALIDATOR: Sana + soat (HH:00) bo‘lishi shart ===
             function validateDateTime(dateTimeStr) {
                 if (!dateTimeStr) return null;
@@ -2464,7 +2484,7 @@ class b1HANA {
                     invoice.CardCode = CardCode;
                     invoice.DueDate = parseLocalDateString(DueDate);
                 }
-
+                console.log(validatedNewDueDate)
                 if (validatedNewDueDate) {
                     invoice.newDueDate = validatedNewDueDate;
                     invoice.notificationSent = false; // reset notification
