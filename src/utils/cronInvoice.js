@@ -7,7 +7,7 @@ function getTashkentDate() {
     );
 }
 
-cron.schedule("0 * * * *", async () => {
+cron.schedule("*/1 * * * *", async () => {
     try {
         const io = global.io;
 

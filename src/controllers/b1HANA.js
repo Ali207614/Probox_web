@@ -882,7 +882,7 @@ class b1HANA {
                 });
             }
 
-            if (validData.interested !== undefined) {
+            if (validData.interested !== null) {
                 const interestedBool = validData.interested === true
 
                 if (!interestedBool) {
