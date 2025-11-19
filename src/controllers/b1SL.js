@@ -158,6 +158,11 @@ class b1SL {
 
     createInvoice = async (req, res, next) => {
         try {
+
+            return res.status(201).json({
+                status: true,
+                invoice: [],
+            });
             const leadId = req.body.leadId;
             delete req.body.leadId;
 
