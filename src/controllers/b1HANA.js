@@ -897,6 +897,11 @@ class b1HANA {
                 }
             }
 
+            if(validData.rejectionReason){
+                validData.status = 'Closed';
+            }
+
+
             if(validData.rejectionReason2){
                 validData.status = 'Closed';
             }
