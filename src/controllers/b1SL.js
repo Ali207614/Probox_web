@@ -243,7 +243,7 @@ class b1SL {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            const { data } = await axiosInstance.post(`/Invoice`, body);
+            const { data } = await axiosInstance.post(`/Invoices`, body);
 
             const updateData = {
                 invoiceCreated: true,
