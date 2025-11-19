@@ -26,6 +26,8 @@ router.get('/leads', authMiddleware, b1HANA.leads)
 
 router.get('/leads/:id', authMiddleware, b1HANA.leadOne)
 
+router.post('/invoice', authMiddleware, b1SL.createInvoice);
+
 router.put('/leads/:id', authMiddleware, b1HANA.updateLead)
 
 router.use('/invoice', invoiceRouter);
@@ -36,7 +38,6 @@ router.post('/incomingPayment', authMiddleware, b1SL.postIncomingPayment);
 
 router.post('/leads', authMiddleware, b1HANA.createLead);
 
-router.post('/invoice', authMiddleware, b1SL.createInvoice);
 
 router.get('/test', (req, res) => {
     res.json({ message: 'ok' });

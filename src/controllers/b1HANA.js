@@ -871,7 +871,6 @@ class b1HANA {
         }
     };
 
-
     updateLead = async (req, res, next) => {
         try {
             const { id } = req.params;
@@ -2563,7 +2562,6 @@ class b1HANA {
             next(e);
         }
     };
-
 
     map = async (req, res, next) => {
         try {
