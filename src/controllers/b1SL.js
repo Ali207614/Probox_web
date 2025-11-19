@@ -262,13 +262,29 @@ class b1SL {
     findOrCreateBusinessPartner = async (phone, cardName) => {
         if (!phone) return null;
 
-        const digits = String(phone).replace(/\D/g, "");
+        function normalizePhone(input) {
+            if (!input) return null;
+            let digits = String(input).replace(/\D/g, '');
+
+            if (digits.startsWith('998') && digits.length > 9) {
+                digits = digits.slice(3);
+            }
+
+            if (digits.length === 10 && digits.startsWith('0')) {
+                digits = digits.slice(1);
+            }
+            return digits;
+        }
+
+        const digits = normalizePhone(phone);
 
         const query = `
         SELECT "CardCode", "CardName", "Phone1", "Phone2"
         FROM ${db}.OCRD
         WHERE "Phone1" LIKE '%${digits}' OR "Phone2" LIKE '%${digits}'
     `;
+
+        console.log("SAP query:", query);
 
         try {
             const rows = await execute(query);
