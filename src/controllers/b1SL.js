@@ -3,6 +3,8 @@ const https = require("https");
 const { get } = require("lodash");
 let dbService = require('../services/dbService')
 
+const LeadModel = require('../models/lead-model');
+
 const moment = require('moment');
 const { getSession, saveSession } = require("../helpers");
 const { api_params, api, db} = require("../config");
@@ -155,69 +157,92 @@ class b1SL {
     };
 
     createInvoice = async (req, res, next) => {
-        const leadId = req.body.leadId;
-        delete req.body.leadId;
+        try {
+            const leadId = req.body.leadId;
+            delete req.body.leadId;
 
-        let body = { ...req.body };
-
-        if (!leadId) {
-            return {
-                status: false,
-                message: "leadId is required to create an invoice",
-            };
-        }
-
-        let createdBP = false;
-        let createdCardCode = null;
-        let createdCardName = null;
-
-        if (!body.CardCode || body.CardCode === null) {
-            const clientPhone = body.clientPhone || body.Phone1 || body.Phone2;
-
-            if (!clientPhone) {
-                return {
+            if (!leadId) {
+                return res.status(400).json({
                     status: false,
-                    message: "CardCode is missing and clientPhone is required to create Business Partner",
-                };
+                    message: "leadId is required to create an invoice",
+                });
             }
 
-            const bp = await this.createBusinessPartner({
-                Phone1: clientPhone,
-                Phone2: '',
-                CardName: body.CardName || "No Name"
+            const sapInvoiceQuery = `
+            SELECT 
+                T0."DocEntry",
+                T0."DocNum",
+                T0."U_leadId",
+                T0."CANCELED"
+            FROM ${db}."OINV" T0
+            WHERE 
+                T0."CANCELED" = 'N'
+                AND T0."U_leadId" = '${leadId}'
+        `;
+
+            const existingInvoices = await execute(sapInvoiceQuery);
+
+            if (existingInvoices && existingInvoices.length > 0) {
+                return res.status(400).json({
+                    status: false,
+                    message: "This lead already has an invoice in SAP",
+                    DocEntry: existingInvoices[0].DocEntry,
+                    DocNum: existingInvoices[0].DocNum,
+                });
+            }
+
+            let body = { ...req.body };
+
+            let createdBP = false;
+            let createdCardCode = null;
+            let createdCardName = null;
+
+            if (!body.CardCode || body.CardCode === null) {
+                const clientPhone = body.clientPhone;
+
+                if (!clientPhone) {
+                    return res.status(400).json({
+                        status: false,
+                        message: "CardCode is missing and clientPhone is required to create Business Partner",
+                    });
+                }
+
+                const bp = await this.createBusinessPartner({
+                    Phone1: clientPhone,
+                    Phone2: '',
+                    CardName: body.clientName || "No Name"
+                });
+
+                if (!bp?.CardCode) {
+                    return res.status(400).json({
+                        status: false,
+                        message: bp?.message || "Failed to create Business Partner",
+                    });
+                }
+
+                createdBP = true;
+                createdCardCode = bp.CardCode;
+                createdCardName = body.CardName || "No Name";
+
+                body.CardCode = bp.CardCode;
+
+                delete body.clientPhone;
+                delete body.Phone1;
+                delete body.Phone2;
+            }
+
+            const axiosInstance = Axios.create({
+                baseURL: `${this.api}`,
+                timeout: 30000,
+                headers: {
+                    'Cookie':
+                        get(getSession(), 'Cookie[0]', '') +
+                        get(getSession(), 'Cookie[1]', ''),
+                    'SessionId': get(getSession(), 'SessionId', ''),
+                },
+                httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            if (!bp?.CardCode) {
-                return {
-                    status: false,
-                    message: bp?.message || "Failed to create Business Partner",
-                };
-            }
-
-            createdBP = true;
-            createdCardCode = bp.CardCode;
-            createdCardName = body.CardName || "No Name";
-
-            body.CardCode = bp.CardCode;
-
-            delete body.clientPhone;
-            delete body.Phone1;
-            delete body.Phone2;
-        }
-
-        const axiosInstance = Axios.create({
-            baseURL: `${this.api}`,
-            timeout: 30000,
-            headers: {
-                'Cookie':
-                    get(getSession(), 'Cookie[0]', '') +
-                    get(getSession(), 'Cookie[1]', ''),
-                'SessionId': get(getSession(), 'SessionId', ''),
-            },
-            httpsAgent: new https.Agent({ rejectUnauthorized: false }),
-        });
-
-        try {
             const { data } = await axiosInstance.post(`/Invoice`, body);
 
             const updateData = {
@@ -237,27 +262,29 @@ class b1SL {
                 { $set: updateData }
             );
 
-            return {
+            return res.status(201).json({
                 status: true,
                 invoice: data,
-            };
+            });
 
         } catch (err) {
             if (get(err, 'response.status') == 401) {
                 const token = await this.auth();
-                if (token.status) return await this.createInvoice(req, res, next);
-
-                return { status: false, message: token.message };
+                if (token.status) return this.createInvoice(req, res, next);
+                return res.status(401).json({ status: false, message: token.message });
             }
 
-            console.log(get(err, 'response.data.error.message.value'), ' SAP ERROR');
+            const sapErr = get(err, 'response.data.error.message.value', 'SAP error');
 
-            return {
+            console.log(sapErr, " SAP ERROR");
+
+            return res.status(400).json({
                 status: false,
-                message: get(err, 'response.data.error.message.value'),
-            };
+                message: sapErr,
+            });
         }
     };
+
 
     findOrCreateBusinessPartner = async (phone, cardName) => {
         if (!phone) return null;

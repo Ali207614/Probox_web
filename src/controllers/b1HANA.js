@@ -813,7 +813,6 @@ class b1HANA {
                 });
             }
 
-            // 📌 OPERATOR ASSIGN
             let operator = operator1 || null;
             if (source !== 'Organika' && !operator) {
                 operator = await assignBalancedOperator();
