@@ -5,7 +5,8 @@ let dbService = require('../services/dbService')
 
 const moment = require('moment');
 const { getSession, saveSession } = require("../helpers");
-const { api_params, api } = require("../config");
+const { api_params, api, db} = require("../config");
+const {execute} = require("../services/dbService");
 
 require('dotenv').config();
 
@@ -157,7 +158,52 @@ class b1SL {
         const leadId = req.body.leadId;
         delete req.body.leadId;
 
-        const body = req.body;
+        let body = { ...req.body };
+
+        if (!leadId) {
+            return {
+                status: false,
+                message: "leadId is required to create an invoice",
+            };
+        }
+
+        let createdBP = false;
+        let createdCardCode = null;
+        let createdCardName = null;
+
+        if (!body.CardCode || body.CardCode === null) {
+            const clientPhone = body.clientPhone || body.Phone1 || body.Phone2;
+
+            if (!clientPhone) {
+                return {
+                    status: false,
+                    message: "CardCode is missing and clientPhone is required to create Business Partner",
+                };
+            }
+
+            const bp = await this.createBusinessPartner({
+                Phone1: clientPhone,
+                Phone2: '',
+                CardName: body.CardName || "No Name"
+            });
+
+            if (!bp?.CardCode) {
+                return {
+                    status: false,
+                    message: bp?.message || "Failed to create Business Partner",
+                };
+            }
+
+            createdBP = true;
+            createdCardCode = bp.CardCode;
+            createdCardName = body.CardName || "No Name";
+
+            body.CardCode = bp.CardCode;
+
+            delete body.clientPhone;
+            delete body.Phone1;
+            delete body.Phone2;
+        }
 
         const axiosInstance = Axios.create({
             baseURL: `${this.api}`,
@@ -174,20 +220,22 @@ class b1SL {
         try {
             const { data } = await axiosInstance.post(`/Invoice`, body);
 
-            // ✔ SUCCESS → lead update qilish
-            if (leadId) {
-                await LeadModel.updateOne(
-                    { _id: leadId },
-                    {
-                        $set: {
-                            invoiceCreated: true,
-                            invoiceDocEntry: data?.DocEntry || null,
-                            invoiceDocNum: data?.DocNum || null,
-                            invoiceCreatedAt: new Date(),
-                        },
-                    }
-                );
+            const updateData = {
+                invoiceCreated: true,
+                invoiceDocEntry: data?.DocEntry || null,
+                invoiceDocNum: data?.DocNum || null,
+                invoiceCreatedAt: new Date(),
+            };
+
+            if (createdBP) {
+                updateData.cardCode = createdCardCode;
+                updateData.cardName = createdCardName;
             }
+
+            await LeadModel.updateOne(
+                { _id: leadId },
+                { $set: updateData }
+            );
 
             return {
                 status: true,
@@ -198,6 +246,7 @@ class b1SL {
             if (get(err, 'response.status') == 401) {
                 const token = await this.auth();
                 if (token.status) return await this.createInvoice(req, res, next);
+
                 return { status: false, message: token.message };
             }
 
@@ -209,6 +258,50 @@ class b1SL {
             };
         }
     };
+
+    findOrCreateBusinessPartner = async (phone, cardName) => {
+        if (!phone) return null;
+
+        const digits = String(phone).replace(/\D/g, "");
+
+        const query = `
+        SELECT "CardCode", "CardName", "Phone1", "Phone2"
+        FROM ${db}.OCRD
+        WHERE "Phone1" LIKE '%${digits}' OR "Phone2" LIKE '%${digits}'
+    `;
+
+        try {
+            const rows = await execute(query);
+
+            if (rows && rows.length > 0) {
+                return {
+                    cardCode: rows[0].CardCode,
+                    cardName: rows[0].CardName,
+                    created: false,
+                };
+            }
+        } catch (err) {
+            console.error("SAP search error:", err);
+        }
+
+        const bp = await this.createBusinessPartner({
+            Phone1: phone,
+            Phone2: '',
+            CardName: cardName || "No Name",
+        });
+
+        if (!bp?.CardCode) {
+            console.error("BP create error:", bp?.message);
+            return null;
+        }
+
+        return {
+            cardCode: bp.CardCode,
+            cardName: cardName || "No Name",
+            created: true,
+        };
+    }
+
 
 }
 

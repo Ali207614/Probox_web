@@ -10,7 +10,7 @@ const InvoiceModel = require("../models/invoice-model");
 const CommentModel = require("../models/comment-model")
 const UserModel = require("../models/user-model")
 const b1Sl = require('./b1SL')
-const { shuffleArray, parseLocalDateString, addAndCondition,groupSearchResults } = require("../helpers");
+const { shuffleArray, parseLocalDateString, addAndCondition } = require("../helpers");
 const moment = require('moment-timezone')
 const fsPromises = require('fs/promises');
 const {notIncExecutorRole} = require("../config");
@@ -737,11 +737,21 @@ class b1HANA {
 
     createLead = async (req, res, next) => {
         try {
-            const { source, clientName, clientPhone, branch2, seller, source2, comment , operator1 } = req.body;
+            const {
+                source,
+                clientName,
+                clientPhone,
+                branch2,
+                seller,
+                source2,
+                comment,
+                operator1
+            } = req.body;
 
             const startOfDay = moment().startOf('day').toDate();
             const endOfDay = moment().endOf('day').toDate();
 
+            // 📌 PHONE VALIDATION
             function validatePhone(phone) {
                 if (!phone) return false;
                 let digits = String(phone).replace(/\D/g, '');
@@ -750,6 +760,7 @@ class b1HANA {
                 return isValid ? digits : false;
             }
 
+            // 📌 REQUIRED: source
             if (!source) {
                 return res.status(400).json({ message: 'source is required' });
             }
@@ -761,6 +772,7 @@ class b1HANA {
                 });
             }
 
+            // 📌 CLEAN PHONE
             const cleanedPhone = validatePhone(clientPhone);
             if (!cleanedPhone) {
                 return res.status(400).json({
@@ -768,10 +780,11 @@ class b1HANA {
                 });
             }
 
+            // 📌 REQUIRED FIELDS per source
             const requiredFieldsBySource = {
                 Organika: ['clientName', 'clientPhone', 'branch2', 'seller'],
                 Community: ['clientName', 'clientPhone'],
-                'Kiruvchi qongiroq': ['clientName', 'clientPhone','operator1'],
+                'Kiruvchi qongiroq': ['clientName', 'clientPhone', 'operator1'],
                 Manychat: ['clientName', 'clientPhone'],
                 Meta: ['clientName', 'clientPhone'],
             };
@@ -780,12 +793,14 @@ class b1HANA {
             const missingFields = requiredFields.filter(
                 (f) => !req.body[f] || String(req.body[f]).trim() === ''
             );
+
             if (missingFields.length > 0) {
                 return res.status(400).json({
                     message: `Majburiy maydonlarni to'ldirish kerak ${source}: ${missingFields.join(', ')}`,
                 });
             }
 
+            // 📌 DUPLICATE CHECK (today only)
             const exists = await LeadModel.exists({
                 clientPhone: cleanedPhone,
                 source,
@@ -798,6 +813,7 @@ class b1HANA {
                 });
             }
 
+            // 📌 OPERATOR ASSIGN
             let operator = operator1 || null;
             if (source !== 'Organika' && !operator) {
                 operator = await assignBalancedOperator();
@@ -805,6 +821,14 @@ class b1HANA {
 
             const n = await generateShortId('PRO');
             const time = new Date();
+
+
+            const sapRecord = await b1Sl.findOrCreateBusinessPartner(cleanedPhone, clientName);
+
+            const cardCode = sapRecord?.cardCode || null;
+            const cardName = sapRecord?.cardName || null;
+
+            console.log('sapRecord', sapRecord)
 
             let dataObj = {
                 n,
@@ -817,14 +841,23 @@ class b1HANA {
                 comment: comment || null,
                 operator,
                 time,
+                cardCode,
+                cardName,
+            };
+
+            if (source === 'Organika') {
+                dataObj = {
+                    ...dataObj,
+                    meetingConfirmed: true,
+                    meetingConfirmedDate: new Date(),
+                    branch2,
+                    seller,
+                };
             }
 
-            if(source === 'Organika'){
-                dataObj= {...dataObj ,meetingConfirmed: true,meetingConfirmedDate: new Date(),branch2: branch2, seller: seller }
-
-            }
             const io = req.app.get('io');
-            if (io) io.emit('new_leads', {...dataObj,SlpCode:dataObj.seller || dataObj.operator})
+            if (io)
+                io.emit('new_leads', { ...dataObj, SlpCode: dataObj.seller || dataObj.operator });
 
             const lead = await LeadModel.create(dataObj);
 
@@ -832,11 +865,13 @@ class b1HANA {
                 message: 'Lead created successfully',
                 data: lead,
             });
+
         } catch (e) {
             console.error('Error creating lead:', e);
             next(e);
         }
-    }
+    };
+
 
     updateLead = async (req, res, next) => {
         try {
@@ -882,13 +917,7 @@ class b1HANA {
                 });
             }
 
-
-            console.log(validData, 'validData')
-
-
             if (validData?.interested) {
-
-                console.log(validData.interested, 'validData.interested')
                 const interestedBool = validData.interested === true
 
                 if (!interestedBool) {
@@ -2452,24 +2481,25 @@ class b1HANA {
             function validateDateTime(dateTimeStr) {
                 if (!dateTimeStr) return null;
 
-
                 const normalMatch = dateTimeStr.match(/^(\d{4}\.\d{2}\.\d{2}) (\d{2}):(\d{2})$/);
-                if (normalMatch) {
-                    const [_, datePart, hour, minute] = normalMatch;
+                if (!normalMatch) return null;
 
-                    if (minute !== "00") {
-                        throw new Error("Minutes must be 00. Example: 2025.11.17 16:00");
-                    }
+                const [_, datePart, hour, minute] = normalMatch;
 
-                    // "2025.11.17" → "2025-11-17" ga o‘tkazamiz
-                    const datePartISO = datePart.replace(/\./g, '-');
-
-                    const d = new Date(`${datePartISO}T${hour}:${minute}:00`);
-                    if (isNaN(d.getTime())) {
-                        throw new Error("Invalid date format");
-                    }
-                    return d;
+                if (minute !== "00") {
+                    throw new Error("Minutes must be 00. Example: 2025.11.17 16:00");
                 }
+
+                const datePartISO = datePart.replace(/\./g, '-'); // 2025.11.19 → 2025-11-19
+
+                // 📌 MUHIM: Asia/Tashkent timezone deb qabul qilish!
+                const m = moment.tz(`${datePartISO} ${hour}:${minute}`, "YYYY-MM-DD HH:mm", "Asia/Tashkent");
+
+                if (!m.isValid()) {
+                    throw new Error("Invalid date format");
+                }
+
+                return m.toDate();  // ← TO‘G‘RI UTC qiymat bo‘ladi
             }
 
             // === Validate newDueDate ===
@@ -2495,10 +2525,11 @@ class b1HANA {
                     invoice.CardCode = CardCode;
                     invoice.DueDate = parseLocalDateString(DueDate);
                 }
-                console.log(validatedNewDueDate)
                 if (validatedNewDueDate) {
+                    console.log(validatedNewDueDate , " bu newDU")
+
                     invoice.newDueDate = validatedNewDueDate;
-                    invoice.notificationSent = false; // reset notification
+                    invoice.notificationSent = false;
                 }
 
                 if (Phone1) invoice.Phone1 = Phone1;
@@ -2529,6 +2560,7 @@ class b1HANA {
             });
 
         } catch (e) {
+            console.log(e)
             next(e);
         }
     };
