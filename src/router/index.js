@@ -26,7 +26,7 @@ router.get('/leads', authMiddleware, b1HANA.leads)
 
 router.get('/leads/:id', authMiddleware, b1HANA.leadOne)
 
-router.post('/invoice', authMiddleware, b1SL.createInvoice);
+router.post('/create/invoice', authMiddleware, b1SL.createInvoice);
 
 router.put('/leads/:id', authMiddleware, b1HANA.updateLead)
 
