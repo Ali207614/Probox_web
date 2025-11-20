@@ -11,7 +11,6 @@ const { main } = require('../src/utils/googleSheetSync');
 const googleSheetRouter = require('../src/router/googleSheetWebhook');
 const router = require('../src/router/index');
 const { PORT, DB_URL, conn_params, CLIENT_URL } = require('./config');
-const { ensureBucket } = require('./minio');
 const leadImageRoute = require('../src/router/leadImageRoute');
 const path = require('path');
 const app = express();
@@ -29,6 +28,8 @@ const io = new Server(server, {
 global.io = io;
 
 // === MIDDLEWARES ===
+
+
 
 app.use(cors({
     origin: '*',
@@ -86,7 +87,6 @@ server.listen(port, () => {
             }
         });
 
-        await ensureBucket(process.env.MINIO_BUCKET);
     } catch (err) {
         console.error('❌ Initial sync failed:', err.message);
     }

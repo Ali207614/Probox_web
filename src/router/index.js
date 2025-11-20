@@ -1,8 +1,13 @@
 const Router = require('express').Router;
 const b1SL = require('../controllers/b1SL');
 const b1HANA = require('../controllers/b1HANA');
+const leadController = require('../controllers/leadController');
 const authMiddleware = require('../middlewares/auth-middleware');
 const googleSheetWebhook = require('./googleSheetWebhook');
+
+const multer = require('multer');
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = new Router();
 
@@ -24,7 +29,35 @@ router.get('/rate', authMiddleware, b1HANA.getRate)
 
 router.get('/leads', authMiddleware, b1HANA.leads)
 
-router.get('/leads/:id', authMiddleware, b1HANA.leadOne)
+router.get('/leads/:id', authMiddleware, leadController.leadOne)
+
+// ==========================
+//     LEAD IMAGES API
+// ==========================
+
+// Rasm yuklash (3-size)
+router.post(
+    '/lead-images/upload',
+    authMiddleware,
+    upload.single('image'),
+    leadController.uploadLeadImage
+);
+
+// Leadga tegishli rasmlarni olish (3-size signed URL bilan)
+router.get(
+    '/lead-images/:leadId',
+    authMiddleware,
+    leadController.getLeadImages
+);
+
+// LeadImage o‘chirish (3-size rasm o‘chadi)
+router.delete(
+    '/lead-images/:id',
+    authMiddleware,
+    leadController.deleteLeadImage
+);
+
+
 
 router.post('/create/invoice', authMiddleware, b1SL.createInvoice);
 

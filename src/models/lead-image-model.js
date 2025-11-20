@@ -2,34 +2,27 @@ const { Schema, model } = require('mongoose');
 
 const LeadImageSchema = new Schema(
     {
-        cardCode: {
-            type: String,
+        leadId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Lead',
             required: true,
             index: true,
-            description: 'Lead yoki mijozning CardCode qiymati',
         },
-        key: {
+
+        cardCode: {
             type: String,
-            required: true,
-            description: 'MinIO ichidagi object key (path)',
+            index: true,
         },
-        url: {
-            type: String,
-            required: true,
-            description: 'Presigned yoki public URL',
+
+        keys: {
+            small: { type: String, required: true },
+            medium: { type: String, required: true },
+            large: { type: String, required: true },
         },
-        fileName: {
-            type: String,
-            description: 'Asl fayl nomi (client tomonidan yuborilgan)',
-        },
-        mimeType: {
-            type: String,
-            description: 'MIME turi (image/jpeg, image/png, va hokazo)',
-        },
-        size: {
-            type: Number,
-            description: 'Fayl hajmi baytlarda',
-        },
+
+        fileName: String,
+        mimeType: String,
+        size: Number,
     },
     { timestamps: true }
 );

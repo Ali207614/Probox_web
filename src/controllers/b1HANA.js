@@ -1107,98 +1107,25 @@ class b1HANA {
         }
     };
 
-    leadOne = async (req, res, next) => {
+    parseProfilePicture(pictureField) {
+        if (!pictureField) return null;
         try {
-            const { id } = req.params;
-
-            const lead = await LeadModel.findById(id).lean();
-
-            if (!lead) {
-                return res.status(404).json({
-                    message: 'Lead not found',
-                });
+            const parsed = JSON.parse(pictureField);
+            if (
+                parsed &&
+                typeof parsed === 'object' &&
+                'small' in parsed &&
+                'medium' in parsed &&
+                'large' in parsed &&
+                typeof parsed.small === 'string' &&
+                typeof parsed.medium === 'string' &&
+                typeof parsed.large === 'string'
+            ) {
+                return parsed;
             }
-
-            const formatDate = (date, withTime = false) => {
-                if (!date) return null;
-                return withTime
-                    ? moment(date).format('YYYY.MM.DD HH:mm')
-                    : moment(date).format('YYYY.MM.DD');
-            };
-
-            const data = {
-                id: lead._id,
-                n: lead.n ?? null,
-                status: lead?.status,
-                cardCode:lead?.cardCode || null,
-                acceptedReason: lead?.acceptedReason || null,
-                invoiceCreated : lead?.invoiceCreated || null,
-                invoiceDocEntry :lead?.invoiceDocEntry || null,
-                invoiceDocNum :lead?.invoiceDocNum || null,
-                invoiceCreatedAt:lead?.invoiceCreatedAt || null,
-                isBlocked: lead?.isBlocked ?? false,
-                comment: lead.comment ?? '',
-                limit: lead.limit ?? null,
-                clientName: lead?.clientName || '',
-                clientPhone: lead.clientPhone || '',
-                source: lead.source || '',
-                time: formatDate(lead.time, true),
-                operator: lead.operator || '',
-                called: lead.called ?? null,
-                callTime: formatDate(lead.callTime, true),
-                answered: lead.answered ?? null,
-                callCount: lead.callCount ?? 0,
-                interested: lead.interested ?? null,
-                rejectionReason: lead.rejectionReason || '',
-                passportVisit: lead.passportVisit || '',
-                jshshir: lead.jshshir || '',
-                operator2: lead.operator2 || '',
-                source2: lead.source2 || null,
-                called2: lead.called2 ?? null,
-                answered2: lead.answered2 ?? null,
-                callCount2: lead.callCount2 ?? 0,
-                meetingDate: formatDate(lead.meetingDate),
-                rejectionReason2: lead.rejectionReason2 || '',
-                paymentInterest: lead.paymentInterest || '',
-                branch: lead.branch || '',
-                meetingHappened: lead.meetingHappened ?? null,
-                percentage: lead.percentage ?? null,
-                meetingConfirmed: lead.meetingConfirmed ?? null,
-                meetingConfirmedDate: formatDate(lead.meetingConfirmedDate),
-                purchase: lead.purchase ?? null,
-                purchaseDate: formatDate(lead.purchaseDate),
-                saleType: lead.saleType || '',
-                passportId: lead.passportId || '',
-                scoring: lead.scoring || null,
-                seller: lead.seller || null,
-                branch2: lead.branch2 || '',
-                clientFullName: lead.clientFullName || '',
-                region: lead.region || '',
-                district: lead.district || '',
-                address: lead.address || '',
-                birthDate: formatDate(lead.birthDate),
-                applicationDate: formatDate(lead.applicationDate),
-                age: lead.age ?? null,
-                score: lead.score ?? null,
-                katm: lead.katm || '',
-                katmPayment: lead.katmPayment ?? null,
-                paymentHistory: lead.paymentHistory || '',
-                mib: lead.mib ?? false,
-                mibIrresponsible: lead.mibIrresponsible ?? false,
-                aliment: lead.aliment ?? false,
-                officialSalary: lead.officialSalary ?? null,
-                finalLimit: lead.finalLimit ?? null,
-                finalPercentage: lead.finalPercentage ?? null,
-                createdAt: formatDate(lead.createdAt, true),
-                updatedAt: formatDate(lead.updatedAt, true),
-            };
-
-            return res.status(200).json({
-                data,
-            });
-        } catch (e) {
-            console.error('Error fetching lead details:', e);
-            next(e);
+            return null;
+        } catch {
+            return null;
         }
     }
 
