@@ -9,28 +9,6 @@ const uploadService = new UploadService();
 
 class LeadController {
 
-    parseProfilePicture(pictureField) {
-        if (!pictureField) return null;
-        try {
-            const parsed = JSON.parse(pictureField);
-            if (
-                parsed &&
-                typeof parsed === 'object' &&
-                'small' in parsed &&
-                'medium' in parsed &&
-                'large' in parsed &&
-                typeof parsed.small === 'string' &&
-                typeof parsed.medium === 'string' &&
-                typeof parsed.large === 'string'
-            ) {
-                return parsed;
-            }
-            return null;
-        } catch {
-            return null;
-        }
-    }
-
     uploadLeadImage = async (req, res, next) => {
         try {
             const { leadId, cardCode } = req.body;
@@ -81,9 +59,15 @@ class LeadController {
                 return res.status(400).json({ message: 'leadId majburiy' });
             }
 
-            const filter = { leadId };
+            const filter = {  };
 
-            if (cardCode) filter.cardCode = cardCode;
+            if (cardCode) {
+                filter.cardCode = cardCode;
+            }
+            else{
+                filter.leadId = leadId;
+            }
+
 
             const images = await LeadImage.find(filter)
                 .sort({ createdAt: -1 })
@@ -135,7 +119,6 @@ class LeadController {
             next(err);
         }
     };
-
 
     leadOne = async (req, res, next) => {
         try {

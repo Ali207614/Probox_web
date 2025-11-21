@@ -2,6 +2,7 @@ const Router = require('express').Router;
 const b1SL = require('../controllers/b1SL');
 const b1HANA = require('../controllers/b1HANA');
 const leadController = require('../controllers/leadController');
+const analyticsController = require('../controllers/analyticsController');
 const authMiddleware = require('../middlewares/auth-middleware');
 const googleSheetWebhook = require('./googleSheetWebhook');
 
@@ -70,6 +71,8 @@ router.get('/search', authMiddleware, b1HANA.search);
 router.post('/incomingPayment', authMiddleware, b1SL.postIncomingPayment);
 
 router.post('/leads', authMiddleware, b1HANA.createLead);
+
+router.get('/lead-analytics', authMiddleware, analyticsController.getLeadsAnalytics);
 
 
 router.get('/test', (req, res) => {

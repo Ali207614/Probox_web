@@ -1107,28 +1107,6 @@ class b1HANA {
         }
     };
 
-    parseProfilePicture(pictureField) {
-        if (!pictureField) return null;
-        try {
-            const parsed = JSON.parse(pictureField);
-            if (
-                parsed &&
-                typeof parsed === 'object' &&
-                'small' in parsed &&
-                'medium' in parsed &&
-                'large' in parsed &&
-                typeof parsed.small === 'string' &&
-                typeof parsed.medium === 'string' &&
-                typeof parsed.large === 'string'
-            ) {
-                return parsed;
-            }
-            return null;
-        } catch {
-            return null;
-        }
-    }
-
     findAllBranch = async(req, res, next) => {
         try {
             const page = parseInt(req.query.page) || 1;
