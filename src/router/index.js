@@ -74,6 +74,11 @@ router.post('/leads', authMiddleware, b1HANA.createLead);
 
 router.get('/lead-analytics', authMiddleware, analyticsController.getLeadsAnalytics);
 
+router.post('/leads/:id/chat', authMiddleware, b1HANA.addChat);
+router.get('/leads/:id/chat', authMiddleware, b1HANA.getChats);
+router.patch('/leads/chat/:chatId', authMiddleware, b1HANA.updateChat);
+router.delete('/leads/chat/:chatId', authMiddleware, b1HANA.deleteChat);
+
 
 router.get('/test', (req, res) => {
     res.json({ message: 'ok' });

@@ -22,6 +22,9 @@ const permissions = require('../utils/lead-permissions')
 const { validateFields } = require("../utils/validate-types")
 const { generateShortId } = require("../utils/createLead");
 const assignBalancedOperator = require("../utils/assignBalancedOperator");
+const LeadChat = require("../models/lead-chat-model");
+
+
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
@@ -888,6 +891,7 @@ class b1HANA {
                 });
             }
 
+
             const allowedFields = permissions[U_role];
             const { validData, errors } = validateFields(
                 body,
@@ -915,6 +919,27 @@ class b1HANA {
                 });
             }
 
+            if( validData.callCount && existingLead.callCount  !== validData.callCount) {
+                const prev = existingLead.callCount || 0;
+
+                if (validData.callCount - prev !== 1) {
+                    return res.status(400).json({
+                        message: "Qo'ng'iroqlar soni faqat bittaga oshishi mumkin"
+                    });
+                }
+            }
+
+
+            if( validData.callCount2 &&  existingLead.callCount2  !== validData.callCount2) {
+                const prev = existingLead.callCount2 || 0;
+
+                if (validData.callCount2 - prev !== 1) {
+                    return res.status(400).json({
+                        message: "Qo'ng'iroqlar soni faqat bittaga oshishi mumkin"
+                    });
+                }
+            }
+
             if (validData?.interested) {
                 const interestedBool = validData.interested === true
 
@@ -938,6 +963,15 @@ class b1HANA {
             if(validData.rejectionReason2){
                 validData.status = 'Closed';
             }
+
+            if (
+                (validData.answered === false || existingLead.answered === false) &&
+                (Number(validData.callCount) >= 3)
+            ) {
+                validData.status = 'Closed';
+            }
+
+
 
             // === Normalize fields
             if (validData?.clientFullName) {
@@ -979,7 +1013,7 @@ class b1HANA {
                 }
             }
 
-            if (validData.meetingConfirmed == 'true') {
+            if (validData.meetingConfirmed === true) {
                 if (!validData.branch2 && !validData.seller) {
                     return res.status(400).json({
                         message: `Uchrashuv bo'lganda filial va sotuvchi tanlash majburiy`,
@@ -2594,6 +2628,126 @@ class b1HANA {
             });
         } catch (e) {
             next(e);
+        }
+    };
+
+
+    addChat = async (req, res, next) => {
+        try {
+            const { id } = req.params;
+            const { message } = req.body;
+            const userId = req.user.SlpCode;
+
+            if (!message || message.trim().length === 0) {
+                return res.status(400).json({ message: "Message cannot be empty" });
+            }
+
+            if(message.trim().length >= 500) {
+                return res.status(400).json({ message: "Message is too long. Maximum length is 500 characters." });
+            }
+
+
+            const lead = await LeadModel.findById(id);
+            if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+            const chat = await LeadChat.create({
+                leadId: id,
+                createdBy: userId,
+                message,
+            });
+
+            return res.status(201).json({
+                message: "Chat created",
+                data: chat,
+            });
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    getChats = async (req, res, next) => {
+        try {
+            const { id } = req.params;
+            let { page = 1, limit = 20 } = req.query;
+
+            page = Number(page);
+            limit = Number(limit);
+
+            const lead = await LeadModel.findById(id);
+            if (!lead) return res.status(404).json({ message: "Lead not found" });
+
+            const skip = (page - 1) * limit;
+
+            const [items, total] = await Promise.all([
+                LeadChat.find({ leadId: id })
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limit),
+                LeadChat.countDocuments({ leadId: id })
+            ]);
+
+            return res.json({
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+                data: items,
+            });
+
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    updateChat = async (req, res, next) => {
+        try {
+            const { chatId } = req.params;
+            const { message } = req.body;
+            const userId = req.user.SlpCode;
+            const userRole = req.user.U_role;
+
+            if (!message || message.trim() === "") {
+                return res.status(400).json({ message: "Message cannot be empty" });
+            }
+
+            if(message.trim().length >= 500) {
+                return res.status(400).json({ message: "Message is too long. Maximum length is 500 characters." });
+            }
+
+            const chat = await LeadChat.findById(chatId);
+            if (!chat) return res.status(404).json({ message: "Chat not found" });
+
+            if (String(chat.createdBy) !== String(userId) && userRole !== "Admin") {
+                return res.status(403).json({ message: "Access denied" });
+            }
+
+            chat.message = message;
+            await chat.save();
+
+            return res.json({ message: "Chat updated", data: chat });
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    deleteChat = async (req, res, next) => {
+        try {
+            const { chatId } = req.params;
+            const userId = req.user.SlpCode;
+            const userRole = req.user.U_role;
+
+            const chat = await LeadChat.findById(chatId);
+            if (!chat) return res.status(404).json({ message: "Chat not found" });
+
+            if (String(chat.createdBy) !== String(userId) && userRole !== "Admin") {
+                return res.status(403).json({ message: "Access denied" });
+            }
+
+            await chat.deleteOne();
+
+            return res.json({ message: "Chat deleted" });
+        } catch (err) {
+            next(err);
         }
     };
 }

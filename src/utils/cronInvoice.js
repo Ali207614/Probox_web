@@ -2,12 +2,6 @@ const cron = require("node-cron");
 const InvoiceModel = require("../models/invoice-model");
 const moment = require('moment-timezone');
 
-function getTashkentDate() {
-    return new Date(
-        new Date().toLocaleString("en-US", { timeZone: "Asia/Tashkent" })
-    );
-}
-
 cron.schedule("0 * * * *", async () => {
     try {
         const io = global.io;
