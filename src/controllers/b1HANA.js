@@ -2680,7 +2680,7 @@ class b1HANA {
 
             const [items, total] = await Promise.all([
                 LeadChat.find({ leadId: id })
-                    .sort({ createdAt: -1 })
+                    .sort({ createdAt: 1 })
                     .skip(skip)
                     .limit(limit)
                     .lean()
