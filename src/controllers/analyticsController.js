@@ -35,7 +35,7 @@ class AnalyticsController {
                 passport: leads.filter(l => l.passportVisit === "Passport").length,
                 meetingSet: leads.filter(l => l.meetingDate).length,
                 visit: leads.filter(l => l.meetingHappened).length,
-                processing: leads.filter(l => l.passportVisit === 'Jarayonda').length,
+                processing: leads.filter(l => l.passportVisit === 'Processing').length,
                 purchase: leads.filter(l => l.purchase).length,
             };
 
@@ -47,7 +47,7 @@ class AnalyticsController {
                 { no: 5, name: 'Pasport', count: funnel.passport, cr: percent(funnel.passport, funnel.leads) },
                 { no: 6, name: 'Uchrashuv belgilandi', count: funnel.meetingSet, cr: percent(funnel.meetingSet, funnel.leads) },
                 { no: 7, name: 'Vizit bo\'ldi', count: funnel.visit, cr: percent(funnel.visit, funnel.leads) },
-                { no: 8, name: 'Jaryonda', count: funnel.processing, cr: percent(funnel.processing, funnel.leads) },
+                { no: 8, name: 'Jarayonda', count: funnel.processing, cr: percent(funnel.processing, funnel.leads) },
                 { no: 9, name: 'Harid bo\'ldi', count: funnel.purchase, cr: percent(funnel.purchase, funnel.leads) },
             ];
 
