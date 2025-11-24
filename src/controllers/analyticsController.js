@@ -35,7 +35,7 @@ class AnalyticsController {
                 passport: leads.filter(l => l.passportVisit === "Passport").length,
                 meetingSet: leads.filter(l => l.meetingDate).length,
                 visit: leads.filter(l => l.meetingHappened).length,
-                processing: leads.filter(l => l.status === 'Processing').length,
+                processing: leads.filter(l => l.passportVisit === 'Jarayonda').length,
                 purchase: leads.filter(l => l.purchase).length,
             };
 
