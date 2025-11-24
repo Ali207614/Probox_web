@@ -32,11 +32,6 @@ router.get('/leads', authMiddleware, b1HANA.leads)
 
 router.get('/leads/:id', authMiddleware, leadController.leadOne)
 
-// ==========================
-//     LEAD IMAGES API
-// ==========================
-
-// Rasm yuklash (3-size)
 router.post(
     '/lead-images/upload',
     authMiddleware,

@@ -2635,14 +2635,14 @@ class b1HANA {
     addChat = async (req, res, next) => {
         try {
             const { id } = req.params;
-            const { message } = req.body;
+            const { Comments } = req.body;
             const userId = req.user.SlpCode;
 
-            if (!message || message.trim().length === 0) {
+            if (!Comments || Comments.trim().length === 0) {
                 return res.status(400).json({ message: "Message cannot be empty" });
             }
 
-            if(message.trim().length >= 500) {
+            if(Comments.trim().length >= 500) {
                 return res.status(400).json({ message: "Message is too long. Maximum length is 500 characters." });
             }
 
@@ -2653,7 +2653,7 @@ class b1HANA {
             const chat = await LeadChat.create({
                 leadId: id,
                 createdBy: userId,
-                message,
+                message:Comments,
             });
 
             return res.status(201).json({
@@ -2682,7 +2682,9 @@ class b1HANA {
                 LeadChat.find({ leadId: id })
                     .sort({ createdAt: -1 })
                     .skip(skip)
-                    .limit(limit),
+                    .limit(limit)
+                    .lean()
+                ,
                 LeadChat.countDocuments({ leadId: id })
             ]);
 
@@ -2691,7 +2693,7 @@ class b1HANA {
                 limit,
                 total,
                 totalPages: Math.ceil(total / limit),
-                data: items,
+                data: items.map(item => ({ ...item,Comments: item.message, SlpCode: item.createdBy })),
             });
 
         } catch (err) {
@@ -2702,15 +2704,15 @@ class b1HANA {
     updateChat = async (req, res, next) => {
         try {
             const { chatId } = req.params;
-            const { message } = req.body;
+            const { Comments } = req.body;
             const userId = req.user.SlpCode;
             const userRole = req.user.U_role;
 
-            if (!message || message.trim() === "") {
+            if (!Comments || Comments.trim() === "") {
                 return res.status(400).json({ message: "Message cannot be empty" });
             }
 
-            if(message.trim().length >= 500) {
+            if(Comments.trim().length >= 500) {
                 return res.status(400).json({ message: "Message is too long. Maximum length is 500 characters." });
             }
 
@@ -2721,7 +2723,7 @@ class b1HANA {
                 return res.status(403).json({ message: "Access denied" });
             }
 
-            chat.message = message;
+            chat.message = Comments;
             await chat.save();
 
             return res.json({ message: "Chat updated", data: chat });
