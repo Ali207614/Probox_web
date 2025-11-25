@@ -201,7 +201,7 @@ class b1HANA {
                     ];
                 }
 
-                if (paymentStatus.split(',').includes('paid') || paymentStatus.split(',').includes('partial')) {
+                if (paymentStatus?.split(',').includes('paid') || paymentStatus?.split(',').includes('partial')) {
                     filterPartial.partial = true
                 }
 
