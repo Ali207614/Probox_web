@@ -168,7 +168,7 @@ class b1HANA {
             const endDateMoment = moment(endDate, 'YYYY.MM.DD').endOf('day').toDate();
 
             if (search) {
-                search = search.replace(/'/g, "''"); // SQL injectionni oldini oladi
+                search = search.replace(/'/g, "''");    // SQL injectionni oldini oladi
             }
 
             const slpCodeRaw = req.query.slpCode;
@@ -1196,7 +1196,7 @@ class b1HANA {
                 page = 1,
                 limit = 50,
                 slpCode,
-                paymentStatus,
+                paymentStatus='',
                 search,
                 phone,
                 phoneConfiscated

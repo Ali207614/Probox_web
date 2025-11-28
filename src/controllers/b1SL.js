@@ -17,14 +17,7 @@ class b1SL {
     constructor() {
         this.api = api;
     }
-    execute = async (sql) => {
-        try {
-            let data = await dbService.execute(sql);
-            return data;
-        } catch (e) {
-            throw new Error(e);
-        }
-    };
+
     auth = async () => {
         let obj = api_params
         const axios = Axios.create({
@@ -290,7 +283,6 @@ class b1SL {
         }
     };
 
-
     findOrCreateBusinessPartner = async (phone, cardName) => {
         if (!phone) return null;
 
@@ -349,8 +341,6 @@ class b1SL {
             created: true,
         };
     }
-
-
 }
 
 module.exports = new b1SL();

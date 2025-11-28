@@ -916,21 +916,42 @@ ORDER BY
 
     }
 
-    getItemSeries({ itemCode, whsCode,}){
+    getItemSeries({ itemCode, whsCode, priceList = 1 }) {
         return `
-            SELECT 
+            SELECT
                 R."ItemCode",
-                R."DistNumber",
+                R."DistNumber" AS "IMEI",
                 R."SysNumber",
-                Q."Quantity"    
-            FROM ${this.db}.OSRN R
-            JOIN  ${this.db}.OSRQ Q ON Q."ItemCode" = R."ItemCode" 
-                       AND Q."SysNumber" = R."SysNumber" and Q."WhsCode" ='${whsCode}'
-            WHERE 
+                Q."WhsCode",
+                Q."Quantity",
+
+                -- Sotuv narxi Price List
+                PR."Price" AS "SalePrice",
+
+                -- IMEI bo‘yicha REAL zakup narxi (OSRN.CostTotal)
+                R."CostTotal" AS "PurchasePrice"
+
+            FROM ${this.db}."OSRN" R
+
+                     JOIN ${this.db}."OSRQ" Q
+                          ON Q."ItemCode" = R."ItemCode"
+                              AND Q."SysNumber" = R."SysNumber"
+                              AND Q."WhsCode" = '${whsCode}'
+
+                -- PriceList
+                     LEFT JOIN ${this.db}."ITM1" PR
+                               ON PR."ItemCode" = R."ItemCode"
+                                   AND PR."PriceList" = ${priceList}
+
+            WHERE
                 R."ItemCode" = '${itemCode}'
-                AND Q."Quantity" > 0;`
+              AND Q."Quantity" > 0
+
+            ORDER BY R."DistNumber";
+        `;
     }
 
+    // 352820546993929
 
     getItems({
                  search,
@@ -943,35 +964,32 @@ ORDER BY
         let imeiJoin = '';
         let imeiWhere = '';
 
+        const isIMEI = search && /^\d+$/.test(search) && search.length >= 4;
+
         // Warehouse filter
         if (whsCode) {
             whereClauses.push(`T0."WhsCode" = '${whsCode}'`);
         }
 
-        const isIMEI = search && /^\d+$/.test(search) && search.length >= 4;
-
         if (isIMEI) {
-            // If IMEI search, build dynamic whsCode condition
-            const whsCondition = whsCode
-                ? `AND Q."WhsCode" = '${whsCode}'`
-                : ``;
+            const whsCondition = whsCode ? `AND Q."WhsCode" = '${whsCode}'` : ``;
 
-            // Dynamic JOIN for IMEI search
             imeiJoin = `
             LEFT JOIN ${this.db}."OSRN" R
                 ON R."ItemCode" = T1."ItemCode"
+
             LEFT JOIN ${this.db}."OSRQ" Q
                 ON Q."ItemCode" = R."ItemCode"
-                AND Q."SysNumber" = R."SysNumber"
-                ${whsCondition}
+               AND Q."SysNumber" = R."SysNumber"
+               ${whsCondition}
         `;
 
-            // WHERE part specifically for IMEI
             imeiWhere = `
             AND R."DistNumber" LIKE '%${search}%'
             AND Q."Quantity" > 0
         `;
         }
+
         else if (search) {
             const s = search.toLowerCase();
             whereClauses.push(`
@@ -992,60 +1010,52 @@ ORDER BY
         if (filters.color) whereClauses.push(`T1."U_Color" = '${filters.color}'`);
 
         const whereQuery = 'WHERE ' + whereClauses.join(' AND ') + imeiWhere;
+
         const imeiSelect = isIMEI ? `R."DistNumber" AS "IMEI",` : '';
+
         return `
-            SELECT
-                ${imeiSelect}
-                T0."ItemCode",
-                T0."WhsCode",
-                CAST(T0."OnHand" AS INTEGER) as "OnHand",
-                T1."ItemName",
-                T1."U_Color",
-                T1."U_Condition",
-                T1."U_Model",
-                T1."U_DeviceType",
-                T1."U_Memory",
-                T1."U_Sim_type",
-                T1."U_PROD_CONDITION",
-                T2."WhsName",
-                OIVL1."Price" AS "Price",
-                P."U_price" AS "PhonePrice",
-                P."U_price_percentage" AS "PhonePercentage"
-            FROM ${this.db}."OITW" T0
-                     INNER JOIN ${this.db}."OITM" T1
-                                ON T0."ItemCode" = T1."ItemCode"
-                     INNER JOIN ${this.db}."OWHS" T2
-                                ON T0."WhsCode" = T2."WhsCode"
+        SELECT
+            ${imeiSelect}
+            T0."ItemCode",
+            T0."WhsCode",
+            CAST(T0."OnHand" AS INTEGER) AS "OnHand",
+            T1."ItemName",
+            T1."U_Color",
+            T1."U_Condition",
+            T1."U_Model",
+            T1."U_DeviceType",
+            T1."U_Memory",
+            T1."U_Sim_type",
+            T1."U_PROD_CONDITION",
+            T2."WhsName",
 
-                ${imeiJoin}  -- IMEI bo'lsa qo‘shiladi, bo‘lmasa bo‘sh bo‘ladi
+            -- Sale Price (Price List)
+            PR."Price" AS "SalePrice",
 
-        LEFT JOIN ${this.db}."@PHONE_PRICE" P
-            ON  P."U_model"        = T1."U_Model"
-                AND P."U_device_type"  = T1."U_DeviceType"
-                AND P."U_memory"       = T1."U_Memory"
-                AND P."U_sim_type"     = T1."U_Sim_type"
-                AND P."U_condition"    = T1."U_PROD_CONDITION"
+            -- IMEI bo'yicha real zakup narxi (OSRN.CostTotal)
+            ${isIMEI ? `R."CostTotal" AS "PurchasePrice"` : `NULL AS "PurchasePrice"`}
 
-                LEFT JOIN (
-                SELECT "ItemCode", "Price"
-                FROM (
-                SELECT
-                "ItemCode",
-                "Price",
-                ROW_NUMBER() OVER (PARTITION BY "ItemCode" ORDER BY "DocDate" DESC, "TransSeq" DESC) AS rn
-                FROM ${this.db}."OIVL"
-                WHERE "TransType" = 18
-                ) x
-                WHERE rn = 1
-                ) OIVL1 ON OIVL1."ItemCode" = T1."ItemCode"
+        FROM ${this.db}."OITW" T0
+            INNER JOIN ${this.db}."OITM" T1
+                ON T0."ItemCode" = T1."ItemCode"
+            INNER JOIN ${this.db}."OWHS" T2
+                ON T0."WhsCode" = T2."WhsCode"
 
-                ${whereQuery}
+            ${imeiJoin}
 
-            ORDER BY CAST(T0."OnHand" AS INTEGER) DESC
+        -- PRICE LIST
+        LEFT JOIN ${this.db}."ITM1" PR
+            ON PR."ItemCode" = T1."ItemCode"
+           AND PR."PriceList" = 1
 
-                LIMIT ${limit} OFFSET ${offset};
-        `;
+        ${whereQuery}
+
+        ORDER BY CAST(T0."OnHand" AS INTEGER) DESC
+        LIMIT ${limit}
+        OFFSET ${offset};
+    `;
     }
+
 
 
 }
