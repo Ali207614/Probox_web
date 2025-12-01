@@ -57,9 +57,9 @@ class UploadService {
             throw new Error('No file uploaded');
         }
 
-        const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+        const allowed = ['image/jpeg', 'image/png', 'image/webp','application/pdf'];
         if (!allowed.includes(file.mimetype)) {
-            throw new Error('Ruxsat etilgan formatlar: jpeg, png, webp');
+            throw new Error('Ruxsat etilgan formatlar: jpeg, png, webp ,pdf');
         }
 
         const baseKey = `${folder}/${entityId}/${Date.now()}-${uuidv4().split('-')[0]}`;
@@ -69,10 +69,16 @@ class UploadService {
         for (const size in sizes) {
             const width = sizes[size];
 
-            const buffer = await sharp(file.buffer)
-                .resize({ width, fit: 'inside', withoutEnlargement: true })
-                .webp({ quality: 85 })
-                .toBuffer();
+            let buffer;
+            if (file.mimetype === 'application/pdf') {
+                buffer = file.buffer;
+            } else {
+                buffer = await sharp(file.buffer)
+                    .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
+                    .jpeg({ quality: 80 })
+                    .toBuffer();
+            }
+
 
             const key = `${baseKey}-${size}.webp`;
 

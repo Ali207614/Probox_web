@@ -12,16 +12,19 @@ const BUCKET = process.env.MINIO_BUCKET;
 
 // === Helper: Faylni MinIO ga yuklash ===
 async function uploadToMinio(cardCode, file) {
-    const ext = mime.extension(file.mimetype) || 'jpg';
+    const ext = mime.extension(file.mimetype) || 'bin';
     const fileName = `${crypto.randomUUID().replace(/-/g, '')}.${ext}`;
 
-    // BU juda muhim: bucket = 'leads', key = 'leads/ZM0001/file.jpg'
     const key = `leads/${cardCode}/${fileName}`;
-
-    const buffer = await sharp(file.buffer)
-        .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 80 })
-        .toBuffer();
+    let buffer;
+    if (file.mimetype === 'application/pdf') {
+        buffer = file.buffer;
+    } else {
+        buffer = await sharp(file.buffer)
+            .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 80 })
+            .toBuffer();
+    }
 
     await minioClient.putObject(BUCKET, key, buffer, {
         'Content-Type': file.mimetype,
@@ -52,10 +55,11 @@ router.post('/:cardCode', upload.array('images', 10), async (req, res) => {
         if (!files?.length)
             return res.status(400).json({ message: 'images are required' });
 
-        const allowed = ['image/png', 'image/jpeg', 'image/jpg'];
+        const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
+
         const invalid = files.filter((f) => !allowed.includes(f.mimetype));
         if (invalid.length > 0)
-            return res.status(400).json({ message: 'Only PNG, JPG, JPEG allowed' });
+            return res.status(400).json({ message: 'Only PNG, JPG, JPEG , PDF allowed' });
 
         const uploadedImages = [];
         for (const file of files) {
