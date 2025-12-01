@@ -53,34 +53,52 @@ class UploadService {
     }
 
     async uploadImage(folder, entityId, file) {
-        if (!file) {
-            throw new Error('No file uploaded');
-        }
+        if (!file) throw new Error('No file uploaded');
 
-        const allowed = ['image/jpeg', 'image/png', 'image/webp','application/pdf'];
+        // Allowed formats
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
         if (!allowed.includes(file.mimetype)) {
-            throw new Error('Ruxsat etilgan formatlar: jpeg, png, webp ,pdf');
+            throw new Error('Ruxsat etilgan formatlar: jpeg, png, webp, pdf');
         }
 
-        const baseKey = `${folder}/${entityId}/${Date.now()}-${uuidv4().split('-')[0]}`;
+        const basePath = `${folder}/${entityId}`;
+        const id = `${Date.now()}-${uuidv4().split('-')[0]}`;
+
+        // === PDF bo‘lsa ===
+        if (file.mimetype === 'application/pdf') {
+            const key = `${basePath}/${id}.pdf`;
+
+            await this.client.send(
+                new PutObjectCommand({
+                    Bucket: this.bucket,
+                    Key: key,
+                    Body: file.buffer,
+                    ContentType: 'application/pdf',
+                })
+            );
+
+            const url = await this.getSignedUrl(key);
+
+            return {
+                isPdf: true,
+                key,
+                url,
+                filename: file.originalname,
+                mimetype: file.mimetype,
+            };
+        }
+
+        // === Image bo‘lsa ===
         const sizes = { small: 200, medium: 600, large: 1200 };
         const keys = {};
 
         for (const size in sizes) {
-            const width = sizes[size];
+            const buffer = await sharp(file.buffer)
+                .resize({ width: sizes[size], withoutEnlargement: true })
+                .webp({ quality: 80 })
+                .toBuffer();
 
-            let buffer;
-            if (file.mimetype === 'application/pdf') {
-                buffer = file.buffer;
-            } else {
-                buffer = await sharp(file.buffer)
-                    .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
-                    .jpeg({ quality: 80 })
-                    .toBuffer();
-            }
-
-
-            const key = `${baseKey}-${size}.webp`;
+            const key = `${basePath}/${id}-${size}.webp`;
 
             await this.client.send(
                 new PutObjectCommand({
@@ -88,7 +106,6 @@ class UploadService {
                     Key: key,
                     Body: buffer,
                     ContentType: 'image/webp',
-                    CacheControl: 'public, max-age=31536000, immutable',
                 })
             );
 
@@ -96,8 +113,9 @@ class UploadService {
         }
 
         const urls = await this.generateSignedUrls(keys);
-        return { keys, urls };
+        return { keys, urls, isPdf: false };
     }
+
 
     async uploadFile(folder, entityId, file, options = {}) {
         if (!file) throw new Error('Fayl yuklanmadi');

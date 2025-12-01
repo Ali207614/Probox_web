@@ -16,10 +16,11 @@ async function uploadToMinio(cardCode, file) {
     const fileName = `${crypto.randomUUID().replace(/-/g, '')}.${ext}`;
 
     const key = `leads/${cardCode}/${fileName}`;
-    let buffer;
-    if (file.mimetype === 'application/pdf') {
-        buffer = file.buffer;
-    } else {
+
+    let buffer = file.buffer;
+
+    // faqat image bo'lsa sharp ishlaydi
+    if (file.mimetype.startsWith('image/')) {
         buffer = await sharp(file.buffer)
             .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
             .jpeg({ quality: 80 })
@@ -42,6 +43,7 @@ async function uploadToMinio(cardCode, file) {
         cardCode,
     };
 }
+
 
 // === POST /api/lead-images/:cardCode ===
 // Bir nechta rasm yuklash
