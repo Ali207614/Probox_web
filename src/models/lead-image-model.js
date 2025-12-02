@@ -15,11 +15,21 @@ const LeadImageSchema = new Schema(
         },
 
         keys: {
-            small: { type: String, required: true },
-            medium: { type: String, required: true },
-            large: { type: String, required: true },
+            small: {
+                type: String,
+                required: function () { return this.isPdf === false; }
+            },
+            medium: {
+                type: String,
+                required: function () { return this.isPdf === false; }
+            },
+            large: {
+                type: String,
+                required: function () { return this.isPdf === false; }
+            },
         },
-
+        pdfKey: { type: String },
+        isPdf: { type: Boolean, default: false },
         fileName: String,
         mimeType: String,
         size: Number,

@@ -12,9 +12,8 @@ class LeadController {
     uploadLeadImage = async (req, res, next) => {
         try {
             const { leadId, cardCode } = req.body;
+            console.log(req.body)
             const file = req.file;
-
-
 
             if (!file) {
                 return res.status(400).json({ message: 'Rasm yuklanmadi' });
@@ -32,20 +31,34 @@ class LeadController {
                 file
             );
 
-            const saved = await LeadImage.create({
+            let payload = {
                 leadId,
                 cardCode: cardCode ?? null,
-                keys: uploaded.keys,
                 fileName: file.originalname,
                 mimeType: file.mimetype,
                 size: file.size,
-            });
+            };
+
+            if (uploaded.isPdf) {
+                payload.isPdf = true;
+                payload.pdfKey = uploaded.key;
+                payload.keys = {};
+            }
+
+            else {
+                payload.isPdf = false;
+                payload.keys = uploaded.keys;
+            }
+
+            const saved = await LeadImage.create(payload);
 
             return res.json({
                 status: true,
                 image: saved,
             });
+
         } catch (err) {
+            console.log(err)
             next(err);
         }
     };
@@ -59,15 +72,7 @@ class LeadController {
                 return res.status(400).json({ message: 'leadId majburiy' });
             }
 
-            const filter = {  };
-
-            if (cardCode) {
-                filter.cardCode = cardCode;
-            }
-            else{
-                filter.leadId = leadId;
-            }
-
+            const filter = cardCode ? { cardCode } : { leadId };
 
             const images = await LeadImage.find(filter)
                 .sort({ createdAt: -1 })
@@ -76,14 +81,28 @@ class LeadController {
             const signedImages = [];
 
             for (const img of images) {
-                const keys = img.keys;
 
-                // 3 ta signed URL
-                const urls = await uploadService.generateSignedUrls(keys, 3600);
+                // === PDF bo‘lsa ===
+                if (img.isPdf) {
+                    const pdfUrl = await uploadService.getSignedUrl(img.pdfKey, 3600);
+
+                    signedImages.push({
+                        ...img,
+                        isPdf: true,
+                        pdfUrl,        // PDF uchun signed URL
+                        urls: null,    // rasm emas
+                    });
+
+                    continue;
+                }
+
+                const urls = await uploadService.generateSignedUrls(img.keys, 3600);
 
                 signedImages.push({
                     ...img,
-                    urls, // { small, medium, large }
+                    isPdf: false,
+                    urls,   // { small, medium, large }
+                    pdfUrl: null,
                 });
             }
 
