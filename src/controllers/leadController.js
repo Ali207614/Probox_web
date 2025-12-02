@@ -124,12 +124,19 @@ class LeadController {
                 return res.status(404).json({ message: "Rasm topilmadi" });
             }
 
-            // 3ta keyni o‘chirish
-            await uploadService.deleteImages([
-                image.keys.small,
-                image.keys.medium,
-                image.keys.large,
-            ]);
+            const keysToDelete = [];
+
+            if (image.isPdf) {
+                // PDFni o‘chirish
+                if (image.pdfKey) keysToDelete.push(image.pdfKey);
+            } else {
+                // Image bo‘lsa 3ta keyni o‘chirish
+                if (image.keys?.small) keysToDelete.push(image.keys.small);
+                if (image.keys?.medium) keysToDelete.push(image.keys.medium);
+                if (image.keys?.large) keysToDelete.push(image.keys.large);
+            }
+
+            await uploadService.deleteImages(keysToDelete);
 
             await image.deleteOne();
 
@@ -138,6 +145,7 @@ class LeadController {
             next(err);
         }
     };
+
 
     leadOne = async (req, res, next) => {
         try {
