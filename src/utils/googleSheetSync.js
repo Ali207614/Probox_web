@@ -85,7 +85,7 @@ async function main(io) {
 
 
         const nValue = lastLead?.nNumeric || 0;
-        const lastRow = nValue > 700 ? nValue - 700 : 1;
+        const lastRow = nValue > 800 ? nValue - 800 : 1;
         const nextStart = lastRow;
         const nextEnd = nextStart + 5000;
 
