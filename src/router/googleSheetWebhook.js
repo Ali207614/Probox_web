@@ -148,7 +148,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
         ]);
 
         const nValue = lastLead?.nNumeric || 0;
-        const nextStart = nValue > 50 ? nValue - 50 : 2;
+        const nextStart = nValue > 500 ? nValue - 500 : 2;
         const nextEnd = nextStart + 100;
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
