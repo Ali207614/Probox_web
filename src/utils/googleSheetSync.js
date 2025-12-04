@@ -85,9 +85,9 @@ async function main(io) {
 
 
         const nValue = lastLead?.nNumeric || 0;
-        const lastRow = nValue > 50 ? nValue - 50 : 1;
+        const lastRow = nValue > 300 ? nValue - 300 : 1;
         const nextStart = lastRow;
-        const nextEnd = nextStart + 30000;
+        const nextEnd = nextStart + 5000;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
