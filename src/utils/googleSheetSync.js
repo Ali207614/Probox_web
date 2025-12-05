@@ -85,11 +85,13 @@ async function main(io) {
 
 
         const nValue = lastLead?.nNumeric || 0;
+        console.log(nValue ,' bu Number')
         const lastRow = nValue > 1000 ? nValue - 1000 : 1;
         const nextStart = lastRow;
-        const nextEnd = nextStart + 500;
+        const nextEnd = nextStart + 1000;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
+        console.log(range)
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
         const rows = response.data.values || [];
         if (!rows.length) {
