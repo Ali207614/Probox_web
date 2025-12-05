@@ -134,6 +134,7 @@ async function main(io) {
             });
         }
 
+        console.log(leads.length ,' Leads Count')
         if (!leads.length) {
             console.log('⚠️ No valid leads after normalization.');
             return;
