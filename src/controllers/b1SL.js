@@ -348,9 +348,9 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
-            //res.json({status:"test"})
-            //return
-            // 5. Execute batch
+            res.json({status:"test"})
+            return
+
             const response = await axiosInstance.post(`/$batch`, payload);
 
             console.log("SAP batch response:", response.data);
