@@ -55,7 +55,7 @@ router.delete(
 
 
 
-router.post('/create/invoice', authMiddleware, b1SL.createInvoice);
+router.post('/create/invoice', authMiddleware, b1SL.createInvoiceAndPayment);
 
 router.put('/leads/:id', authMiddleware, b1HANA.updateLead)
 
