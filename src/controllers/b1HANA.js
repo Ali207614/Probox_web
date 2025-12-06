@@ -1717,11 +1717,13 @@ class b1HANA {
                 )
                 : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
+
+
             if(result.PaidToDate > result.SumApplied){
                 let n = result.PaidToDate - result.SumApplied;
                 result.InsTotal = result.InsTotal - n;
                 result.PaidToDate = 0;
-                result.SumApplied = confiscatedTotal;
+                result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
             }
             else{
                 result.SumApplied = Number(result.SumApplied) + confiscatedTotal ;
