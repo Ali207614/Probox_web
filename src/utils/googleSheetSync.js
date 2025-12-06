@@ -88,7 +88,7 @@ async function main(io) {
         console.log(nValue ,' bu Number')
         const lastRow = nValue > 1000 ? nValue - 1000 : 1;
         const nextStart = lastRow;
-        const nextEnd = nextStart + 1000;
+        const nextEnd = nextStart + 1500;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
         console.log(range)
