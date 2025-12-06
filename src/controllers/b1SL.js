@@ -225,7 +225,6 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
         };
     }
 
-
     createInvoiceAndPayment = async (req, res, next) => {
         try {
             const leadId = req.body.leadId;

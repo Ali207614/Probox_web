@@ -252,20 +252,30 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
         for (const lead of leads) {
             try {
+                const normalizedPhone = normalizePhone(lead.clientPhone);
+                if (!normalizedPhone) continue;
+
+                const start = moment(lead.time).startOf('day').toDate();
+                const end = moment(lead.time).endOf('day').toDate();
+
                 const doc = await LeadModel.findOneAndUpdate(
-                    {clinetPhone: lead.clientPhone, source: lead.source, clinetName: lead.clientName, time: lead.time, weekday: lead.weekday},
+                    {
+                        clientPhone: normalizedPhone,
+                        source: lead.source,
+                        time: { $gte: start, $lte: end }
+                    },
                     { $setOnInsert: lead },
                     { upsert: true, new: false }
                 );
+
                 if (!doc) inserted.push(lead);
+
             } catch (err) {
-                if (err.code === 11000) {
-                    console.warn('Duplicate skipped:', lead.n);
-                } else {
-                    throw err;
-                }
+                if (err.code === 11000) console.warn('Duplicate skipped:', lead.n);
+                else throw err;
             }
         }
+
 
         const io = req.app.get('io');
         if (io && inserted.length > 0) io.emit('new_leads', {...inserted, SlpCode: inserted.operator});

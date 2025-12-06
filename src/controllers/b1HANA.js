@@ -1588,7 +1588,7 @@ class b1HANA {
     getAnalytics = async (req, res, next) => {
         try {
 
-            let { startDate, endDate, slpCode } = req.query
+            let { startDate, endDate, slpCode, phoneConfiscated } = req.query
 
             if (!startDate || !endDate) {
                 return res.status(404).json({ error: 'startDate and endDate are required' });
@@ -1606,6 +1606,7 @@ class b1HANA {
 
             const slpCodeRaw = req.query.slpCode; // "1,4,5"
             const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
+            const tz = 'Asia/Tashkent'
             if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
                 let filter = {
                     SlpCode: { $in: slpCodeArray },
@@ -1701,6 +1702,7 @@ class b1HANA {
             }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
 
 
+            let confiscatedTotal = invoiceConfiscated.length ? invoiceConfiscated.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) : 0
             const query = await DataRepositories.getAnalytics({ startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
 
             let data = await this.execute(query)
@@ -1727,7 +1729,7 @@ class b1HANA {
     getAnalyticsByDay = async (req, res, next) => {
         try {
 
-            let { startDate, endDate, slpCode } = req.query
+            let { startDate, endDate, slpCode, phoneConfiscated } = req.query
 
             if (!startDate || !endDate) {
                 return res.status(404).json({ error: 'startDate and endDate are required' });
@@ -1745,6 +1747,7 @@ class b1HANA {
 
             const slpCodeRaw = req.query.slpCode; // "1,4,5"
             const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
+            const tz = 'Asia/Tashkent'
             if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
                 let filter = {
                     SlpCode: { $in: slpCodeArray },
@@ -1811,7 +1814,7 @@ class b1HANA {
 
                 const result = Object.values(grouped);
 
-               data = result
+                data = result
 
                 if (phoneConfisList.length === 0 || data.length === 0) {
                     return res.status(200).json(data);
@@ -1884,8 +1887,9 @@ class b1HANA {
                 return acc;
             }, {});
 
+            const result = Object.values(grouped);
 
-            data = Object.values(grouped);
+            data = result
 
             data.forEach(item => {
                 const formattedDate = item.DueDate; // '2025.05.01'

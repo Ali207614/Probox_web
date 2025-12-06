@@ -744,12 +744,12 @@ ORDER BY
 `
     }
 
-   async getAnalytics({ startDate, endDate, invoices = [], phoneConfiscated }) {
+    getAnalytics({ startDate, endDate, invoices = [], phoneConfiscated }) {
         let salesCondition = '';
 
-        if (invoices.length > 0 && false) {
+        if (invoices.length > 0) {
             const condition = invoices.map(item =>
-                `(T2."DocEntry" = '${item.DocEntry}' AND T2."InstId" = '${item.InstlmntID}')`
+                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
             ).join(' OR ');
 
             salesCondition = `
@@ -760,18 +760,23 @@ ORDER BY
             `;
         }
 
-       return `SELECT
-            sum(T0."InsTotal") as "InsTotal",
-            sum(T0."PaidToDate") as "PaidToDate",
-            sum(T2."SumApplied") AS "SumApplied"
+        const newEndDate = moment(endDate, 'YYYY.MM.DD')
+            .endOf('month')
+            .add(10, 'days')
+            .format('YYYY.MM.DD');
+
+        let sql = `SELECT 
+            SUM(T2."SumApplied") as "SumApplied",  
+            SUM(T0."InsTotal") as "InsTotal", 
+            SUM(T0."PaidToDate") as "PaidToDate"
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"  and T3."Canceled" = 'N'
+        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN '${startDate}' and '${newEndDate}' and T3."Canceled" = 'N' 
         WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'
         ${salesCondition}
-     GROUP BY T2."DocEntry", T2."InstId" , T0."PaidToDate" , T0."InsTotal"
         `
+        return sql
     }
 
     getAnalyticsByDay({ startDate, endDate, invoices = [], phoneConfiscated }) {
@@ -795,23 +800,21 @@ ORDER BY
             .format('YYYY.MM.DD');
 
 
-        return `SELECT 
+        let sql = `SELECT 
             TO_VARCHAR(T0."DueDate", 'YYYY.MM.DD') AS "DueDate",
             COALESCE(SUM(T2."SumApplied"), 0) AS "SumApplied",
-            T0."InsTotal", 
-            T0."PaidToDate"
+            SUM(T0."InsTotal") as "InsTotal", 
+            SUM(T0."PaidToDate") as "PaidToDate"
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN T1."DocDate" and '${newEndDate}' and T3."Canceled" = 'N' and T3."DocType" ='C'
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'  AND T3."DocDate" IS NOT NULL
+        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN '${startDate}' and '${newEndDate}' and T3."Canceled" = 'N' 
+        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'
         ${salesCondition}
-        GROUP BY T0."DueDate",   T0."DocEntry",
-                       T0."InstlmntID",
-                       T0."InsTotal",
-                       T0."PaidToDate"
+        GROUP BY T0."DueDate"
         ORDER BY T0."DueDate"
         `
+        return sql
     }
 
     getAnalyticsBySlpCode({ startDate, endDate, invoices = [], phoneConfiscated }) {
@@ -829,31 +832,25 @@ ORDER BY
                 )
             `;
         }
-
         const newEndDate = moment(endDate, 'YYYY.MM.DD')
             .endOf('month')
             .add(10, 'days')
             .format('YYYY.MM.DD');
 
-        return `SELECT 
+        let sql = `SELECT 
             T0."DocEntry",
             T0."InstlmntID",
-            SUM(T2."SumApplied") as "SumApplied",
+            T2."SumApplied",  
             T0."InsTotal", 
            T0."PaidToDate"
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN T1."DocDate" and '${newEndDate}' and T3."Canceled" = 'N' 
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N' AND T3."DocDate" IS NOT NULL  and T3."DocType" ='C'
+        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN '${startDate}' and '${newEndDate}' and T3."Canceled" = 'N' 
+        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'
         ${salesCondition}
-                   GROUP BY
-                       T0."DocEntry",
-                       T0."InstlmntID",
-                       T0."InsTotal",
-                       T0."PaidToDate"
-       
         `
+        return sql
     }
 
     getBusinessPartners({ jshshir, passport, phone }) {
