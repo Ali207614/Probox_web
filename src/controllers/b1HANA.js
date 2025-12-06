@@ -1717,13 +1717,17 @@ class b1HANA {
                 )
                 : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
-            console.log(result)
-            console.log(confiscatedTotal)
-
-            result.SumApplied = Number(result.SumApplied) ;
-            result.InsTotal = Number(result.InsTotal) + confiscatedTotal ;
-            result.PaidToDate = Number(result.PaidToDate) + confiscatedTotal ;
-
+            if(result.PaidToDate > result.SumApplied){
+                let n = result.PaidToDate - result.SumApplied;
+                result.InsTotal = result.InsTotal - n;
+                result.PaidToDate = 0;
+                result.SumApplied = confiscatedTotal;
+            }
+            else{
+                result.SumApplied = Number(result.SumApplied) + confiscatedTotal ;
+                result.InsTotal = Number(result.InsTotal) ;
+                result.PaidToDate = Number(result.PaidToDate) ;
+            }
 
             return res.status(200).json(result);
         }
