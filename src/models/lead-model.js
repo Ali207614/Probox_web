@@ -92,7 +92,6 @@ const LeadSchema = new Schema(
     },
         { timestamps: true }
 );
-LeadSchema.index({ n: 1 }, { unique: true });
 
 module.exports = model('Lead', LeadSchema);
 

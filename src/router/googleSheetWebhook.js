@@ -149,7 +149,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
         const nValue = lastLead?.nNumeric || 0;
         const nextStart = nValue > 500 ? nValue - 500 : 2;
-        const nextEnd = nextStart + 500;
+        const nextEnd = nextStart + 800;
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
         // === Google Sheets
@@ -253,7 +253,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
         for (const lead of leads) {
             try {
                 const doc = await LeadModel.findOneAndUpdate(
-                    { n: lead.n },
+                    {clinetPhone: lead.clientPhone, source: lead.source, clinetName: lead.clientName, time: lead.time, weekday: lead.weekday},
                     { $setOnInsert: lead },
                     { upsert: true, new: false }
                 );

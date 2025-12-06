@@ -177,7 +177,10 @@ async function main(io) {
         const uniqueLeads = [];
         for (const lead of leads) {
             const exists = await LeadModel.exists({
-                n: lead.n,
+                source: lead.source,
+                clientName: lead.clientName,
+                clientPhone: lead.clientPhone,
+                time: { $gte: moment(lead.time).startOf('day').toDate(), $lte: moment(lead.time).endOf('day').toDate() },
             });
             if (!exists) uniqueLeads.push(lead);
         }
