@@ -1662,6 +1662,7 @@ class b1HANA {
                     // phoneConfiscated: 'false'
                 });
                 let data = await this.execute(query);
+                console.log(data , " bu query")
                 const result = data.length
                     ? data.reduce(
                         (acc, item) => ({
