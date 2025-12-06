@@ -1717,6 +1717,9 @@ class b1HANA {
                 )
                 : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
+            console.log(result)
+            console.log(confiscatedTotal)
+
             result.SumApplied = Number(result.SumApplied) ;
             result.InsTotal = Number(result.InsTotal) + confiscatedTotal ;
             result.PaidToDate = Number(result.PaidToDate) + confiscatedTotal ;
