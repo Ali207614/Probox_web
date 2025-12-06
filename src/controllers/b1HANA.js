@@ -1724,8 +1724,8 @@ class b1HANA {
                 let n = result.PaidToDate - result.SumApplied;
                 result.InsTotal = result.InsTotal - n;
 
-                result.SumApplied = 0;
-                result.PaidToDate = Number(result.SumApplied) + confiscatedTotal;
+                result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
+                result.PaidToDate = result.SumApplied;
             }
             else{
                 result.SumApplied = Number(result.SumApplied) + confiscatedTotal ;
