@@ -1666,16 +1666,22 @@ class b1HANA {
                     ? data.reduce(
                         (acc, item) => ({
                             SumApplied: acc.SumApplied + (+item.SumApplied || 0),
-                            InsTotal: acc.InsTotal + (+item.InsTotal || 0),
+                            InsTotal: acc.InsTotal + (+item.InsTotal2 || 0),
                             PaidToDate: acc.PaidToDate + (+item.PaidToDate || 0),
                         }),
                         { SumApplied: 0, InsTotal: 0, PaidToDate: 0 }
                     )
                     : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
-                result.SumApplied = Number(result.SumApplied) ;
-                result.InsTotal = Number(result.InsTotal) + confiscatedTotal ;
-                result.PaidToDate = Number(result.PaidToDate) + confiscatedTotal ;
+                if(result.PaidToDate > result.SumApplied){
+                    result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
+                    result.PaidToDate = result.SumApplied;
+                }
+                else{
+                    result.SumApplied = Number(result.SumApplied) + confiscatedTotal ;
+                    result.InsTotal = Number(result.InsTotal) ;
+                    result.PaidToDate = Number(result.PaidToDate) ;
+                }
 
                 return res.status(200).json(result);
             }
@@ -1721,7 +1727,6 @@ class b1HANA {
 
 
             if(result.PaidToDate > result.SumApplied){
-                let n = result.PaidToDate - result.SumApplied;
                 result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
                 result.PaidToDate = result.SumApplied;
             }
@@ -2035,9 +2040,22 @@ class b1HANA {
                             Confiscated = confisCatedList.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) || 0
                             phoneConfiscated = true
                         }
-                        item.SumApplied = Number(item.SumApplied) + Confiscated;
-                        item.InsTotal = Number(item.InsTotal) + Confiscated;
-                        item.PaidToDate = Number(item.PaidToDate) + Confiscated;
+
+                        item.SumApplied = Number(item.SumApplied);
+                        item.InsTotal = Number(item.InsTotal);
+                        item.PaidToDate = Number(item.PaidToDate);
+
+                        if(item.PaidToDate > item.SumApplied){
+                            item.SumApplied = Number(item.SumApplied) + Confiscated;
+                            item.PaidToDate = item.SumApplied;
+                        }
+                        else{
+                            item.SumApplied = Number(item.SumApplied) + Confiscated ;
+                            item.InsTotal = Number(item.InsTotal) ;
+                            item.PaidToDate = Number(item.PaidToDate) ;
+                        }
+
+
                         return { ...item, Confiscated, phoneConfiscated }
                     })
                 }
@@ -2094,9 +2112,20 @@ class b1HANA {
                 })
                 result = {
                     ...result,
-                    SumApplied: result.SumApplied + result.Confiscated,
-                    PaidToDate: result.PaidToDate + result.Confiscated,
-                    InsTotal: result.InsTotal + result.Confiscated,
+                    SumApplied: result.SumApplied ,
+                    PaidToDate: result.PaidToDate ,
+                    InsTotal: result.InsTotal,
+                }
+
+
+                if(result.PaidToDate > result.SumApplied){
+                    result.SumApplied = Number(result.SumApplied) + result.Confiscated;
+                    result.PaidToDate = result.SumApplied;
+                }
+                else{
+                    result.SumApplied = Number(result.SumApplied) + result.Confiscated ;
+                    result.InsTotal = Number(result.InsTotal) ;
+                    result.PaidToDate = Number(result.PaidToDate) ;
                 }
 
                 return res.status(200).json([result]);

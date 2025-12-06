@@ -774,7 +774,8 @@ ORDER BY
                 WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
                   AND T1."CANCELED" = 'N'
            ) AS "InsTotal",
-            SUM(T0."PaidToDate") as "PaidToDate"
+            SUM(T0."PaidToDate") as "PaidToDate",
+            SUM(T0."InsTotal") as "InsTotal2"
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
@@ -843,7 +844,8 @@ ORDER BY
             .add(10, 'days')
             .format('YYYY.MM.DD');
 
-        let sql = `SELECT 
+        let sql = `
+        SELECT 
             T0."DocEntry",
             T0."InstlmntID",
             T2."SumApplied",  
