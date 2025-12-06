@@ -1674,8 +1674,8 @@ class b1HANA {
                     : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
                 result.SumApplied = Number(result.SumApplied) ;
-                result.InsTotal = Number(result.InsTotal) ;
-                result.PaidToDate = Number(result.PaidToDate) ;
+                result.InsTotal = Number(result.InsTotal) + confiscatedTotal ;
+                result.PaidToDate = Number(result.PaidToDate) + confiscatedTotal ;
 
                 return res.status(200).json(result);
             }
@@ -1716,6 +1716,10 @@ class b1HANA {
                     { SumApplied: 0, InsTotal: 0, PaidToDate: 0 }
                 )
                 : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
+
+            result.SumApplied = Number(result.SumApplied) ;
+            result.InsTotal = Number(result.InsTotal) + confiscatedTotal ;
+            result.PaidToDate = Number(result.PaidToDate) + confiscatedTotal ;
 
 
             return res.status(200).json(result);
