@@ -772,7 +772,7 @@ ORDER BY
                 FROM ${this.db}.INV6 T0
                 JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
                 WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-                  AND T1."Canceled" = 'N'
+                  AND T1."CANCELED" = 'N'
            ) AS "InsTotal",
             SUM(T0."PaidToDate") as "PaidToDate"
         FROM 
