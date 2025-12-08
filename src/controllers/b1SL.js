@@ -1,10 +1,7 @@
 const Axios = require("axios");
 const https = require("https");
 const { get } = require("lodash");
-let dbService = require('../services/dbService')
-
 const LeadModel = require('../models/lead-model');
-
 const moment = require('moment');
 const { getSession, saveSession } = require("../helpers");
 const { api_params, api, db} = require("../config");

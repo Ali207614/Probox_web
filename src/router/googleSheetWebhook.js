@@ -31,23 +31,47 @@ function basicAuth(req, res, next) {
 }
 
 function parseSheetDate(value) {
-    if (!value) return moment().utcOffset(5).toDate();
+    if (!value) {
+        return moment().utcOffset(5).toDate();
+    }
 
     if (!isNaN(value)) {
         const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-        return new Date(excelEpoch.getTime() + value * 86400000);
+        const date = new Date(excelEpoch.getTime() + value * 86400000);
+        return moment(date).utcOffset(5).toDate();
     }
 
-    const str = String(value).trim().replace(/[\/\\]/g, '.');
-    let parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY HH:mm', 'DD.MM.YYYY'], true);
+    const str = String(value)
+        .trim()
+        .replace(/[\/\\]/g, '.')
+        .replace(/\u00A0/g, ' ')   // no-break space
+        .replace(/\u200B/g, '')    // zero width
+        .replace(/\s+/g, ' ');
+
+    let parsed = moment(str, [
+        'DD.MM.YYYY HH:mm:ss',
+        'DD.MM.YYYY HH:mm',
+        'DD.MM.YYYY'
+    ], true);
 
     if (parsed.isValid() && /^\d{2}\.\d{2}\.\d{4}$/.test(str)) {
-        const now = moment();
-        parsed.set({ hour: now.hour(), minute: now.minute(), second: now.second() });
+        const now = moment().utcOffset(5);
+        parsed = parsed.set({
+            hour: now.hour(),
+            minute: now.minute(),
+            second: now.second()
+        });
     }
 
-    return parsed.isValid() ? parsed.utcOffset(5).toDate() : moment().utcOffset(5).toDate();
+    if (!parsed.isValid()) {
+        return moment().utcOffset(5).toDate();
+    }
+
+    parsed = moment(parsed.format("YYYY-MM-DD HH:mm:ss") + " +05:00");
+
+    return parsed.toDate();
 }
+
 
 function normalizePhone(input) {
     if (!input) return null;
@@ -237,14 +261,14 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 lead.cardCode = found.CardCode;
                 lead.cardName = found.CardName;
             } else {
-                const newBP = await b1ServiceLayer.createBusinessPartner({
-                    Phone1: cleanPhone,
-                    CardName: lead.clientName,
-                });
-                if (newBP?.CardCode) {
-                    lead.cardCode = newBP.CardCode;
-                    lead.cardName = newBP.CardName;
-                }
+                // const newBP = await b1ServiceLayer.createBusinessPartner({
+                //     Phone1: cleanPhone,
+                //     CardName: lead.clientName,
+                // });
+                // if (newBP?.CardCode) {
+                //     lead.cardCode = newBP.CardCode;
+                //     lead.cardName = newBP.CardName;
+                // }
             }
         }
 

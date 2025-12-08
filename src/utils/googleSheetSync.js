@@ -110,6 +110,7 @@ async function main(io) {
             const row = rows[i];
             const rowNumber = nextStart + i;
             const parsedTime = parseSheetDate(row[3]);
+
             const weekday = moment(parsedTime).isoWeekday().toString();
 
             let clientName = row[0]?.trim() || '';
@@ -134,7 +135,6 @@ async function main(io) {
             });
         }
 
-        console.log(leads.length ,' Leads Count')
         if (!leads.length) {
             console.log('⚠️ No valid leads after normalization.');
             return;
@@ -248,41 +248,47 @@ async function main(io) {
 }
 
 
+
 function parseSheetDate(value) {
-    // Agar qiymat umuman bo'lmasa
     if (!value) {
-        return moment().utcOffset(5).toDate(); // bugungi sana
+        return moment().utcOffset(5).toDate();
     }
 
-    // Excel serial date bo‘lsa (raqam)
-    if (!isNaN(value)) {
+    let cleaned = String(value)
+        .trim()
+        .replace(/\//g, '.')
+        .replace(/\u00A0/g, ' ')
+        .replace(/\u200B/g, '')
+        .replace(/\s+/g, ' ');
+
+    if (!isNaN(cleaned) && cleaned !== "") {
         const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-        return new Date(excelEpoch.getTime() + value * 86400000);
+        const date = new Date(excelEpoch.getTime() + Number(cleaned) * 86400000);
+
+        return moment(date).utcOffset(5).toDate();
     }
 
-    // Matn formatdagi sana
-    const str = String(value).trim().replace(/\//g, '.');
+    const formats = [
+        "DD.MM.YYYY HH:mm:ss",
+        "DD.MM.YYYY HH:mm",
+        "DD.MM.YYYY"
+    ];
 
-    let parsed = moment(str, ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY HH:mm', 'DD.MM.YYYY'], true);
+    let parsed = moment(cleaned, formats, true);
 
-    // Agar faqat sana bo‘lsa (vaqt yo‘q) → hozirgi vaqtni qo‘shamiz
-    if (parsed.isValid() && /^\d{2}\.\d{2}\.\d{4}$/.test(str)) {
-        const now = moment();
-        parsed.set({
-            hour: now.hour(),
-            minute: now.minute(),
-            second: now.second(),
-        });
+    if (!parsed.isValid()) {
+        parsed = moment(cleaned, formats);
     }
 
-    // Agar parsed noto‘g‘ri bo‘lsa → bugungi sanani qaytaramiz
     if (!parsed.isValid()) {
         return moment().utcOffset(5).toDate();
     }
 
-    // Aks holda, to‘g‘ri vaqtni +05:00 offset bilan qaytaramiz
-    return parsed.utcOffset(5).toDate();
+    parsed = moment(parsed.format("YYYY-MM-DD HH:mm:ss") + " +05:00");
+
+    return parsed.toDate();
 }
+
 
 
 

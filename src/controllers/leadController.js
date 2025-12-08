@@ -8,7 +8,6 @@ const upload = multer({ storage: multer.memoryStorage() });
 const uploadService = new UploadService();
 
 class LeadController {
-
     uploadLeadImage = async (req, res, next) => {
         try {
             const { leadId, cardCode } = req.body;
@@ -146,7 +145,6 @@ class LeadController {
         }
     };
 
-
     leadOne = async (req, res, next) => {
         try {
             const { id } = req.params;
@@ -240,7 +238,6 @@ class LeadController {
             next(e);
         }
     };
-
 }
 
 module.exports = new LeadController();
