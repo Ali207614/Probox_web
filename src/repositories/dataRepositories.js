@@ -766,7 +766,7 @@ ORDER BY
             .format('YYYY.MM.DD');
 
         let sql = `SELECT 
-            SUM(T2."SumApplied") as "SumApplied",  
+            SUM(T2."SumApplied") as "SumApplied",
             (
                 SELECT SUM(T0."InsTotal")
                 FROM ${this.db}.INV6 T0
