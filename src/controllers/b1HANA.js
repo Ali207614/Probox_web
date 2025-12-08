@@ -1662,7 +1662,6 @@ class b1HANA {
                     // phoneConfiscated: 'false'
                 });
                 let data = await this.execute(query);
-                console.log(data , " bu query")
                 const result = data.length
                     ? data.reduce(
                         (acc, item) => ({
@@ -1971,8 +1970,8 @@ class b1HANA {
                 let filter = {
                     SlpCode: { $in: slpCodeArray },
                     DueDate: {
-                        $gte: moment.tz(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                        $lte: moment.tz(endDate, 'YYYY.MM.DD').endOf('day').toDate(),
+                        $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
+                        $lte: moment(endDate, 'YYYY.MM.DD').endOf('day').toDate(),
                     }
                 };
 
@@ -2049,12 +2048,14 @@ class b1HANA {
                         item.PaidToDate = Number(item.PaidToDate);
 
                         if(item.PaidToDate > item.SumApplied){
+                            let n = item.PaidToDate - item.SumApplied;
+                            item.InsTotal = item.InsTotal - n + Confiscated;
                             item.SumApplied = Number(item.SumApplied) + Confiscated;
                             item.PaidToDate = item.SumApplied;
                         }
                         else{
                             item.SumApplied = Number(item.SumApplied) + Confiscated ;
-                            item.InsTotal = Number(item.InsTotal) ;
+                            item.InsTotal = Number(item.InsTotal) + Confiscated ;
                             item.PaidToDate = Number(item.PaidToDate) ;
                         }
 
