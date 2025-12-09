@@ -280,30 +280,28 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 const normalizedPhone = normalizePhone(lead.clientPhone);
                 if (!normalizedPhone) continue;
 
+                const start = moment().utcOffset(5).startOf('day').subtract(2, 'days');
+                const end = moment().utcOffset(5).endOf('day');
 
-                const start = moment().utcOffset(5).startOf('day').subtract(2, 'days'); // 3 kun orqaga
-                const end   = moment().utcOffset(5).endOf('day');
+                const existing = await LeadModel.findOne({
+                    clientPhone: { $in: [normalizedPhone, "998" + normalizedPhone] },
+                    source: lead.source,
+                    createdAt: { $gte: start.toDate(), $lte: end.toDate() }
+                });
 
-                const doc = await LeadModel.findOneAndUpdate(
-                    {
-                        clientPhone: normalizedPhone,
-                        source: lead.source,
-                        createdAt: { $gte: start.toDate(), $lte: end.toDate() }
-                    },
-                    {
-                        $set: lead,
-                        $setOnInsert: { createdAt: new Date() }
-                    },
-                    { upsert: true, new: false }
-                );
+                if (existing) continue;
 
-                if (!doc) inserted.push(lead);
+                lead.createdAt = new Date();
+                await LeadModel.create(lead);
+
+                inserted.push(lead);
 
             } catch (err) {
-                if (err.code === 11000) console.warn('Duplicate skipped:', lead.n);
+                if (err.code === 11000) console.warn("Duplicate skipped:", lead.n);
                 else throw err;
             }
         }
+
 
 
         const io = req.app.get('io');
