@@ -330,8 +330,6 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
 
             console.log("SAP batch payload:", payload);
 
-
-
             const axiosInstance = Axios.create({
                 baseURL: `${this.api}`,
                 timeout: 30000,
@@ -344,8 +342,6 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
-            res.json({status:"test"})
-            return
 
             const response = await axiosInstance.post(`/$batch`, payload);
 
