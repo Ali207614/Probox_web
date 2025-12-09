@@ -323,8 +323,9 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
 
             console.log("SAP payment body:", paymentBody);
 
-            delete req.body.DocRate;
-            delete req.body.CashSum;
+            delete body.DocRate;
+            delete body.CashSum;
+            delete body.paymentType;
 
             const { batchId, payload } = this.buildBatchInvoiceAndPayment(body, paymentBody);
 
