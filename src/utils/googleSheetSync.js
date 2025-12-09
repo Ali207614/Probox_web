@@ -129,6 +129,7 @@ async function main(io) {
                 clientPhone,
                 source: row[2]?.trim() || '',
                 time: parsedTime,
+                leadTime:row[3],
                 weekday,
                 cardCode: null,
                 cardName: null,
@@ -184,11 +185,14 @@ async function main(io) {
                     { clientPhone: normalizedPhone },
                     { clientPhone: "998" + normalizedPhone },
                 ],
-                time: {
-                    $gte: moment(lead.time).startOf('day').toDate(),
-                    $lte: moment(lead.time).endOf('day').toDate(),
-                },
+                $expr: {
+                    $eq: [
+                        { $toString: "$n" },
+                        String(lead.n)
+                    ]
+                }
             });
+
             if (!exists) uniqueLeads.push(lead);
         }
 
@@ -247,8 +251,6 @@ async function main(io) {
     }
 }
 
-
-
 function parseSheetDate(value) {
     if (!value) {
         return moment().utcOffset(5).toDate();
@@ -288,8 +290,5 @@ function parseSheetDate(value) {
 
     return parsed.toDate();
 }
-
-
-
 
 module.exports = { main };

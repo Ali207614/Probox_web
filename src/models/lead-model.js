@@ -10,6 +10,7 @@ const LeadSchema = new Schema(
         cardCode: { type: String, trim: true, description: 'CardCode' },
         cardName: { type: String, trim: true, description: 'CardName' },
         source: { type: String, description: 'Manba (reklama, ijtimoiy tarmoq, va hokazo) (Umumiy ozgarmaydi)' },
+        leadTime:{ type: String,description: 'CardCode'},
         time: { type: Date, description: 'Yozilgan vaqt (Umumiy ozgarmaydi)' },
         operator: { type: String, description: 'Qo‘ng‘iroq qilgan operator (Operator1 )' },
         called: { type: Boolean, description: 'Qo‘ng‘iroq qilindimi? (Operator1 true/false)' },

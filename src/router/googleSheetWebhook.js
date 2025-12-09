@@ -227,6 +227,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 clientPhone,
                 source,
                 time: parsedTime,
+                leadTime:row[3],
                 operator: operator?.SlpCode || null,
             });
         }
@@ -286,7 +287,12 @@ router.post('/webhook', basicAuth, async (req, res) => {
                     {
                         clientPhone: normalizedPhone,
                         source: lead.source,
-                        time: { $gte: start, $lte: end }
+                        $expr: {
+                            $eq: [
+                                { $toString: "$n" },
+                                String(lead.n)
+                            ]
+                        }
                     },
                     { $setOnInsert: lead },
                     { upsert: true, new: false }
