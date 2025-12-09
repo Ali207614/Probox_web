@@ -83,7 +83,6 @@ async function main(io) {
             { $limit: 1 },
         ]);
 
-
         const nValue = lastLead?.nNumeric || 0;
         console.log(nValue ,' bu Number')
         const lastRow = nValue > 1000 ? nValue - 1000 : 1;
@@ -179,17 +178,18 @@ async function main(io) {
         for (const lead of leads) {
             const normalizedPhone = normalizePhone(lead.clientPhone);
 
+            const start = moment().utcOffset(5).startOf('day').subtract(2, 'days');
+            const end = moment().utcOffset(5).endOf('day');
+
             const exists = await LeadModel.exists({
                 source: lead.source,
                 $or: [
                     { clientPhone: normalizedPhone },
-                    { clientPhone: "998" + normalizedPhone },
+                    { clientPhone: "998" + normalizedPhone }
                 ],
-                $expr: {
-                    $eq: [
-                        { $toString: "$n" },
-                        String(lead.n)
-                    ]
+                createdAt: {
+                    $gte: start.toDate(),
+                    $lte: end.toDate()
                 }
             });
 
@@ -224,7 +224,6 @@ async function main(io) {
             lead.operator = availableOperators[lastAssignedIndex % availableOperators.length].SlpCode;
             lastAssignedIndex++;
         }
-
 
         const notInSap = uniqueLeads.filter((lead) => !lead.cardCode);
         const inserted = await LeadModel.insertMany(uniqueLeads);

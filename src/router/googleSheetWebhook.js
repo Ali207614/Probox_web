@@ -280,21 +280,20 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 const normalizedPhone = normalizePhone(lead.clientPhone);
                 if (!normalizedPhone) continue;
 
-                const start = moment(lead.time).startOf('day').toDate();
-                const end = moment(lead.time).endOf('day').toDate();
+
+                const start = moment().utcOffset(5).startOf('day').subtract(2, 'days'); // 3 kun orqaga
+                const end   = moment().utcOffset(5).endOf('day');
 
                 const doc = await LeadModel.findOneAndUpdate(
                     {
                         clientPhone: normalizedPhone,
                         source: lead.source,
-                        $expr: {
-                            $eq: [
-                                { $toString: "$n" },
-                                String(lead.n)
-                            ]
-                        }
+                        createdAt: { $gte: start.toDate(), $lte: end.toDate() }
                     },
-                    { $setOnInsert: lead },
+                    {
+                        $set: lead,
+                        $setOnInsert: { createdAt: new Date() }
+                    },
                     { upsert: true, new: false }
                 );
 
