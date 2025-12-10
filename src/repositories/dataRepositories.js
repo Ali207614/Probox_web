@@ -878,6 +878,42 @@ ORDER BY
         `;
     }
 
+    getInstallmentPayments(cardCode) {
+        return `
+           SELECT 
+    T0."DocEntry",
+    T0."CardCode",
+    T1."DueDate",
+    T1."InsTotal",
+    T1."InstlmntID",
+    SUM(T2."SumApplied") as "SumApplied",
+    MAX(T3."DocDate") as "DocDate"
+FROM ${this.db}.OINV T0
+INNER JOIN ${this.db}.INV6 T1 ON T0."DocEntry" = T1."DocEntry"
+LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry"= T0."DocEntry" 
+    AND T1."InstlmntID" = T2."InstId"
+INNER JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"
+WHERE 
+    T3."Canceled" ='N'
+    AND T0."CardCode" = '${cardCode}'
+    AND T0."CANCELED" ='N'
+GROUP BY 
+    T1."InstlmntID",
+    T0."DocEntry",
+    T0."CardCode",
+    T1."DueDate",
+    T1."InsTotal",
+    T3."DocDate"
+ORDER BY
+    T0."DocEntry",
+    T1."InstlmntID";
+
+        `;
+    }
+
+
+
+
 
 
     getDistribution({ startDate, endDate, }) {

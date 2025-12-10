@@ -874,6 +874,83 @@ class b1HANA {
         }
     };
 
+    calculateScoreByDelay(delay) {
+        if (delay <= 0) return 10;
+        if (delay <= 6) return 9;
+        if (delay <= 12) return 8;
+        if (delay <= 18) return 7;
+        if (delay <= 24) return 6;
+        if (delay <= 30) return 5;
+        if (delay <= 36) return 4;
+        if (delay <= 42) return 3;
+        if (delay <= 48) return 2;
+        if (delay <= 54) return 1;
+        return 0;
+    }
+
+    mergeInstallments(rows) {
+        const map = {};
+
+        for (const r of rows) {
+            const id = r.InstlmntID;
+
+            if (!map[id]) {
+                map[id] = {
+                    InstlmntID: id,
+                    DueDate: r.DueDate,
+                    InsTotal: r.InsTotal,
+                    TotalPaid: 0,
+                    PaidDate: null
+                };
+            }
+
+            map[id].TotalPaid += Number(r.SumApplied || 0);
+
+            const d = new Date(r.DocDate);
+            if (!map[id].PaidDate || d > map[id].PaidDate) {
+                map[id].PaidDate = d;
+            }
+        }
+
+        return Object.values(map);
+    }
+
+    calculateTotalScore = (installments) => {
+        let total = 0;
+        let count = 0;
+
+        for (const inst of installments) {
+            if (inst.TotalPaid < inst.InsTotal) {
+                continue;
+            }
+
+            const delay = moment(inst.PaidDate).diff(moment(inst.DueDate), 'days');
+
+            const score = this.calculateScoreByDelay(delay);
+
+            total += score;
+            count++;
+        }
+
+        if (count === 0) return 0; // to'lov qilmagan bo'lsa 0
+
+        return Number((total / count).toFixed(2));
+    }
+
+    calculateLeadPaymentScore = async (cardCode) => {
+        const sql = DataRepositories.getInstallmentPayments(cardCode);
+        const rows = await this.execute(sql);
+
+        if (!rows || rows.length === 0) return 0;
+
+        const installments = this.mergeInstallments(rows);
+
+        const score = this.calculateTotalScore(installments);
+ 
+        return score;
+    }
+
+
     updateLead = async (req, res, next) => {
         try {
             const { id } = req.params;
@@ -1109,9 +1186,18 @@ class b1HANA {
                     const sapResult = await this.execute(query);
                     if (sapResult.length > 0) {
                         const record = sapResult[0];
+
                         validData.isBlocked = record.U_blocked === 'yes';
                         validData.cardCode = record.CardCode;
                         validData.cardName = record.CardName;
+
+                        if (validData.isBlocked !== true) {
+                            const score = await this.calculateLeadPaymentScore(record.CardCode);
+                            console.log(scrore ," bu scrore")
+                            if (score !== null) {
+                                validData.paymentScore = score;
+                            }
+                        }
 
                         console.log(`SAP match found → ${record.CardCode} | ${record.CardName}`);
                     } else {
