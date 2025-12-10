@@ -108,10 +108,10 @@ class b1SL {
     }
 
     createBusinessPartner = async ({ Phone1, Phone2, CardName }) => {
-        const rand = String.fromCharCode(65 + Math.floor(Math.random() * 26)); // A–Z
-        const CardCode = `BP${moment().format('YYMMDDHHmmss')}${rand}`; // 15 belgi
+        const rand = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+        const CardCode = `BP${moment().format('YYMMDDHHmmss')}${rand}`;
 
-        let body = { CardCode, CardName };
+        let body = { CardCode, CardName , "Currency": "UZS", };
         if (Phone1) body = { ...body, Phone1 };
         if (Phone2) body = { ...body, Phone2 };
 
@@ -224,10 +224,16 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
 
     createInvoiceAndPayment = async (req, res, next) => {
         try {
+
+            if(!req.user.U_branch){
+                return res.status(400).json({
+                    status: false,
+                    message: "Siz Sotuvchi emassiz"
+                });
+            }
             const leadId = req.body.leadId;
             delete req.body.leadId;
             delete req.body.selectedDevices;
-
 
             if (!leadId) {
                 return res.status(400).json({
@@ -302,14 +308,20 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                 delete body.monthlyLimit;
                 delete body.sellerName;
             }
-            console.log(body ,' bu body')
+
+            let obj = {
+                "1":"5010",
+                "2":"5040",
+                "3":"5060"
+            }
+
 
 
             const paymentBody = {
                 CardCode: body.CardCode,
                 DocCurrency: "UZS",
                 CashSum: (req.body.CashSum || 0)  ,
-                CashAccount: req.body.CashAccount || "5020",
+                CashAccount: body.paymentType === 'Card' ? "5020" : obj[req.user.U_branch],
                 DocRate: req.body.DocRate || 11990,
                 PaymentInvoices: [
                     {
@@ -361,7 +373,7 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
             if (!parsed.invoice) {
                 return res.status(400).json({
                     status: false,
-                    message: "Invoice was not created in SAP"
+                    message: `Invoice was not created in SAP ${response.data}`
                 });
             }
 
