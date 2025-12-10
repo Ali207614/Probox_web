@@ -85,9 +85,9 @@ async function main(io) {
 
         const nValue = lastLead?.nNumeric || 0;
         console.log(nValue ,' bu Number')
-        const lastRow = nValue > 1000 ? nValue - 1000 : 1;
+        const lastRow = nValue > 500 ? nValue - 500 : 1;
         const nextStart = lastRow;
-        const nextEnd = nextStart + 1500;
+        const nextEnd = nextStart + 500;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
         console.log(range)
@@ -105,6 +105,9 @@ async function main(io) {
 
         const leads = [];
 
+        const minCountExcel= process.env.MIN_COUNT_EXCEL || 1 ;
+
+        console.log(minCountExcel ,' bu minCountExcel')
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             const rowNumber = nextStart + i;
@@ -124,6 +127,7 @@ async function main(io) {
 
             leads.push({
                 n: rowNumber,
+                uniqueId: minCountExcel < row[6] ? row[6] : null,
                 clientName,
                 clientPhone,
                 source: row[2]?.trim() || '',
@@ -177,21 +181,22 @@ async function main(io) {
         const uniqueLeads = [];
         for (const lead of leads) {
             const normalizedPhone = normalizePhone(lead.clientPhone);
+            let exists;
 
-            const start = moment().utcOffset(5).startOf('day').subtract(2, 'days');
-            const end = moment().utcOffset(5).endOf('day');
-
-            const exists = await LeadModel.exists({
-                source: lead.source,
-                $or: [
-                    { clientPhone: normalizedPhone },
-                    { clientPhone: "998" + normalizedPhone }
-                ],
-                createdAt: {
-                    $gte: start.toDate(),
-                    $lte: end.toDate()
-                }
-            });
+            if(lead.uniqueId){
+                exists =  await LeadModel.exists({
+                    uniqueId: lead.uniqueId.toString(),
+                });
+            }
+            else{
+                exists =  await LeadModel.exists({
+                    source: lead.source,
+                    $or: [
+                        { clientPhone: normalizedPhone },
+                        { clientPhone: "998" + normalizedPhone }
+                    ],
+                });
+            }
 
             if (!exists) uniqueLeads.push(lead);
         }
@@ -226,6 +231,7 @@ async function main(io) {
         }
 
         const notInSap = uniqueLeads.filter((lead) => !lead.cardCode);
+        console.log(uniqueLeads.length)
         const inserted = await LeadModel.insertMany(uniqueLeads);
         console.log(`📥 ${inserted.length} new leads inserted into MongoDB.`);
         console.log(`🆕 SAP’da topilmagan yangi clientlar soni: ${notInSap.length}`);

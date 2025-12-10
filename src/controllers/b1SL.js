@@ -24,6 +24,7 @@ class b1SL {
                 rejectUnauthorized: false,
             }),
         });
+
         return axios.post("/Login", obj).then(({ headers, data }) => {
             saveSession({
                 'Cookie': get(headers, 'set-cookie', ''),
@@ -318,8 +319,6 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                 "3":"5060"
             }
 
-
-
             const paymentBody = {
                 CardCode: body.CardCode,
                 DocCurrency: "UZS",
@@ -345,6 +344,10 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
             const { batchId, payload } = this.buildBatchInvoiceAndPayment(body, paymentBody);
 
             console.log("SAP batch payload:", payload);
+
+                return res.json({
+                    status: true,
+                });
 
             const axiosInstance = Axios.create({
                 baseURL: `${this.api}`,

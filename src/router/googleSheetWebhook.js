@@ -172,8 +172,8 @@ router.post('/webhook', basicAuth, async (req, res) => {
         ]);
 
         const nValue = lastLead?.nNumeric || 0;
-        const nextStart = nValue > 500 ? nValue - 500 : 2;
-        const nextEnd = nextStart + 800;
+        const nextStart = nValue > 200 ? nValue - 200 : 2;
+        const nextEnd = nextStart + 400;
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
         // === Google Sheets
@@ -196,7 +196,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
         const operatorBalance = await getOperatorBalance(operators);
 
         const leads = [];
-
+        const minCountExcel= process.env.MIN_COUNT_EXCEL || 1 ;
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             const rowNumber = nextStart + i;
@@ -226,6 +226,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 clientName,
                 clientPhone,
                 source,
+                uniqueId: minCountExcel < row[6] ? row[6] : null,
                 time: parsedTime,
                 leadTime:row[3],
                 operator: operator?.SlpCode || null,
@@ -279,15 +280,22 @@ router.post('/webhook', basicAuth, async (req, res) => {
             try {
                 const normalizedPhone = normalizePhone(lead.clientPhone);
                 if (!normalizedPhone) continue;
+                let existing;
 
-                const start = moment().utcOffset(5).startOf('day').subtract(2, 'days');
-                const end = moment().utcOffset(5).endOf('day');
-
-                const existing = await LeadModel.findOne({
-                    clientPhone: { $in: [normalizedPhone, "998" + normalizedPhone] },
-                    source: lead.source,
-                    createdAt: { $gte: start.toDate(), $lte: end.toDate() }
-                });
+                if(lead.uniqueId){
+                    existing =  await LeadModel.findOne({
+                        uniqueId: lead.uniqueId.toString(),
+                    });
+                }
+                else{
+                    existing=  await LeadModel.findOne({
+                        source: lead.source,
+                        $or: [
+                            { clientPhone: normalizedPhone },
+                            { clientPhone: "998" + normalizedPhone }
+                        ],
+                    });
+                }
 
                 if (existing) continue;
 
