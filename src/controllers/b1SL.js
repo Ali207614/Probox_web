@@ -68,10 +68,12 @@ class b1SL {
 
     updateBusinessPartner = async ({ Phone1, Phone2, CardCode }) => {
 
-        let body = {}
+        let body = {
+            "Currency": "UZS",
+        }
 
         if (Phone1) {
-            body = { Phone1 }
+            body = {...body, Phone1 }
         }
 
         if (Phone2) {
@@ -300,6 +302,7 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                 delete body.sellerName;
             }
             else{
+                await this.updateBusinessPartner({CardCode:body.CardCode})
                 delete body.clientPhone;
                 delete body.clientName;
                 delete body.jshshir;
