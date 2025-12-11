@@ -168,6 +168,7 @@ class LeadController {
                 id: lead._id,
                 n: lead.n ?? null,
                 status: lead?.status,
+                paymentScore: lead.paymentScore || null,
                 cardCode: lead?.cardCode || null,
                 acceptedReason: lead?.acceptedReason || null,
                 invoiceCreated: lead?.invoiceCreated || null,

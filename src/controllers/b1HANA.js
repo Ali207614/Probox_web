@@ -683,6 +683,7 @@ class b1HANA {
             const data = rawData.map((item) => ({
                 n: item.n,
                 id: item._id,
+                paymentScore: item.paymentScore || null,
                 callCount: item?.callCount || null,
                 callCount2: item?.callCount2 || null,
                 meetingHappened: item.meetingHappened || null,
@@ -892,23 +893,24 @@ class b1HANA {
         const map = {};
 
         for (const r of rows) {
-            const id = r.InstlmntID;
+            const key = `${r.DocEntry}_${r.InstlmntID}`;
 
-            if (!map[id]) {
-                map[id] = {
-                    InstlmntID: id,
+            if (!map[key]) {
+                map[key] = {
+                    DocEntry: r.DocEntry,
+                    InstlmntID: r.InstlmntID,
                     DueDate: r.DueDate,
-                    InsTotal: r.InsTotal,
+                    InsTotal: Number(r.InsTotal),
                     TotalPaid: 0,
                     PaidDate: null
                 };
             }
 
-            map[id].TotalPaid += Number(r.SumApplied || 0);
+            map[key].TotalPaid += Number(r.SumApplied || 0);
 
-            const d = new Date(r.DocDate);
-            if (!map[id].PaidDate || d > map[id].PaidDate) {
-                map[id].PaidDate = d;
+            const paymentDate = new Date(r.DocDate);
+            if (!map[key].PaidDate || paymentDate > map[key].PaidDate) {
+                map[key].PaidDate = paymentDate;
             }
         }
 
@@ -932,7 +934,7 @@ class b1HANA {
             count++;
         }
 
-        if (count === 0) return 0; // to'lov qilmagan bo'lsa 0
+        if (count === 0) return 0;
 
         return Number((total / count).toFixed(2));
     }
@@ -946,10 +948,8 @@ class b1HANA {
         const installments = this.mergeInstallments(rows);
 
         const score = this.calculateTotalScore(installments);
- 
         return score;
     }
-
 
     updateLead = async (req, res, next) => {
         try {
@@ -1184,6 +1184,7 @@ class b1HANA {
                     const phone = phoneRaw.replace(/\D/g, '');
                     const query = DataRepositories.getBusinessPartners({ jshshir, passport, phone: `%${phone}` })
                     const sapResult = await this.execute(query);
+                    console.log(sapResult ,' bu spaResult')
                     if (sapResult.length > 0) {
                         const record = sapResult[0];
 
@@ -1193,7 +1194,6 @@ class b1HANA {
 
                         if (validData.isBlocked !== true) {
                             const score = await this.calculateLeadPaymentScore(record.CardCode);
-                            console.log(scrore ," bu scrore")
                             if (score !== null) {
                                 validData.paymentScore = score;
                             }
