@@ -8,6 +8,7 @@ const router = new Router();
 
 
 router.get('/', authMiddleware, b1HANA.invoice);
+router.get('/score', authMiddleware, b1HANA.getScore);
 router.get('/report', authMiddleware, b1HANA.getAnalytics)
 router.get('/report-days', authMiddleware, b1HANA.getAnalyticsByDay)
 router.get('/report-sales-person', authMiddleware, b1HANA.getAnalyticsBySlpCode)

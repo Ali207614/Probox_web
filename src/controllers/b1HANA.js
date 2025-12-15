@@ -69,6 +69,28 @@ class b1HANA {
         }
     };
 
+    getScore = async (req, res, next) => {
+        try {
+
+            const { CardCode } = req.query
+
+            if(!CardCode){
+                return res.status(400).json({
+                    message: 'CardCode is required'
+                });
+            }
+            const score = await this.calculateLeadPaymentScore(CardCode);
+
+            res.json({
+                score
+            });
+            return
+        }
+        catch (e) {
+            next(e);
+        }
+    };
+
     getItemSeries = async (req, res, next) => {
         try {
             const {
@@ -2766,7 +2788,6 @@ class b1HANA {
             next(e);
         }
     };
-
 
     addChat = async (req, res, next) => {
         try {
