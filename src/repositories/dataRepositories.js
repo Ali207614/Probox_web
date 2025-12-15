@@ -911,11 +911,6 @@ ORDER BY
         `;
     }
 
-
-
-
-
-
     getDistribution({ startDate, endDate, }) {
         let statusCondition = 'AND ((T0."PaidToDate" = 0) OR (T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"))';
         const INVOICE_TYPE = 13;
@@ -1096,9 +1091,6 @@ ORDER BY
         OFFSET ${offset};
     `;
     }
-
-
-
 }
 
 module.exports = new DataRepositories(db);
