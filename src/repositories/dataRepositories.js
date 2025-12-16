@@ -856,7 +856,7 @@ ORDER BY
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN '${startDate}' and '${newEndDate}' and T3."Canceled" = 'N' 
+        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."Canceled" = 'N' 
         WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N' and T1."CardCode" not in ('Naqd','Bonus')
         ${salesCondition}
         `
@@ -882,34 +882,84 @@ ORDER BY
 
     getInstallmentPayments(cardCode) {
         return `
-           SELECT 
+  SELECT
+    T1."Canceled",
+    T0."DocNum",
     T0."DocEntry",
-    T0."CardCode",
-    T1."DueDate",
-    T1."InsTotal",
-    T1."InstlmntID",
-    SUM(T2."SumApplied") as "SumApplied",
-    MAX(T3."DocDate") as "DocDate"
-FROM ${this.db}.OINV T0
-INNER JOIN ${this.db}.INV6 T1 ON T0."DocEntry" = T1."DocEntry"
-LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry"= T0."DocEntry" 
-    AND T1."InstlmntID" = T2."InstId"
-INNER JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"
-WHERE 
-    T3."Canceled" ='N'
-    AND T0."CardCode" = '${cardCode}'
-    AND T0."CANCELED" ='N'
-GROUP BY 
-    T1."InstlmntID",
+    T0."SumApplied",
+    T0."AppliedSys" as "AppliedFC",
+    T0."InstId",
+    T1."CashAcct",
+    T1."DocDate",
+    T1."CheckAcct",
+    T1."DocCurr" as "Currency",
+    T2."InstlmntID",
+    T2."DueDate",
+    T2."PaidToDate",
+    T2."InsTotal",
+    T2."PaidFC",
+    T2."InsTotalFC",
+    T4."DocCur",
+    T3."AcctName",
+    T4."CardCode",
+    T4."CardName",
+    T4."DocTotal" as "MaxDocTotal",
+    T4."DocTotalFC" as "MaxDocTotalFC",
+    T4."PaidFC" as "MaxTotalPaidToDateFC",
+    T4."PaidToDate" as "MaxTotalPaidToDate",
+    T5."Cellular",
+    T5."Phone1",
+    T5."Phone2",
+    T6."ItemCode",
+    T6."Dscription",
+    STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial"
+FROM
+    ${this.db}.INV6 T2
+    LEFT JOIN ${this.db}.RCT2 T0 ON T2."DocEntry" = T0."DocEntry" AND T2."InstlmntID" = T0."InstId"
+    LEFT JOIN ${this.db}.ORCT T1 ON T0."DocNum" = T1."DocEntry"
+    LEFT JOIN ${this.db}.OACT T3 ON T3."AcctCode" = COALESCE(T1."CashAcct", T1."CheckAcct")
+    LEFT JOIN ${this.db}.OINV T4 ON T4."DocEntry" = T2."DocEntry"
+    INNER JOIN ${this.db}.OCRD T5 ON T4."CardCode" = T5."CardCode"
+    LEFT JOIN ${this.db}.INV1 T6 ON T6."DocEntry" = T4."DocEntry" AND T6."LineNum" = 0
+    LEFT JOIN ${this.db}.SRI1 TSRI1 ON T6."DocEntry" = TSRI1."BaseEntry"
+        AND TSRI1."BaseType" = 13 AND TSRI1."BaseLinNum" = T6."LineNum"
+    LEFT JOIN ${this.db}."OSRI" TOSRI ON TSRI1."SysSerial" = TOSRI."SysSerial"
+        AND TOSRI."ItemCode" = TSRI1."ItemCode"
+WHERE
+      T4."CardCode" = '${cardCode}'
+GROUP BY
+    T1."Canceled",
+    T0."DocNum",
     T0."DocEntry",
-    T0."CardCode",
-    T1."DueDate",
-    T1."InsTotal",
-    T3."DocDate"
+    T0."SumApplied",
+    T0."InstId",
+    T1."CashAcct",
+    T1."DocDate",
+    T1."CheckAcct",
+    T2."InstlmntID",
+    T2."DueDate",
+    T2."PaidToDate",
+    T2."InsTotal",
+    T2."PaidFC",
+    T2."InsTotalFC",
+    T3."AcctName",
+    T4."CardCode",
+    T4."CardName",
+    T4."DocTotal",
+    T4."PaidToDate",
+    T4."DocTotalFC",
+    T4."PaidFC",
+    T5."Cellular",
+    T5."Phone1",
+    T5."Phone2",
+    T6."ItemCode",
+    T6."Dscription",
+    T4."DocCur",
+    T0."AppliedSys",
+    T4."PaidToDate",
+    T1."DocCurr"
 ORDER BY
-    T0."DocEntry",
-    T1."InstlmntID";
-
+    T2."InstlmntID" ASC
         `;
     }
 
