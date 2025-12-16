@@ -765,6 +765,8 @@ ORDER BY
             .add(10, 'days')
             .format('YYYY.MM.DD');
 
+        console.log(startDate , endDate , newEndDate , " get Analytics")
+
         let sql = `SELECT 
             SUM(T2."SumApplied") as "SumApplied",
             (
