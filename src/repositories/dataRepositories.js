@@ -781,7 +781,7 @@ ORDER BY
         FROM 
         ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN '${startDate}' and '${newEndDate}' and T3."Canceled" = 'N' 
+        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"  and T3."Canceled" = 'N' 
         WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N' and T1."CardCode" not in ('Naqd','Bonus')
         ${salesCondition}
         `
