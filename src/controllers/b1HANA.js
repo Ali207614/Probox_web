@@ -930,7 +930,7 @@ class b1HANA {
 
             map[key].TotalPaid += Number(r.SumApplied || 0);
 
-            const paymentDate = new Date(r.DocDate);
+            const paymentDate = r.DocDate ?  new Date(r.DocDate) : new Date();
             if (!map[key].PaidDate || paymentDate > map[key].PaidDate) {
                 map[key].PaidDate = paymentDate;
             }
@@ -943,13 +943,16 @@ class b1HANA {
         let total = 0;
         let count = 0;
 
+        const today = moment();
+
         for (const inst of installments) {
-            if (inst.TotalPaid < inst.InsTotal) {
-                continue;
-            }
+            const isFullyPaid = inst.TotalPaid >= inst.InsTotal;
 
-            const delay = moment(inst.PaidDate).diff(moment(inst.DueDate), 'days');
+            const paidDate = isFullyPaid
+                ? moment(inst.PaidDate)
+                : today;
 
+            const delay = paidDate.diff(moment(inst.DueDate), 'days');
             const score = this.calculateScoreByDelay(delay);
 
             total += score;
@@ -959,11 +962,13 @@ class b1HANA {
         if (count === 0) return 0;
 
         return Number((total / count).toFixed(2));
-    }
+    };
+
 
     calculateLeadPaymentScore = async (cardCode) => {
         const sql = DataRepositories.getInstallmentPayments(cardCode);
         const rows = await this.execute(sql);
+
 
         if (!rows || rows.length === 0) return 0;
 
