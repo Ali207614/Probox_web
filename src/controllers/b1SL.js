@@ -15,6 +15,46 @@ class b1SL {
         this.api = api;
     }
 
+    normalizePhone = (phone = '') => {
+        let p = String(phone).trim();
+
+        // bo'sh joylarni olib tashla
+        p = p.replace(/\s+/g, '');
+
+        // faqat raqam qoldir
+        p = p.replace(/\D/g, '');
+
+        // agar 998 bilan boshlanmasa → qo‘sh
+        if (p.length === 9) {
+            p = '998' + p;
+        }
+
+        if (p.length === 12 && p.startsWith('998')) {
+            return p;
+        }
+
+        return null; // yaroqsiz
+    };
+
+    findBpByPhoneSql = (phone) => `
+    SELECT
+        T0."CardCode",
+        T0."CardName",
+        T0."Currency",
+        T0."Phone1",
+        T0."Phone2"
+    FROM OCRD T0
+    WHERE
+        T0."CardType" = 'C'
+        AND T0."Currency" = 'UZS'
+        AND (
+            REPLACE(REPLACE(REPLACE(T0."Phone1", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
+            OR
+            REPLACE(REPLACE(REPLACE(T0."Phone2", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
+        )
+    LIMIT 1
+`;
+
     auth = async () => {
         let obj = api_params
         const axios = Axios.create({
@@ -269,49 +309,52 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
 
             let body = { ...req.body };
 
-            let createdBP = false;
-            if (!body.CardCode) {
-                const clientPhone = body.clientPhone;
-                if (!clientPhone) {
-                    return res.status(400).json({
-                        status: false,
-                        message: "CardCode missing and clientPhone required",
-                    });
-                }
+            const rawPhone = body.clientPhone;
+            const normalizedPhone = this.normalizePhone(rawPhone);
 
+            if (!normalizedPhone) {
+                return res.status(400).json({
+                    status: false,
+                    message: 'Invalid client phone number'
+                });
+            }
+
+            const bpRows = await execute(this.findBpByPhoneSql(normalizedPhone));
+
+            let cardCode;
+            let createdBP = false;
+
+            if (bpRows?.length) {
+                // ✅ BOR BP
+                cardCode = bpRows[0].CardCode;
+            } else {
+                // ❌ YO‘Q → CREATE
                 const bp = await this.createBusinessPartner({
-                    Phone1: clientPhone,
-                    Phone2: "",
-                    CardName: body.clientName || "No Name"
+                    CardName: body.clientName || 'No Name',
+                    Phone1: normalizedPhone,
+                    Currency: 'UZS'
                 });
 
                 if (!bp?.CardCode) {
                     return res.status(400).json({
                         status: false,
-                        message: bp?.message || "Failed to create Business Partner"
+                        message: bp?.message || 'Failed to create Business Partner'
                     });
                 }
 
+                cardCode = bp.CardCode;
                 createdBP = true;
-                body.CardCode = bp.CardCode;
-                delete body.clientPhone;
-                delete body.clientName;
-                delete body.jshshir;
-                delete body.passportId;
-                delete body.clientAddress;
-                delete body.monthlyLimit;
-                delete body.sellerName;
             }
-            else{
-                await this.updateBusinessPartner({CardCode:body.CardCode})
-                delete body.clientPhone;
-                delete body.clientName;
-                delete body.jshshir;
-                delete body.passportId;
-                delete body.clientAddress;
-                delete body.monthlyLimit;
-                delete body.sellerName;
-            }
+
+            body.CardCode = cardCode;
+
+            delete body.clientPhone;
+            delete body.clientName;
+            delete body.jshshir;
+            delete body.passportId;
+            delete body.clientAddress;
+            delete body.monthlyLimit;
+            delete body.sellerName;
 
             let obj = {
                 "1":"5010",
