@@ -43,7 +43,7 @@ class b1SL {
         T0."Currency",
         T0."Phone1",
         T0."Phone2"
-    FROM OCRD T0
+    FROM ${db}.OCRD T0
     WHERE
         T0."CardType" = 'C'
         AND T0."Currency" = 'UZS'
