@@ -357,8 +357,8 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
             delete body.sellerName;
 
             let obj = {
-                "1":"5010",
-                "2":"5040",
+                "1":"5040",
+                "2":"5010",
                 "3":"5060"
             }
 
