@@ -1387,7 +1387,7 @@ class b1HANA {
                         validData.cardName = record.CardName;
 
                         if (validData.isBlocked !== true) {
-                            const score = await this.calculateLeadPaymentScore(record.CardCode);
+                            const {score} = await this.calculateLeadPaymentScore(record.CardCode);
                             if (score !== null) {
                                 validData.paymentScore = score;
                             }
