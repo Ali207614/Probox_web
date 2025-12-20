@@ -965,18 +965,175 @@ class b1HANA {
     };
 
 
+    // calculateLeadPaymentScore = async (cardCode) => {
+    //     const sql = DataRepositories.getInstallmentPayments(cardCode);
+    //     const rows = await this.execute(sql);
+    //
+    //
+    //     if (!rows || rows.length === 0) return 0;
+    //
+    //     const installments = this.mergeInstallments(rows);
+    //
+    //     const score = this.calculateTotalScore(installments);
+    //     return score;
+    // }
+
+
     calculateLeadPaymentScore = async (cardCode) => {
         const sql = DataRepositories.getInstallmentPayments(cardCode);
         const rows = await this.execute(sql);
 
+        if (!rows || rows.length === 0) {
+            return {
+                score: 0,
+                totalContracts: 0,
+                openContracts: 0,
+                totalAmount: 0,
+                totalPaid: 0,
+                overdueDebt: 0,
+                maxDelay: 0,
+                avgPaymentDelay: 0
+            };
+        }
 
-        if (!rows || rows.length === 0) return 0;
+        const contractSet = new Set(rows.map(r => r.DocEntry));
+        const totalContracts = contractSet.size;
 
-        const installments = this.mergeInstallments(rows);
+        let totalAmount = 0;
+        let totalPaid = 0;
 
+        const installmentsMap = {};
+
+        for (const r of rows) {
+            const key = `${r.DocEntry}_${r.InstlmntID}`;
+
+            if (!installmentsMap[key]) {
+                installmentsMap[key] = {
+                    DocEntry: r.DocEntry,
+                    InstlmntID: r.InstlmntID,
+                    DueDate: moment(r.DueDate),
+                    InsTotal: Number(r.InsTotal),
+                    Total: Number(r.Total),
+                    PaidTodate: Number(r.TotalPaid),
+                    TotalPaid: 0,
+                    PaidDate: null
+                };
+            }
+
+            installmentsMap[key].TotalPaid += Number(r.SumApplied || 0);
+
+            if (r.DocDate) {
+                const paymentDate = moment(r.DocDate);
+                if (
+                    !installmentsMap[key].PaidDate ||
+                    paymentDate.isAfter(installmentsMap[key].PaidDate)
+                ) {
+                    installmentsMap[key].PaidDate = paymentDate;
+                }
+            }
+        }
+
+        const installments = Object.values(installmentsMap);
+        const today = moment();
+
+        // ===============================
+        // 4. Ochiq shartnomalar
+        // ===============================
+
+        const contractMap = {};
+        for (const inst of Object.values(installmentsMap)) {
+
+            if (!contractMap[inst.DocEntry]) {
+                contractMap[inst.DocEntry] = {
+                    total: 0,
+                    paid: 0,
+                    Total:inst.Total,
+                    PaidTodate:inst.PaidTodate
+                };
+            }
+
+            contractMap[inst.DocEntry].total += inst.InsTotal;
+            contractMap[inst.DocEntry].paid += inst.TotalPaid;
+        }
+
+        let openContracts = 0;
+        for (const docEntry in contractMap) {
+            const c = contractMap[docEntry];
+
+            if ((c.paid <= c.total) && (c.Total <= c.paid + 5)) {
+                openContracts++;
+            }
+
+            totalAmount += c.Total;
+            totalPaid += c.PaidTodate;
+        }
+        // ===============================
+        // 5. Просрочка (overdue debt)
+        // ===============================
+
+
+        let overdueDebt = 0;
+
+        for (const inst of installments) {
+            const unpaid = inst.InsTotal - inst.TotalPaid;
+            if (unpaid <= 0) continue;
+
+            if (inst.DueDate.isBefore(today, 'day')) {
+                overdueDebt += unpaid;
+            }
+
+        }
+
+        // ===============================
+        // 6. Eng cho‘zilgan kun
+        // ===============================
+        let maxDelay = 0;
+
+        for (const inst of installments) {
+            const paidDate =
+                inst.TotalPaid >= inst.InsTotal && inst.PaidDate
+                    ? inst.PaidDate
+                    : today;
+
+            const delay = paidDate.diff(inst.DueDate, 'days');
+            if (delay > maxDelay) {
+                maxDelay = delay;
+            }
+        }
+
+        // ===============================
+        // 7. O‘rtacha to‘lov kuni
+        // ===============================
+        let totalDelay = 0;
+        let paidCount = 0;
+
+        for (const inst of installments) {
+            if (inst.TotalPaid >= inst.InsTotal && inst.PaidDate) {
+                const delay = inst.PaidDate.diff(inst.DueDate, 'days');
+                totalDelay += delay;
+                paidCount++;
+            }
+        }
+
+        const avgPaymentDelay = paidCount
+            ? Math.floor(Number((totalDelay / paidCount)))
+            : 0;
+        // ===============================
+        // 8. SCORE
+        // ===============================
         const score = this.calculateTotalScore(installments);
-        return score;
-    }
+
+        return {
+            score,
+            totalContracts,
+            openContracts,
+            totalAmount,
+            totalPaid,
+            overdueDebt,
+            maxDelay,
+            avgPaymentDelay
+        };
+    };
 
     updateLead = async (req, res, next) => {
         try {

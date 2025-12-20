@@ -883,31 +883,32 @@ ORDER BY
     getInstallmentPayments(cardCode) {
         return `
            SELECT 
-    T0."DocEntry",
-    T0."CardCode",
-    T1."DueDate",
-    T1."InsTotal",
-    T1."InstlmntID",
-    SUM(T2."SumApplied") as "SumApplied",
-    MAX(T3."DocDate") as "DocDate"
-FROM ${this.db}.INV6 T1
-INNER JOIN ${this.db}.OINV T0 ON T0."DocEntry" = T1."DocEntry"
- LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry"= T0."DocEntry" 
-    AND T1."InstlmntID" = T2."InstId"
- LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"
-WHERE 
-    T0."CardCode" = '${cardCode}' and T1."DueDate" <= CURRENT_DATE
-GROUP BY 
-    T1."InstlmntID",
-    T0."DocEntry",
-    T0."CardCode",
-    T1."DueDate",
-    T1."InsTotal",
-    T3."DocDate"
-ORDER BY
-    T0."DocEntry",
-    T1."InstlmntID";
-
+                T0."DocEntry",
+                T0."CardCode",
+                T1."DueDate",
+                T1."InsTotal",
+                T1."InstlmntID",
+                (Select SUM(A1."DocTotal") FROM ${this.db}.OINV A1  WHERE  T0."DocEntry" = A1."DocEntry" and  A1."CANCELED" = 'N' and A1."CardCode" = '${cardCode}') as "Total",
+                (Select SUM(A1."PaidToDate") FROM ${this.db}.OINV A1  WHERE T0."DocEntry" = A1."DocEntry" and A1."CANCELED" = 'N' and A1."CardCode" = '${cardCode}') as "TotalPaid",
+                SUM(T2."SumApplied") as "SumApplied",
+                MAX(T3."DocDate") as "DocDate"
+            FROM ${this.db}.INV6 T1
+            INNER JOIN ${this.db}.OINV T0 ON T0."DocEntry" = T1."DocEntry"
+             LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry"= T0."DocEntry" 
+                AND T1."InstlmntID" = T2."InstId"
+             LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"
+            WHERE 
+                T0."CardCode" = '${cardCode}' and T1."DueDate" <= CURRENT_DATE  and T3."Canceled" = 'N'
+            GROUP BY 
+                T1."InstlmntID",
+                T0."DocEntry",
+                T0."CardCode",
+                T1."DueDate",
+                T1."InsTotal",
+                T3."DocDate"
+            ORDER BY
+                T0."DocEntry",
+                T1."InstlmntID";
         `;
     }
 
