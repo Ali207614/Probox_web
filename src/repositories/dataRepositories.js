@@ -898,7 +898,7 @@ ORDER BY
                 AND T1."InstlmntID" = T2."InstId"
              LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"
             WHERE 
-                T0."CardCode" = '${cardCode}' and T1."DueDate" <= CURRENT_DATE  and T3."Canceled" = 'N'
+                T0."CardCode" = '${cardCode}' and T1."DueDate" <= CURRENT_DATE 
             GROUP BY 
                 T1."InstlmntID",
                 T0."DocEntry",

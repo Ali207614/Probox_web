@@ -1083,9 +1083,11 @@ class b1HANA {
         let overdueDebt = 0;
 
         for (const inst of installments) {
+            console.log(installments)
             const unpaid = inst.InsTotal - inst.TotalPaid;
+            console.log('unpaid', unpaid)
             if (unpaid <= 0) continue;
-
+            console.log(inst.DueDate.isBefore(today, 'day'))
             if (inst.DueDate.isBefore(today, 'day')) {
                 overdueDebt += unpaid;
             }
