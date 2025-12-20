@@ -1057,15 +1057,23 @@ class b1HANA {
         }
 
         let openContracts = 0;
+        console.log('contractMap', contractMap)
         for (const docEntry in contractMap) {
             const c = contractMap[docEntry];
 
-            if ((c.paid <= c.total) && (c.Total <= c.paid + 5)) {
-                openContracts++;
-            }
-
             totalAmount += c.Total;
             totalPaid += c.PaidTodate;
+
+
+            if ((c.Total <= c.paid + 5)) {
+                continue;
+            }
+            else{
+                openContracts+=1
+            }
+
+
+
         }
         // ===============================
         // 5. Просрочка (overdue debt)
