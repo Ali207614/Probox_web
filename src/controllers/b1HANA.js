@@ -1064,12 +1064,12 @@ class b1HANA {
         let openContracts = 0;
         for (const docEntry in contractMap) {
             const c = contractMap[docEntry];
-
+            console.log(c)
             totalAmount += c.Total;
             totalPaid += c.PaidTodate;
 
 
-            if ((c.Total <= c.paid + 5)) {
+            if ((c.Total <= c.PaidTodate + 5)) {
                 continue;
             }
             else{
