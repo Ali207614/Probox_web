@@ -1064,7 +1064,6 @@ class b1HANA {
         let openContracts = 0;
         for (const docEntry in contractMap) {
             const c = contractMap[docEntry];
-            console.log(c)
             totalAmount += c.Total;
             totalPaid += c.PaidTodate;
 
@@ -1118,12 +1117,19 @@ class b1HANA {
         let totalDelay = 0;
         let paidCount = 0;
 
-        for (const inst of installments) {
-            if (inst.TotalPaid >= inst.InsTotal && inst.PaidDate) {
-                const delay = inst.PaidDate.diff(inst.DueDate, 'days');
-                totalDelay += delay;
-                paidCount++;
+
+        const filtered = installments.filter((inst) =>
+            moment(inst.DueDate).isSameOrBefore(today, 'day')
+        );
+
+        for (const inst of filtered) {
+            if(!inst.PaidDate){
+                inst.PaidDate = today;
             }
+
+            const delay = inst.PaidDate.diff(inst.DueDate, 'days');
+            totalDelay += delay;
+            paidCount++;
         }
 
         const avgPaymentDelay = paidCount
