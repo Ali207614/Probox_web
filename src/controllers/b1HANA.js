@@ -988,8 +988,6 @@ class b1HANA {
     calculateLeadPaymentScore = async (cardCode) => {
         const sql = DataRepositories.getInstallmentPayments(cardCode);
         let rows = await this.execute(sql);
-
-        rows = rows.filter(el => el.Canceled === 'N')
         if (!rows || rows.length === 0) {
             return {
                 score: 0,
