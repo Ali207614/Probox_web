@@ -1387,9 +1387,26 @@ class b1HANA {
                         validData.cardName = record.CardName;
 
                         if (validData.isBlocked !== true) {
-                            const {score} = await this.calculateLeadPaymentScore(record.CardCode);
+                            const {
+                                score,
+                                totalContracts,
+                                openContracts,
+                                totalAmount,
+                                totalPaid,
+                                overdueDebt,
+                                maxDelay,
+                                avgPaymentDelay
+                            } = await this.calculateLeadPaymentScore(record.CardCode);
+
                             if (score !== null) {
                                 validData.paymentScore = score;
+                                validData.totalContracts = totalContracts;
+                                validData.openContracts = openContracts;
+                                validData.totalAmount = totalAmount;
+                                validData.totalPaid = totalPaid;
+                                validData.overdueDebt = overdueDebt;
+                                validData.maxDelay = maxDelay;
+                                validData.avgPaymentDelay = avgPaymentDelay;
                             }
                         }
 
