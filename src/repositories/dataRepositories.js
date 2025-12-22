@@ -891,7 +891,8 @@ ORDER BY
                 (Select SUM(A1."DocTotal") FROM ${this.db}.OINV A1  WHERE  T0."DocEntry" = A1."DocEntry" and  A1."CANCELED" = 'N' and A1."CardCode" = '${cardCode}') as "Total",
                 (Select SUM(A1."PaidToDate") FROM ${this.db}.OINV A1  WHERE T0."DocEntry" = A1."DocEntry" and A1."CANCELED" = 'N' and A1."CardCode" = '${cardCode}') as "TotalPaid",
                 SUM(T2."SumApplied") as "SumApplied",
-                MAX(T3."DocDate") as "DocDate"
+                MAX(T3."DocDate") as "DocDate",
+                T3."Canceled"
             FROM ${this.db}.INV6 T1
             INNER JOIN ${this.db}.OINV T0 ON T0."DocEntry" = T1."DocEntry"
              LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry"= T0."DocEntry" 
@@ -905,7 +906,8 @@ ORDER BY
                 T0."CardCode",
                 T1."DueDate",
                 T1."InsTotal",
-                T3."DocDate"
+                T3."DocDate",
+                T3."Canceled"
             ORDER BY
                 T0."DocEntry",
                 T1."InstlmntID";

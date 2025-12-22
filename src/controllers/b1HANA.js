@@ -860,7 +860,6 @@ class b1HANA {
             const cardCode = sapRecord?.cardCode || null;
             const cardName = sapRecord?.cardName || null;
 
-            console.log('sapRecord', sapRecord)
 
             let dataObj = {
                 n,
@@ -988,8 +987,9 @@ class b1HANA {
 
     calculateLeadPaymentScore = async (cardCode) => {
         const sql = DataRepositories.getInstallmentPayments(cardCode);
-        const rows = await this.execute(sql);
+        let rows = await this.execute(sql);
 
+        rows = rows.filter(el => el.Canceled === 'N')
         if (!rows || rows.length === 0) {
             return {
                 score: 0,
@@ -1064,7 +1064,6 @@ class b1HANA {
         }
 
         let openContracts = 0;
-        console.log('contractMap', contractMap)
         for (const docEntry in contractMap) {
             const c = contractMap[docEntry];
 
@@ -1090,11 +1089,8 @@ class b1HANA {
         let overdueDebt = 0;
 
         for (const inst of installments) {
-            console.log(installments)
             const unpaid = inst.InsTotal - inst.TotalPaid;
-            console.log('unpaid', unpaid)
             if (unpaid <= 0) continue;
-            console.log(inst.DueDate.isBefore(today, 'day'))
             if (inst.DueDate.isBefore(today, 'day')) {
                 overdueDebt += unpaid;
             }
@@ -2817,7 +2813,6 @@ class b1HANA {
                     invoice.DueDate = parseLocalDateString(DueDate);
                 }
                 if (validatedNewDueDate) {
-                    console.log(validatedNewDueDate , " bu newDU")
 
                     invoice.newDueDate = validatedNewDueDate;
                     invoice.notificationSent = false;
