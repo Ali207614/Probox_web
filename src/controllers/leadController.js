@@ -175,7 +175,7 @@ class LeadController {
                 totalPaid: lead.totalPaid || null,
                 overdueDebt: lead.overdueDebt || null,
                 maxDelay: lead.maxDelay || null,
-                avgPaymentDela: lead.avgPaymentDela || null,
+                avgPaymentDelay: lead.avgPaymentDelay || null,
 
                 cardCode: lead?.cardCode || null,
                 acceptedReason: lead?.acceptedReason || null,
