@@ -134,6 +134,14 @@ class DataRepositories {
                 AND TOSRI."ItemCode" = TSRI1."ItemCode"
             WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
                 AND T1."CANCELED" = 'N'
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM ${this.db}.RIN1 CM1
+                             INNER JOIN ${this.db}.ORIN CM0
+                                        ON CM0."DocEntry" = CM1."DocEntry"
+                    WHERE CM1."BaseType" = 13              -- A/R Invoice
+                      AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+                )
                 ${statusCondition}
                 ${businessPartnerCondition}
                 ${seriesCondition}
@@ -308,6 +316,14 @@ class DataRepositories {
                 AND TOSRI."ItemCode" = TSRI1."ItemCode"
             WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
                 AND T1."CANCELED" = 'N'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM ${this.db}.RIN1 CM1
+                         INNER JOIN ${this.db}.ORIN CM0
+                                    ON CM0."DocEntry" = CM1."DocEntry"
+                WHERE CM1."BaseType" = 13              -- A/R Invoice
+                  AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+            )
                 ${statusCondition}
                 ${businessPartnerCondition}
                 ${seriesCondition}
@@ -462,6 +478,14 @@ class DataRepositories {
                 AND TOSRI."ItemCode" = TSRI1."ItemCode"
             WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
               AND T1."CANCELED" = 'N'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM ${this.db}.RIN1 CM1
+                         INNER JOIN ${this.db}.ORIN CM0
+                                    ON CM0."DocEntry" = CM1."DocEntry"
+                WHERE CM1."BaseType" = 13              -- A/R Invoice
+                  AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+            )
                 ${statusCondition}
                 ${searchCondition}
                 ${salesCondition}
@@ -585,6 +609,14 @@ class DataRepositories {
                 AND TOSRI."ItemCode" = TSRI1."ItemCode"
             WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
               AND T1."CANCELED" = 'N'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM ${this.db}.RIN1 CM1
+                         INNER JOIN ${this.db}.ORIN CM0
+                                    ON CM0."DocEntry" = CM1."DocEntry"
+                WHERE CM1."BaseType" = 13              -- A/R Invoice
+                  AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+            )
                 ${statusCondition}
                 ${searchCondition}
                 ${salesCondition}
@@ -783,6 +815,14 @@ ORDER BY
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
         LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"  and T3."Canceled" = 'N' 
         WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N' and T1."CardCode" not in ('Naqd','Bonus')
+        AND NOT EXISTS (
+            SELECT 1
+            FROM ${this.db}.RIN1 CM1
+                     INNER JOIN ${this.db}.ORIN CM0
+                                ON CM0."DocEntry" = CM1."DocEntry"
+            WHERE CM1."BaseType" = 13              -- A/R Invoice
+              AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+        )
         ${salesCondition}
         `
         return sql
@@ -858,6 +898,14 @@ ORDER BY
         LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
         LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."Canceled" = 'N' 
         WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N' and T1."CardCode" not in ('Naqd','Bonus')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM ${this.db}.RIN1 CM1
+                     INNER JOIN ${this.db}.ORIN CM0
+                                ON CM0."DocEntry" = CM1."DocEntry"
+            WHERE CM1."BaseType" = 13              -- A/R Invoice
+              AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+        )
         ${salesCondition}
         `
         return sql
