@@ -141,7 +141,7 @@ class DataRepositories {
                                         ON CM0."DocEntry" = CM1."DocEntry"
                     WHERE CM1."BaseType" = 13              -- A/R Invoice
                       AND CM1."BaseEntry" = T1."DocEntry"
-                      AND   CMO."CANCELED" = 'N'-- shu invoice
+                      AND   CMO."CANCELED" = 'N' 
                 )
                 ${statusCondition}
                 ${businessPartnerCondition}
@@ -968,7 +968,8 @@ ORDER BY
                          INNER JOIN ${this.db}.ORIN CM0
                                     ON CM0."DocEntry" = CM1."DocEntry"
                 WHERE CM1."BaseType" = 13              -- A/R Invoice
-                  AND CM1."BaseEntry" = T0."DocEntry"  -- shu invoice
+                  AND CM1."BaseEntry" = T0."DocEntry"
+                AND T0."CANCELED" = 'N' 
             )
             GROUP BY 
                 T1."InstlmntID",
