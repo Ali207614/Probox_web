@@ -1008,10 +1008,9 @@ class b1HANA {
         let totalPaid = 0;
 
         const installmentsMap = {};
-
         for (const r of rows) {
             const key = `${r.DocEntry}_${r.InstlmntID}`;
-            if (!installmentsMap[key] && r.Canceled !== 'Y') {
+            if (!installmentsMap[key]) {
                 installmentsMap[key] = {
                     DocEntry: r.DocEntry,
                     InstlmntID: r.InstlmntID,
@@ -1082,7 +1081,8 @@ class b1HANA {
             moment(inst.DueDate).isSameOrBefore(today, 'day')
         );
 
-        for (const inst of filtered) {
+
+        for (const inst of installments) {
             const unpaid = inst.InsTotal - inst.TotalPaid;
             if (unpaid <= 0) continue;
             if (inst.DueDate.isBefore(today, 'day')) {
