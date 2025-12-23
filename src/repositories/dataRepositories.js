@@ -140,7 +140,8 @@ class DataRepositories {
                              INNER JOIN ${this.db}.ORIN CM0
                                         ON CM0."DocEntry" = CM1."DocEntry"
                     WHERE CM1."BaseType" = 13              -- A/R Invoice
-                      AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+                      AND CM1."BaseEntry" = T1."DocEntry"
+                      AND   CMO.CANCELED = 'N'-- shu invoice
                 )
                 ${statusCondition}
                 ${businessPartnerCondition}
@@ -322,7 +323,8 @@ class DataRepositories {
                          INNER JOIN ${this.db}.ORIN CM0
                                     ON CM0."DocEntry" = CM1."DocEntry"
                 WHERE CM1."BaseType" = 13              -- A/R Invoice
-                  AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+                  AND CM1."BaseEntry" = T1."DocEntry"
+                  AND   CMO.CANCELED = 'N'-- shu invoice
             )
                 ${statusCondition}
                 ${businessPartnerCondition}
@@ -484,7 +486,8 @@ class DataRepositories {
                          INNER JOIN ${this.db}.ORIN CM0
                                     ON CM0."DocEntry" = CM1."DocEntry"
                 WHERE CM1."BaseType" = 13              -- A/R Invoice
-                  AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+                  AND CM1."BaseEntry" = T1."DocEntry"
+                  AND   CMO.CANCELED = 'N'-- shu invoice
             )
                 ${statusCondition}
                 ${searchCondition}
@@ -615,7 +618,8 @@ class DataRepositories {
                          INNER JOIN ${this.db}.ORIN CM0
                                     ON CM0."DocEntry" = CM1."DocEntry"
                 WHERE CM1."BaseType" = 13              -- A/R Invoice
-                  AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+                  AND CM1."BaseEntry" = T1."DocEntry"
+                  AND   CMO.CANCELED = 'N'-- shu invoice
             )
                 ${statusCondition}
                 ${searchCondition}
@@ -813,7 +817,8 @@ ORDER BY
                              INNER JOIN ${this.db}.ORIN CM0
                                         ON CM0."DocEntry" = CM1."DocEntry"
                     WHERE CM1."BaseType" = 13              -- A/R Invoice
-                      AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+                      AND CM1."BaseEntry" = T1."DocEntry"
+                    AND   CMO.CANCELED = 'N' -- shu invoice
                 )
            ) AS "InsTotal",
             SUM(T0."PaidToDate") as "PaidToDate",
@@ -912,7 +917,8 @@ ORDER BY
                      INNER JOIN ${this.db}.ORIN CM0
                                 ON CM0."DocEntry" = CM1."DocEntry"
             WHERE CM1."BaseType" = 13              -- A/R Invoice
-              AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+              AND CM1."BaseEntry" = T1."DocEntry"
+              AND   CMO.CANCELED = 'N'-- shu invoice
         )
         ${salesCondition}
         `
