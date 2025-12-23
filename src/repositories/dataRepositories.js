@@ -807,6 +807,14 @@ ORDER BY
                 JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
                 WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
                   AND T1."CANCELED" = 'N' and T1."CardCode" not in ('Naqd','Bonus')
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM ${this.db}.RIN1 CM1
+                             INNER JOIN ${this.db}.ORIN CM0
+                                        ON CM0."DocEntry" = CM1."DocEntry"
+                    WHERE CM1."BaseType" = 13              -- A/R Invoice
+                      AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
+                )
            ) AS "InsTotal",
             SUM(T0."PaidToDate") as "PaidToDate",
             SUM(T0."InsTotal") as "InsTotal2"
