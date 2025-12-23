@@ -139,9 +139,8 @@ class DataRepositories {
                     FROM ${this.db}.RIN1 CM1
                              INNER JOIN ${this.db}.ORIN CM0
                                         ON CM0."DocEntry" = CM1."DocEntry"
-                    WHERE CM1."BaseType" = 13              -- A/R Invoice
+                    WHERE CM1."BaseType" = 13              
                       AND CM1."BaseEntry" = T1."DocEntry"
-                      AND   CMO."CANCELED" = 'N' 
                 )
                 ${statusCondition}
                 ${businessPartnerCondition}
