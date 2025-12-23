@@ -323,7 +323,6 @@ class DataRepositories {
                                     ON CM0."DocEntry" = CM1."DocEntry"
                 WHERE CM1."BaseType" = 13              -- A/R Invoice
                   AND CM1."BaseEntry" = T1."DocEntry"
-                  AND   CMO."CANCELED" = 'N'-- shu invoice
             )
                 ${statusCondition}
                 ${businessPartnerCondition}
@@ -486,7 +485,6 @@ class DataRepositories {
                                     ON CM0."DocEntry" = CM1."DocEntry"
                 WHERE CM1."BaseType" = 13              -- A/R Invoice
                   AND CM1."BaseEntry" = T1."DocEntry"
-                  AND   CMO."CANCELED" = 'N'-- shu invoice
             )
                 ${statusCondition}
                 ${searchCondition}
@@ -618,7 +616,6 @@ class DataRepositories {
                                     ON CM0."DocEntry" = CM1."DocEntry"
                 WHERE CM1."BaseType" = 13              -- A/R Invoice
                   AND CM1."BaseEntry" = T1."DocEntry"
-                  AND   CMO."CANCELED" = 'N'-- shu invoice
             )
                 ${statusCondition}
                 ${searchCondition}
@@ -817,7 +814,6 @@ ORDER BY
                                         ON CM0."DocEntry" = CM1."DocEntry"
                     WHERE CM1."BaseType" = 13              -- A/R Invoice
                       AND CM1."BaseEntry" = T1."DocEntry"
-                    AND   CMO."CANCELED" = 'N' -- shu invoice
                 )
            ) AS "InsTotal",
             SUM(T0."PaidToDate") as "PaidToDate",
@@ -917,7 +913,6 @@ ORDER BY
                                 ON CM0."DocEntry" = CM1."DocEntry"
             WHERE CM1."BaseType" = 13              -- A/R Invoice
               AND CM1."BaseEntry" = T1."DocEntry"
-              AND   CMO."CANCELED" = 'N'-- shu invoice
         )
         ${salesCondition}
         `
@@ -968,7 +963,6 @@ ORDER BY
                                     ON CM0."DocEntry" = CM1."DocEntry"
                 WHERE CM1."BaseType" = 13              -- A/R Invoice
                   AND CM1."BaseEntry" = T0."DocEntry"
-                AND T0."CANCELED" = 'N' 
             )
             GROUP BY 
                 T1."InstlmntID",
