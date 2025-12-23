@@ -888,8 +888,8 @@ ORDER BY
                 T1."DueDate",
                 T1."InsTotal",
                 T1."InstlmntID",
-                (Select SUM(A1."DocTotal") FROM ${this.db}.OINV A1  WHERE  T0."DocEntry" = A1."DocEntry" and  A1."CANCELED" = 'N' and A1."CardCode" = '${cardCode}') as "Total",
-                (Select SUM(A1."PaidToDate") FROM ${this.db}.OINV A1  WHERE T0."DocEntry" = A1."DocEntry" and A1."CANCELED" = 'N' and A1."CardCode" = '${cardCode}') as "TotalPaid",
+                (Select SUM(A1."DocTotal") FROM ${this.db}.OINV A1  WHERE  T0."DocEntry" = A1."DocEntry" and  A1."CANCELED" = 'N') as "Total",
+                (Select SUM(A1."PaidToDate") FROM ${this.db}.OINV A1  WHERE T0."DocEntry" = A1."DocEntry" and A1."CANCELED" = 'N') as "TotalPaid",
                 SUM(T2."SumApplied") as "SumApplied",
                 MAX(T3."DocDate") as "DocDate",
                 T3."Canceled"
@@ -899,7 +899,15 @@ ORDER BY
                 AND T1."InstlmntID" = T2."InstId"
              LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"
             WHERE 
-                T0."CardCode" = '${cardCode}' and T0."CANCELED" = 'N' and T1."DueDate" <= CURRENT_DATE 
+                T0."CardCode" = '${cardCode}' and T0."CANCELED" = 'N'
+              AND NOT EXISTS (
+                SELECT 1
+                FROM ${this.db}.RIN1 CM1
+                         INNER JOIN ${this.db}.ORIN CM0
+                                    ON CM0."DocEntry" = CM1."DocEntry"
+                WHERE CM1."BaseType" = 13              -- A/R Invoice
+                  AND CM1."BaseEntry" = T0."DocEntry"  -- shu invoice
+            )
             GROUP BY 
                 T1."InstlmntID",
                 T0."DocEntry",

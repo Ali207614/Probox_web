@@ -1011,8 +1011,7 @@ class b1HANA {
 
         for (const r of rows) {
             const key = `${r.DocEntry}_${r.InstlmntID}`;
-
-            if (!installmentsMap[key]) {
+            if (!installmentsMap[key] && r.Canceled !== 'Y') {
                 installmentsMap[key] = {
                     DocEntry: r.DocEntry,
                     InstlmntID: r.InstlmntID,
@@ -1040,7 +1039,6 @@ class b1HANA {
 
         const installments = Object.values(installmentsMap);
         const today = moment();
-
         // ===============================
         // 4. Ochiq shartnomalar
         // ===============================
@@ -1058,7 +1056,7 @@ class b1HANA {
             }
 
             contractMap[inst.DocEntry].total += inst.InsTotal;
-            contractMap[inst.DocEntry].paid += inst.TotalPaid;
+            contractMap[inst.DocEntry].paid += inst.TotalPaid || 0;
         }
 
         let openContracts = 0;
@@ -1067,16 +1065,12 @@ class b1HANA {
             totalAmount += c.Total;
             totalPaid += c.PaidTodate;
 
-
             if ((c.Total <= c.PaidTodate + 5)) {
                 continue;
             }
             else{
                 openContracts+=1
             }
-
-
-
         }
         // ===============================
         // 5. Просрочка (overdue debt)
@@ -1084,8 +1078,11 @@ class b1HANA {
 
 
         let overdueDebt = 0;
+        const filtered = installments.filter((inst) =>
+            moment(inst.DueDate).isSameOrBefore(today, 'day')
+        );
 
-        for (const inst of installments) {
+        for (const inst of filtered) {
             const unpaid = inst.InsTotal - inst.TotalPaid;
             if (unpaid <= 0) continue;
             if (inst.DueDate.isBefore(today, 'day')) {
@@ -1117,10 +1114,6 @@ class b1HANA {
         let totalDelay = 0;
         let paidCount = 0;
 
-
-        const filtered = installments.filter((inst) =>
-            moment(inst.DueDate).isSameOrBefore(today, 'day')
-        );
 
         for (const inst of filtered) {
             if(!inst.PaidDate){
