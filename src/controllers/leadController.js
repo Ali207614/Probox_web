@@ -60,6 +60,8 @@ class LeadController {
                 qrValue, // frontend QR generatsiya qilish uchun
             });
         } catch (err) {
+
+            console.log(err ,' buuu errrrrrrrrr')
             next(err);
         }
     };
