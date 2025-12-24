@@ -53,7 +53,7 @@ router.delete(
     leadController.deleteLeadImage
 );
 
-router.get('/public/contracts/:docNum', leadController.downloadContract);
+router.get('/public/contracts/:key', leadController.downloadContract);
 
 
 router.post('/create/invoice', authMiddleware, b1SL.createInvoiceAndPayment);
