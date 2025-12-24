@@ -107,7 +107,7 @@ class b1SL {
             });
     }
 
-    updateBusinessPartner = async ({ Phone1, Phone2, CardCode }) => {
+    updateBusinessPartner = async ({ Phone1, Phone2, CardCode , CardName }) => {
 
         let body = {
             "Currency": "UZS",
@@ -119,6 +119,10 @@ class b1SL {
 
         if (Phone2) {
             body = { ...body, Phone1 }
+        }
+
+        if(CardName){
+            body = { ...body, CardName }
         }
 
         const axios = Axios.create({

@@ -1247,6 +1247,12 @@ class b1HANA {
             // === Normalize fields
             if (validData?.clientFullName) {
                 validData.clientName = validData.clientFullName;
+                if(existingLead.cardCode){
+                    await b1Sl.updateBusinessPartner({
+                        CardCode: existingLead.cardCode,
+                        CardName: validData.clientFullName
+                    } )
+                }
             }
 
             if (validData.passportId) {
