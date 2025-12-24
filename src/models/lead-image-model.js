@@ -31,6 +31,7 @@ const LeadImageSchema = new Schema(
         pdfKey: { type: String },
         isPdf: { type: Boolean, default: false },
         fileName: String,
+        docNum: String,
         mimeType: String,
         size: Number,
     },

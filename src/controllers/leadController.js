@@ -12,29 +12,20 @@ const uploadService = new UploadService();
 class LeadController {
     uploadLeadImage = async (req, res, next) => {
         try {
-            const { leadId, cardCode } = req.body;
-            console.log(req.body)
+            const { leadId, cardCode, docNum } = req.body;
             const file = req.file;
 
-            if (!file) {
-                return res.status(400).json({ message: 'Rasm yuklanmadi' });
-            }
-
-            if (!leadId) {
-                return res.status(400).json({ message: 'leadId majburiy' });
-            }
+            if (!file) return res.status(400).json({ message: 'Fayl yuklanmadi' });
+            if (!leadId) return res.status(400).json({ message: 'leadId majburiy' });
 
             const entityId = cardCode ? cardCode : leadId.toString();
 
-            const uploaded = await uploadService.uploadImage(
-                "lead-images",
-                entityId,
-                file
-            );
+            const uploaded = await uploadService.uploadImage('lead-images', entityId, file);
 
-            let payload = {
+            const payload = {
                 leadId,
                 cardCode: cardCode ?? null,
+                docNum: docNum ? String(docNum).trim() : null, // ✅ optional
                 fileName: file.originalname,
                 mimeType: file.mimetype,
                 size: file.size,
@@ -44,25 +35,35 @@ class LeadController {
                 payload.isPdf = true;
                 payload.pdfKey = uploaded.key;
                 payload.keys = {};
-            }
 
-            else {
+                // ✅ docNum kelmagan bo‘lsa, keyin create bo‘lgach _id’dan docNum qilib qo'yamiz
+            } else {
                 payload.isPdf = false;
                 payload.keys = uploaded.keys;
             }
 
             const saved = await LeadImage.create(payload);
 
+            // ✅ PDF bo‘lsa va docNum yo‘q bo‘lsa → docNum = saved._id (tahmin qilish qiyin)
+            if (saved.isPdf && !saved.docNum) {
+                saved.docNum = String(saved._id);
+                await saved.save();
+            }
+
+            const qrValue = saved.isPdf
+                ? `${process.env.PUBLIC_BASE_URL}/public/contracts/${saved.docNum}.pdf`
+                : null;
+
             return res.json({
                 status: true,
                 image: saved,
+                qrValue, // frontend QR generatsiya qilish uchun
             });
-
         } catch (err) {
-            console.log(err)
             next(err);
         }
     };
+
 
     getLeadImages = async (req, res, next) => {
         try {
@@ -250,32 +251,21 @@ class LeadController {
         }
     };
 
-    downloadPublicContractByLeadImageId = async (req, res, next) => {
+    downloadContract = async (req, res, next) => {
         try {
-            const { id } = req.params; // leadImageId (Mongo _id)
+            const { key } = req.params;
 
-            if (!isValidObjectId(id)) {
-                return res.status(400).json({ message: 'leadImageId noto‘g‘ri' });
-            }
+            const query = { docNum: key, isPdf: true };
 
-            const doc = await LeadImage.findOne({ _id: id, isPdf: true }).lean();
-            if (!doc?.pdfKey) return res.status(404).json({ message: 'PDF topilmadi' });
+            const doc = await LeadImage.findOne(query).lean();
+            if (!doc?.pdfKey) return res.status(404).json({ message: 'Shartnoma topilmadi' });
 
             const out = await uploadService.client.send(
-                new GetObjectCommand({
-                    Bucket: uploadService.bucket,
-                    Key: doc.pdfKey,
-                })
+                new GetObjectCommand({ Bucket: uploadService.bucket, Key: doc.pdfKey })
             );
 
             res.setHeader('Content-Type', 'application/pdf');
-
-            res.setHeader(
-                'Content-Disposition',
-                `attachment; filename="contract-${id}.pdf"`
-            );
-
-            if (out?.ContentLength) res.setHeader('Content-Length', String(out.ContentLength));
+            res.setHeader('Content-Disposition', `attachment; filename="contract-${key}.pdf"`);
 
             if (out?.Body?.pipe) {
                 out.Body.on('error', next);
