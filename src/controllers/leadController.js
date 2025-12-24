@@ -3,6 +3,8 @@ const LeadImage = require('../models/lead-image-model');
 const UploadService = require('../minio');
 const multer = require('multer');
 const moment = require('moment');
+const {GetObjectCommand} = require("@aws-sdk/client-s3");
+const {isValidObjectId} = require("mongoose");
 
 const upload = multer({ storage: multer.memoryStorage() });
 const uploadService = new UploadService();
@@ -247,6 +249,48 @@ class LeadController {
             next(e);
         }
     };
+
+    downloadPublicContractByLeadImageId = async (req, res, next) => {
+        try {
+            const { id } = req.params; // leadImageId (Mongo _id)
+
+            if (!isValidObjectId(id)) {
+                return res.status(400).json({ message: 'leadImageId noto‘g‘ri' });
+            }
+
+            const doc = await LeadImage.findOne({ _id: id, isPdf: true }).lean();
+            if (!doc?.pdfKey) return res.status(404).json({ message: 'PDF topilmadi' });
+
+            const out = await uploadService.client.send(
+                new GetObjectCommand({
+                    Bucket: uploadService.bucket,
+                    Key: doc.pdfKey,
+                })
+            );
+
+            res.setHeader('Content-Type', 'application/pdf');
+
+            res.setHeader(
+                'Content-Disposition',
+                `attachment; filename="contract-${id}.pdf"`
+            );
+
+            if (out?.ContentLength) res.setHeader('Content-Length', String(out.ContentLength));
+
+            if (out?.Body?.pipe) {
+                out.Body.on('error', next);
+                return out.Body.pipe(res);
+            }
+
+            const buf = Buffer.from(await out.Body.transformToByteArray());
+            return res.end(buf);
+        } catch (e) {
+            next(e);
+        }
+    };
+
+
+
 }
 
 module.exports = new LeadController();
