@@ -72,7 +72,7 @@ router.get('/lead-analytics', authMiddleware, analyticsController.getLeadsAnalyt
 
 router.post('/leads/:id/chat', authMiddleware, b1HANA.addChat);
 router.get('/leads/:id/chat', authMiddleware, b1HANA.getChats);
-router.patch('/leads/chat/:chatId', authMiddleware, b1HANA.updateChat);
+router.put('/leads/chat/:chatId', authMiddleware, b1HANA.updateChat);
 router.delete('/leads/chat/:chatId', authMiddleware, b1HANA.deleteChat);
 
 

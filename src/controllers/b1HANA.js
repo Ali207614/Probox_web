@@ -970,21 +970,6 @@ class b1HANA {
         return Number((total / count).toFixed(2));
     };
 
-
-    // calculateLeadPaymentScore = async (cardCode) => {
-    //     const sql = DataRepositories.getInstallmentPayments(cardCode);
-    //     const rows = await this.execute(sql);
-    //
-    //
-    //     if (!rows || rows.length === 0) return 0;
-    //
-    //     const installments = this.mergeInstallments(rows);
-    //
-    //     const score = this.calculateTotalScore(installments);
-    //     return score;
-    // }
-
-
     calculateLeadPaymentScore = async (cardCode) => {
         const sql = DataRepositories.getInstallmentPayments(cardCode);
         let rows = await this.execute(sql);

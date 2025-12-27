@@ -3,8 +3,7 @@ const LeadImage = require('../models/lead-image-model');
 const UploadService = require('../minio');
 const multer = require('multer');
 const moment = require('moment');
-const {GetObjectCommand} = require("@aws-sdk/client-s3");
-const {isValidObjectId} = require("mongoose");
+const { GetObjectCommand } = require("@aws-sdk/client-s3");
 
 const upload = multer({ storage: multer.memoryStorage() });
 const uploadService = new UploadService();
@@ -36,7 +35,6 @@ class LeadController {
                 payload.pdfKey = uploaded.key;
                 payload.keys = {};
 
-                // ✅ docNum kelmagan bo‘lsa, keyin create bo‘lgach _id’dan docNum qilib qo'yamiz
             } else {
                 payload.isPdf = false;
                 payload.keys = uploaded.keys;
@@ -44,7 +42,6 @@ class LeadController {
 
             const saved = await LeadImage.create(payload);
 
-            // ✅ PDF bo‘lsa va docNum yo‘q bo‘lsa → docNum = saved._id (tahmin qilish qiyin)
             if (saved.isPdf && !saved.docNum) {
                 saved.docNum = String(saved._id);
                 await saved.save();
@@ -57,7 +54,7 @@ class LeadController {
             return res.json({
                 status: true,
                 image: saved,
-                qrValue, // frontend QR generatsiya qilish uchun
+                qrValue,
             });
         } catch (err) {
 
@@ -65,7 +62,6 @@ class LeadController {
             next(err);
         }
     };
-
 
     getLeadImages = async (req, res, next) => {
         try {
@@ -280,9 +276,6 @@ class LeadController {
             next(e);
         }
     };
-
-
-
 }
 
 module.exports = new LeadController();
