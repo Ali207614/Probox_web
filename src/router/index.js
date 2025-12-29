@@ -1,5 +1,6 @@
 const Router = require('express').Router;
 const b1SL = require('../controllers/b1SL');
+const b1SL1 = require('../controllers/b1SL1');
 const b1HANA = require('../controllers/b1HANA');
 const leadController = require('../controllers/leadController');
 const analyticsController = require('../controllers/analyticsController');
@@ -57,6 +58,7 @@ router.get('/public/contracts/:key', leadController.downloadContract);
 
 
 router.post('/create/invoice', authMiddleware, b1SL.createInvoiceAndPayment);
+router.post('/create/invoice/test', authMiddleware, b1SL1.createInvoiceAndPayment);
 
 router.put('/leads/:id', authMiddleware, b1HANA.updateLead)
 

@@ -1235,7 +1235,9 @@ class b1HANA {
                 if(existingLead.cardCode){
                     await b1Sl.updateBusinessPartner({
                         CardCode: existingLead.cardCode,
-                        CardName: validData.clientFullName
+                        CardName: validData.clientFullName,
+                        U_jshshir:validData.jshshir || null,
+                        Cellular:  validData.passportId || null
                     } )
                 }
             }

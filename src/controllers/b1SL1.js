@@ -107,10 +107,12 @@ class b1SL {
             });
     }
 
-    updateBusinessPartner = async ({ Phone1, Phone2, CardCode , CardName }) => {
+    updateBusinessPartner = async ({ Phone1, Phone2, CardCode , CardName ,U_jshshir=null,Cellular=null}) => {
 
         let body = {
             "Currency": "UZS",
+            U_jshshir,
+            Cellular
         }
 
         if (Phone1) {
@@ -154,11 +156,11 @@ class b1SL {
             });
     }
 
-    createBusinessPartner = async ({ Phone1, Phone2, CardName }) => {
+    createBusinessPartner = async ({ Phone1, Phone2, CardName , U_jshshir , Cellular }) => {
         const rand = String.fromCharCode(65 + Math.floor(Math.random() * 26));
         const CardCode = `BP${moment().format('YYMMDDHHmmss')}${rand}`;
 
-        let body = { CardCode, CardName , "Currency": "UZS", };
+        let body = { CardCode, CardName , "Currency": "UZS", U_jshshir ,Cellular};
         if (Phone1) body = { ...body, Phone1 };
         if (Phone2) body = { ...body, Phone2 };
 
@@ -193,91 +195,158 @@ class b1SL {
             });
     };
 
-    buildBatchInvoiceAndPayment(invoiceBody, paymentBody) {
-        const batchId = `batch_${crypto.randomUUID()}`;
-        const changeSetId = `changeset_${crypto.randomUUID()}`;
+    normalizePayments(payments) {
+        if (!Array.isArray(payments)) return [];
+        return payments
+            .filter((p) => p && typeof p === 'object')
+            .map((p) => ({
+                type: String(p.type || '').trim(),     // Cash | Card | Terminal
+                amount: Number(p.amount || 0),         // UZS
+            }))
+            .filter((p) =>
+                (p.type === 'Cash' || p.type === 'Card' || p.type === 'Terminal') &&
+                p.amount > 0
+            );
+    }
+
+    getCashAccountByBranch(branchCode) {
+        const map = { '1': '5040', '2': '5010', '3': '5060' };
+        const acc = map[String(branchCode)];
+        if (!acc) throw new Error(`CashAccount not found for branch=${branchCode}`);
+        return acc;
+    }
+
+    resolveCashAccount(type, branchCode) {
+        if (type === 'Terminal') return '5710';
+        if (type === 'Card') return '5020';
+        return this.getCashAccountByBranch(branchCode); // Cash
+    }
+
+    buildIncomingPaymentBody({ cardCode, branchCode, docRate, payment }) {
+        const rate = Number(docRate || 11990);
+        if (!(rate > 0)) throw new Error('DocRate must be > 0');
+
+        const amountUZS = Number(payment.amount || 0);
+        if (!(amountUZS > 0)) throw new Error(`Invalid payment amount for ${payment.type}`);
+
+        const cashAccount = this.resolveCashAccount(payment.type, branchCode);
 
         return {
-            batchId,
-            payload:
-                `--${batchId}
-Content-Type: multipart/mixed;boundary=${changeSetId}
-                    
---${changeSetId}
-Content-Type: application/http
-Content-Transfer-Encoding: binary
-Content-ID: 1
-                    
-POST /ServiceLayer/b1s/v1/Invoices HTTP/1.1
-Content-Type: application/json
-                    
-${JSON.stringify(invoiceBody,null,4)}
-                    
---${changeSetId}
-Content-Type: application/http
-Content-Transfer-Encoding: binary
-Content-ID: 2
-                    
-POST /ServiceLayer/b1s/v1/IncomingPayments HTTP/1.1
-Content-Type: application/json
-                    
-${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
-                    
---${changeSetId}--
---${batchId}--`
+            CardCode: cardCode,
+            DocCurrency: 'UZS',
+            CashSum: amountUZS,
+            CashAccount: cashAccount,
+            PaymentInvoices: [
+                {
+                    DocEntry: '__INVOICE_DOCENTRY__',
+                    "AppliedFC": amountUZS,
+                    "AppliedSys":amountUZS,
+                    InstallmentId: 1,
+                },
+            ],
         };
     }
 
-    parseSapBatchResponse(raw) {
-        const blocks = raw.split("HTTP/1.1").slice(1);
+    buildPaymentBodies({ cardCode, branchCode, docRate, payments }) {
+        const normalized = this.normalizePayments(payments);
+        return normalized.map((p) =>
+            this.buildIncomingPaymentBody({ cardCode, branchCode, docRate, payment: p })
+        );
+    }
+
+    buildBatchInvoiceAndPayments(invoiceBody, paymentBodies = []) {
+        const batchId = `batch_${crypto.randomUUID()}`;
+        const changeSetId = `changeset_${crypto.randomUUID()}`;
+        const CRLF = '\r\n';
+
+        const parts = [];
+
+        // ✅ Invoice (Content-ID:1)
+        parts.push(
+            `--${changeSetId}${CRLF}` +
+            `Content-Type: application/http${CRLF}` +
+            `Content-Transfer-Encoding: binary${CRLF}` +
+            `Content-ID: 1${CRLF}${CRLF}` +
+            `POST /b1s/v1/Invoices HTTP/1.1${CRLF}` +
+            `Content-Type: application/json${CRLF}${CRLF}` +
+            `${JSON.stringify(invoiceBody)}${CRLF}${CRLF}` // ✅ MUHIM: JSON dan keyin 2 ta CRLF
+        );
+
+        // ✅ Payments (Content-ID:2..)
+        for (let i = 0; i < paymentBodies.length; i++) {
+            const pBody = paymentBodies[i];
+
+            const json = JSON.stringify(pBody).replace(
+                '"__INVOICE_DOCENTRY__"',
+                '$1'
+            );
+
+            parts.push(
+                `--${changeSetId}${CRLF}` +
+                `Content-Type: application/http${CRLF}` +
+                `Content-Transfer-Encoding: binary${CRLF}` +
+                `Content-ID: ${i + 2}${CRLF}${CRLF}` +
+                `POST /b1s/v1/IncomingPayments HTTP/1.1${CRLF}` +
+                `Content-Type: application/json${CRLF}${CRLF}` +
+                `${json}${CRLF}${CRLF}` // ✅ MUHIM: JSON dan keyin 2 ta CRLF
+            );
+        }
+
+        const payload =
+            `--${batchId}${CRLF}` +
+            `Content-Type: multipart/mixed; boundary=${changeSetId}${CRLF}${CRLF}` +
+            parts.join('') +
+            `--${changeSetId}--${CRLF}` +
+            `--${batchId}--${CRLF}`;
+
+        return { batchId, payload };
+    }
+
+    parseSapBatchResponseMulti(raw) {
+        const blocks = String(raw || '').split('HTTP/1.1').slice(1);
 
         let invoice = null;
-        let payment = null;
-        let errors = [];
+        const payments = [];
+        const errors = [];
 
         for (const block of blocks) {
             const status = Number(block.substring(0, 3));
-
             const jsonMatch = block.match(/\{[\s\S]*\}/);
-            const json = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+            let json = null;
+
+            if (jsonMatch) {
+                try { json = JSON.parse(jsonMatch[0]); } catch { json = null; }
+            }
 
             if (status >= 400) {
-                errors.push(json?.error?.message?.value || "Unknown SAP error");
+                errors.push(json?.error?.message?.value || 'Unknown SAP error');
                 continue;
             }
 
             if (json?.DocEntry && !invoice) {
-                invoice = {
-                    DocEntry: json.DocEntry,
-                    DocNum: json.DocNum,
-                };
+                invoice = { DocEntry: json.DocEntry, DocNum: json.DocNum };
                 continue;
             }
 
-            if (json?.DocEntry && invoice && !payment) {
-                payment = {
-                    DocEntry: json.DocEntry
-                };
+            if (json?.DocEntry && invoice) {
+                payments.push({ DocEntry: json.DocEntry, DocNum: json.DocNum });
             }
         }
 
-        return {
-            ok: errors.length === 0,
-            invoice,
-            payment,
-            errors
-        };
+        return { ok: errors.length === 0, invoice, payments, errors };
     }
 
     createInvoiceAndPayment = async (req, res, next) => {
         try {
-
-            if(!req.user.U_branch){
+            // 0) seller check
+            if (!req.user?.U_branch) {
                 return res.status(400).json({
                     status: false,
-                    message: "Siz Sotuvchi emassiz"
+                    message: "Siz Sotuvchi emassiz",
                 });
             }
+
+            // 1) leadId
             const leadId = req.body.leadId;
             delete req.body.leadId;
             delete req.body.selectedDevices;
@@ -285,10 +354,11 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
             if (!leadId) {
                 return res.status(400).json({
                     status: false,
-                    message: "leadId is required"
+                    message: "leadId is required",
                 });
             }
 
+            // 2) SAP’da shu leadId bilan invoice bor-yo‘qligini tekshirish
             const sapInvoiceQuery = `
                 SELECT
                     T0."DocEntry",
@@ -307,7 +377,7 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                     status: false,
                     message: "This lead already has an invoice in SAP",
                     DocEntry: existingInvoices[0].DocEntry,
-                    DocNum: existingInvoices[0].DocNum
+                    DocNum: existingInvoices[0].DocNum,
                 });
             }
 
@@ -319,7 +389,7 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
             if (!normalizedPhone) {
                 return res.status(400).json({
                     status: false,
-                    message: 'Invalid client phone number'
+                    message: "Invalid client phone number",
                 });
             }
 
@@ -329,20 +399,20 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
             let createdBP = false;
 
             if (bpRows?.length) {
-                // ✅ BOR BP
                 cardCode = bpRows[0].CardCode;
             } else {
-                // ❌ YO‘Q → CREATE
                 const bp = await this.createBusinessPartner({
-                    CardName: body.clientName || 'No Name',
+                    CardName: body.clientName || "No Name",
                     Phone1: normalizedPhone,
-                    Currency: 'UZS'
+                    Currency: "UZS",
+                    U_jshshir: body.jshshir,
+                    Cellular: body.passportId,
                 });
 
                 if (!bp?.CardCode) {
                     return res.status(400).json({
                         status: false,
-                        message: bp?.message || 'Failed to create Business Partner'
+                        message: bp?.message || "Failed to create Business Partner",
                     });
                 }
 
@@ -360,99 +430,79 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
             delete body.monthlyLimit;
             delete body.sellerName;
 
-            let obj = {
-                "1":"5040",
-                "2":"5010",
-                "3":"5060"
-            }
 
-            const paymentBody = {
-                CardCode: body.CardCode,
-                DocCurrency: "UZS",
-                CashSum: (req.body.CashSum || 0)  ,
-                CashAccount: body.paymentType === 'Card' ? "5020" : obj[req.user.U_branch],
-                DocRate: req.body.DocRate || 11990,
-                PaymentInvoices: [
-                    {
-                        DocEntry: 0,
-                        SumApplied: req.body.CashSum / req.body.DocRate ,
-                        "DocRate": req.body.DocRate || 11990,
-                        "InstallmentId": 1
-                    }
-                ]
-            };
+            const paymentsInput = body.payments;
+            const docRate = Number(body.DocRate || 11990);
 
-            console.log("SAP payment body:", paymentBody);
+
+            // ✅ payments input (0..3)
+            delete body.payments;
 
             delete body.DocRate;
             delete body.CashSum;
             delete body.paymentType;
 
-            const { batchId, payload } = this.buildBatchInvoiceAndPayment(body, paymentBody);
+            const paymentBodies = this.buildPaymentBodies({
+                cardCode: body.CardCode,
+                branchCode: req.user.U_branch,
+                docRate,
+                payments: paymentsInput,
+            });
 
-            console.log("SAP batch payload:", payload);
-            //
-            // return res.status(201).json({
-            //     status: true,
-            //     message: "Test",
-            // });
+            delete body.payments;
+            delete body.DocRate;
+            delete body.CashSum;
+            delete body.paymentType;
+
+            const { batchId, payload } = this.buildBatchInvoiceAndPayments(body, paymentBodies);
+            console.log(payload)
 
             const axiosInstance = Axios.create({
                 baseURL: `${this.api}`,
                 timeout: 30000,
                 headers: {
-                    'Content-Type': `multipart/mixed;boundary=${batchId}`,
-                    'Cookie':
-                        get(getSession(), 'Cookie[0]', '') +
-                        get(getSession(), 'Cookie[1]', ''),
-                    'SessionId': get(getSession(), 'SessionId', '')
+                    "Content-Type": `multipart/mixed;boundary=${batchId}`,
+                    Cookie: get(getSession(), "Cookie[0]", "") + get(getSession(), "Cookie[1]", ""),
+                    SessionId: get(getSession(), "SessionId", ""),
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
             const response = await axiosInstance.post(`/$batch`, payload);
 
-            console.log("SAP batch response:", response.data);
-
-            const parsed = this.parseSapBatchResponse(response.data);
+            const parsed = this.parseSapBatchResponseMulti(response.data);
 
             if (!parsed.ok) {
                 return res.status(400).json({
                     status: false,
                     message: "SAP batch error",
-                    errors: parsed.errors
+                    errors: parsed.errors,
+                    raw: response.data,
                 });
             }
 
-            if (!parsed.invoice) {
+            if (!parsed.invoice?.DocEntry) {
                 return res.status(400).json({
                     status: false,
-                    message: `Invoice was not created in SAP ${response.data}`
+                    message: `Invoice was not created in SAP`,
+                    raw: response.data,
                 });
             }
 
-            if (!parsed.payment) {
+            if (paymentBodies.length > 0 && parsed.payments.length !== paymentBodies.length) {
                 return res.status(400).json({
                     status: false,
-                    message: "Incoming Payment was not created in SAP"
+                    message: "Some Incoming Payments were not created in SAP",
+                    expected: paymentBodies.length,
+                    created: parsed.payments.length,
+                    errors: parsed.errors,
+                    raw: response.data,
                 });
             }
 
             const invoiceDocEntry = parsed.invoice.DocEntry;
             const invoiceDocNum = parsed.invoice.DocNum;
 
-            console.log("Invoice created:", parsed.invoice);
-            console.log("Payment created:", parsed.payment);
-
-            if (!invoiceDocEntry) {
-                return res.status(400).json({
-                    status: false,
-                    message: "SAP Batch Error: Invoice not created",
-                    raw: response.data
-                });
-            }
-
-            // 7. Update lead
             await LeadModel.updateOne(
                 { _id: leadId },
                 {
@@ -461,10 +511,12 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                         invoiceDocEntry,
                         invoiceDocNum,
                         invoiceCreatedAt: new Date(),
-                        paymentCreated: true,
-                        paymentCreatedAt: new Date(),
-                        ...(createdBP && { cardCode: body.CardCode })
-                    }
+
+                        paymentCreated: paymentBodies.length > 0,
+                        paymentCreatedAt: paymentBodies.length > 0 ? new Date() : null,
+
+                        ...(createdBP && { cardCode: body.CardCode }),
+                    },
                 }
             );
 
@@ -472,22 +524,22 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                 status: true,
                 invoiceDocEntry,
                 invoiceDocNum,
-                raw: response.data
+                paymentsCreated: parsed.payments.length,
+                raw: response.data,
             });
-
         } catch (err) {
             console.log("Batch SAP Error:", err?.response?.data || err);
 
-            if (get(err, 'response.status') == 401) {
+            if (get(err, "response.status") == 401) {
                 const token = await this.auth();
                 if (token.status) return this.createInvoiceAndPayment(req, res, next);
                 return res.status(401).json({ status: false, message: token.message });
             }
 
-            const sapErr = get(err, 'response.data.error.message.value', "SAP error");
+            const sapErr = get(err, "response.data.error.message.value", "SAP error");
             return res.status(400).json({
                 status: false,
-                message: sapErr
+                message: sapErr,
             });
         }
     };
@@ -553,4 +605,5 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
 }
 
 module.exports = new b1SL();
+
 
