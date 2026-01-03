@@ -17,6 +17,18 @@ const permissions = {
         'region',
         'district',
         'address',
+        'comment',
+        'called2',
+        'answered2',
+        'callCount2',
+        'meetingDate',
+        'rejectionReason2',
+        'paymentInterest',
+        'branch',
+        'meetingHappened',
+        'region',
+        'district',
+        'address',
         'comment'
     ],
     Operator2: [
