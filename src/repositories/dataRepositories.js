@@ -1011,7 +1011,6 @@ ORDER BY
         WHERE 
             T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
             AND T1."CANCELED" = 'N'
-            ${statusCondition}
         GROUP BY 
             T0."DocEntry",
             T0."InstlmntID"
