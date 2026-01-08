@@ -43,7 +43,7 @@ class b1SL {
         T0."Currency",
         T0."Phone1",
         T0."Phone2",
-        T0."U_jsshir",
+        T0."U_jshshir",
         T0."Cellular"
     FROM ${db}.OCRD T0
     WHERE
@@ -156,14 +156,14 @@ class b1SL {
             });
     }
 
-    createBusinessPartner = async ({ Phone1, Phone2, CardName , U_jsshir, Cellular }) => {
+    createBusinessPartner = async ({ Phone1, Phone2, CardName , U_jshshir, Cellular }) => {
         const rand = String.fromCharCode(65 + Math.floor(Math.random() * 26));
         const CardCode = `BP${moment().format('YYMMDDHHmmss')}${rand}`;
 
         let body = { CardCode, CardName , "Currency": "UZS", };
         if (Phone1) body = { ...body, Phone1 };
         if (Phone2) body = { ...body, Phone2 };
-        if (U_jsshir) body = { ...body, U_jsshir };
+        if (U_jshshir) body = { ...body, U_jshshir };
         if (Cellular) body = { ...body, Cellular };
 
         const axios = Axios.create({
@@ -341,7 +341,7 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                     CardName: body.clientName || 'No Name',
                     Phone1: normalizedPhone,
                     Currency: 'UZS',
-                    U_jsshir: body.jshshir,
+                    U_jshshir: body.jshshir,
                     Cellular:body.passportId
                 });
 
@@ -517,7 +517,7 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                     cardName: bpRows[0].CardName,
                     Phone1: bpRows[0].Phone1,
                     Phone2: bpRows[0].Phone2,
-                    U_jsshir: bpRows[0].U_jsshir,
+                    U_jshshir: bpRows[0].U_jshshir,
                     Cellular: bpRows[0].Cellular,
                     created: false,
                 };

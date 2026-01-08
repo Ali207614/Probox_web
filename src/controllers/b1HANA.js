@@ -893,7 +893,7 @@ class b1HANA {
                 time,
                 cardCode,
                 cardName,
-                jshshir:sapRecord?.U_jsshir || null,
+                jshshir:sapRecord?.U_jshshir || null,
                 idX: sapRecord?.Cellular || null,
             };
 
