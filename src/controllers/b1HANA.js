@@ -851,6 +851,24 @@ class b1HANA {
                 operator = await assignBalancedOperator();
             }
 
+            let scoring = null;
+
+            if(source === 'Organika') {
+                const scoringQuery = DataRepositories.getSalesPersons({
+                    include: ['Scoring'],
+                });
+                const scoringData = await this.execute(scoringQuery);
+
+                if (scoringData.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * scoringData.length);
+                    const selectedScoring = scoringData[randomIndex];
+                    scoring = selectedScoring?.SlpCode || null;
+
+                } else {
+                    console.warn('No Scoring operator found');
+                }
+            }
+
             const n = await generateShortId('PRO');
             const time = new Date();
 
@@ -871,6 +889,7 @@ class b1HANA {
                 source2: source2 || null,
                 comment: comment || null,
                 operator,
+                scoring,
                 time,
                 cardCode,
                 cardName,
