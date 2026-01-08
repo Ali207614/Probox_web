@@ -923,9 +923,6 @@ class b1HANA {
                 }
             }
 
-            console.log(dataObj)
-
-            return
 
             if (source === 'Organika') {
                 dataObj = {
