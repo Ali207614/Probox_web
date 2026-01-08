@@ -47,8 +47,7 @@ class b1SL {
         T0."Cellular"
     FROM ${db}.OCRD T0
     WHERE
-        T0."CardType" = 'C'
-        AND T0."Currency" = 'UZS'
+        T0."Currency" = 'UZS'
         AND (
             REPLACE(REPLACE(REPLACE(T0."Phone1", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
             OR
@@ -197,7 +196,7 @@ class b1SL {
             });
     };
 
-    buildBatchInvoiceAndPayment(invoiceBody, paymentBody) {
+    buildBatchInvoiceAndPayment(invoiceBody, s) {
         const batchId = `batch_${crypto.randomUUID()}`;
         const changeSetId = `changeset_${crypto.randomUUID()}`;
 

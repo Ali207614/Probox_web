@@ -875,6 +875,8 @@ class b1HANA {
 
             const sapRecord = await b1Sl.findOrCreateBusinessPartner(cleanedPhone, clientName);
 
+            console.log(sapRecord)
+
             const cardCode = sapRecord?.cardCode || null;
             const cardName = sapRecord?.cardName || null;
 
@@ -920,6 +922,10 @@ class b1HANA {
                     dataObj.avgPaymentDelay = avgPaymentDelay;
                 }
             }
+
+            console.log(dataObj)
+
+            return
 
             if (source === 'Organika') {
                 dataObj = {
