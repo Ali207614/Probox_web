@@ -881,7 +881,7 @@ class b1HANA {
             let dataObj = {
                 n,
                 source,
-                clientName,
+                clientName:sapRecord?.cardName || clientName,
                 clientPhone: cleanedPhone,
                 branch2: branch2 || null,
                 seller: seller || null,
@@ -894,8 +894,9 @@ class b1HANA {
                 cardName,
                 jshshir:sapRecord?.U_jshshir || null,
                 idX: sapRecord?.Cellular || null,
+                passportId: sapRecord?.Cellular || null,
+                jshshir2: sapRecord?.U_jshshir || null,
             };
-
             if(cardCode){
                 const {
                     score,
