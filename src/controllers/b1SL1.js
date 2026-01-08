@@ -410,6 +410,7 @@ class b1SL {
 
             const bpRows = await execute(this.findBpByDocUnsafeSql(safeJshshir, safePassport));
 
+            console.log(bpRows)
 
             let cardCode;
             let createdBP = false;
