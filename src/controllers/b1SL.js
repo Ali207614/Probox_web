@@ -47,7 +47,8 @@ class b1SL {
         T0."Cellular"
     FROM ${db}.OCRD T0
     WHERE
-         (
+        T0."Currency" = 'UZS'
+        AND (
             REPLACE(REPLACE(REPLACE(T0."Phone1", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
             OR
             REPLACE(REPLACE(REPLACE(T0."Phone2", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
