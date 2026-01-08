@@ -154,13 +154,15 @@ class b1SL {
             });
     }
 
-    createBusinessPartner = async ({ Phone1, Phone2, CardName }) => {
+    createBusinessPartner = async ({ Phone1, Phone2, CardName , U_jsshir, Cellular }) => {
         const rand = String.fromCharCode(65 + Math.floor(Math.random() * 26));
         const CardCode = `BP${moment().format('YYMMDDHHmmss')}${rand}`;
 
         let body = { CardCode, CardName , "Currency": "UZS", };
         if (Phone1) body = { ...body, Phone1 };
         if (Phone2) body = { ...body, Phone2 };
+        if (U_jsshir) body = { ...body, U_jsshir };
+        if (Cellular) body = { ...body, Cellular };
 
         const axios = Axios.create({
             baseURL: `${this.api}`,
@@ -336,7 +338,9 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                 const bp = await this.createBusinessPartner({
                     CardName: body.clientName || 'No Name',
                     Phone1: normalizedPhone,
-                    Currency: 'UZS'
+                    Currency: 'UZS',
+                    U_jsshir: body.jshshir,
+                    Cellular:body.passportId
                 });
 
                 if (!bp?.CardCode) {
