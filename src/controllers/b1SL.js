@@ -42,7 +42,9 @@ class b1SL {
         T0."CardName",
         T0."Currency",
         T0."Phone1",
-        T0."Phone2"
+        T0."Phone2",
+        T0."U_jsshir",
+        T0."Cellular"
     FROM ${db}.OCRD T0
     WHERE
         T0."CardType" = 'C'
@@ -498,61 +500,31 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
 
     findOrCreateBusinessPartner = async (phone, cardName) => {
         if (!phone) return null;
+        const digits = this.normalizePhone(phone);
 
-        function normalizePhone(input) {
-            if (!input) return null;
-            let digits = String(input).replace(/\D/g, '');
-
-            if (digits.startsWith('998') && digits.length > 9) {
-                digits = digits.slice(3);
-            }
-
-            if (digits.length === 10 && digits.startsWith('0')) {
-                digits = digits.slice(1);
-            }
-            return digits;
+        if (!digits) {
+            return res.status(400).json({
+                status: false,
+                message: 'Invalid client phone number'
+            });
         }
 
-        const digits = normalizePhone(phone);
-
-        const query = `
-        SELECT "CardCode", "CardName", "Phone1", "Phone2"
-        FROM ${db}.OCRD
-        WHERE "Phone1" LIKE '%${digits}' OR "Phone2" LIKE '%${digits}'
-    `;
-
-        console.log("SAP query:", query);
-
+        const bpRows = await execute(this.findBpByPhoneSql(digits));
         try {
-            const rows = await execute(query);
-
-            if (rows && rows.length > 0) {
+            if (bpRows && bpRows.length > 0) {
                 return {
-                    cardCode: rows[0].CardCode,
-                    cardName: rows[0].CardName,
+                    cardCode: bpRows[0].CardCode,
+                    cardName: bpRows[0].CardName,
+                    Phone1: bpRows[0].Phone1,
+                    Phone2: bpRows[0].Phone2,
+                    U_jsshir: bpRows[0].U_jsshir,
+                    Cellular: bpRows[0].Cellular,
                     created: false,
                 };
             }
         } catch (err) {
             console.error("SAP search error:", err);
         }
-
-        const bp = await this.createBusinessPartner({
-            Phone1: phone,
-            Phone2: '',
-            CardName: cardName || "No Name",
-        });
-
-        if (!bp?.CardCode) {
-            console.error("BP create error:", bp?.message);
-            return null;
-        }
-
-        return {
-            cardCode: bp.CardCode,
-            cardName: cardName || "No Name",
-            created: true,
-        };
     }
 }
 

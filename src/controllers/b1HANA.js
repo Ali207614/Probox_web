@@ -893,7 +893,33 @@ class b1HANA {
                 time,
                 cardCode,
                 cardName,
+                jshshir:sapRecord?.U_jsshir || null,
+                idX: sapRecord?.Cellular || null,
             };
+
+            if(cardCode){
+                const {
+                    score,
+                    totalContracts,
+                    openContracts,
+                    totalAmount,
+                    totalPaid,
+                    overdueDebt,
+                    maxDelay,
+                    avgPaymentDelay
+                } = await this.calculateLeadPaymentScore(cardCode);
+
+                if (score !== null) {
+                    dataObj.paymentScore = score;
+                    dataObj.totalContracts = totalContracts;
+                    dataObj.openContracts = openContracts;
+                    dataObj.totalAmount = totalAmount;
+                    dataObj.totalPaid = totalPaid;
+                    dataObj.overdueDebt = overdueDebt;
+                    dataObj.maxDelay = maxDelay;
+                    dataObj.avgPaymentDelay = avgPaymentDelay;
+                }
+            }
 
             if (source === 'Organika') {
                 dataObj = {
