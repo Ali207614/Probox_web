@@ -60,7 +60,7 @@ class b1SL {
   WHERE
     (${jshshir ? `T0."U_jshshir" = '${jshshir}'` : '1=0'})
     OR
-    (${passportId ? `T0."U_passportId" = '${passportId}'` : '1=0'})
+    (${passportId ? `T0."Cellular" = '${passportId}'` : '1=0'})
   LIMIT 1
 `;
 
