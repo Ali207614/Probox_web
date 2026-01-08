@@ -45,13 +45,25 @@ class b1SL {
         T0."Phone2"
     FROM ${db}.OCRD T0
     WHERE
-         (
+        AND T0."Currency" = 'UZS'
+        AND (
             REPLACE(REPLACE(REPLACE(T0."Phone1", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
             OR
             REPLACE(REPLACE(REPLACE(T0."Phone2", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
         )
     LIMIT 1
 `;
+
+    findBpByDocUnsafeSql = (jshshir, passportId) => `
+  SELECT T0."CardCode", T0."CardName"
+  FROM ${db}.OCRD T0
+  WHERE
+    (${jshshir ? `T0."U_jshshir" = '${jshshir}'` : '1=0'})
+    OR
+    (${passportId ? `T0."U_passportId" = '${passportId}'` : '1=0'})
+  LIMIT 1
+`;
+
 
     auth = async () => {
         let obj = api_params
@@ -391,7 +403,11 @@ class b1SL {
                 });
             }
 
-            const bpRows = await execute(this.findBpByPhoneSql(normalizedPhone));
+            const safeJshshir = body.jshshir ? String(body.jshshir).replace(/\D/g, '') : '1';
+            const safePassport = body.passportId ? String(body.passportId).replace(/['"]/g, '').trim() : '1';
+
+            const bpRows = await execute(this.findBpByDocUnsafeSql(safeJshshir, safePassport));
+
 
             let cardCode;
             let createdBP = false;
