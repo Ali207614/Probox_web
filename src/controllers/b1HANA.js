@@ -721,7 +721,7 @@ class b1HANA {
                 invoiceDocEntry:item.invoiceDocEntry || null,
                 invoiceDocNum:item.invoiceDocNum || null,
                 invoiceCreatedAt:item.invoiceCreatedAt || null,
-                status: item.status,
+                status: item.purchase ? 'Purchased' : item.status,
                 isBlocked: item?.isBlocked ?? false,
                 clientName: item.clientName || '',
                 jsshir: item.jshshir || '',
@@ -1457,6 +1457,11 @@ class b1HANA {
                     console.warn('SAP check failed:', sapErr.message);
                 }
             }
+
+            if(validData.purchase){
+                validData.status = 'Purchased'
+            }
+
 
             const updated = await LeadModel.findByIdAndUpdate(id, validData, {
                 new: true,
