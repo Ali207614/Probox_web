@@ -412,7 +412,6 @@ class b1SL {
 
             const bpRows = await execute(this.findBpByDocUnsafeSql(safeJshshir, safePassport));
 
-            console.log(bpRows , ' bu bor ekan ')
 
             let cardCode;
             let createdBP = false;
@@ -529,8 +528,9 @@ class b1SL {
                         invoiceCreated: true,
                         invoiceDocEntry,
                         invoiceDocNum,
+                        status:'Purchased',
+                        purchase:true,
                         invoiceCreatedAt: new Date(),
-
                         paymentCreated: paymentBodies.length > 0,
                         paymentCreatedAt: paymentBodies.length > 0 ? new Date() : null,
 
