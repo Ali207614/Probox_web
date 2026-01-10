@@ -1156,8 +1156,8 @@ class b1HANA {
 
         const overRate = B > 0 ? D / B : 0;
 
-        if (overRate >= 0.03 || D >= 3_000_000 || G >= 51) return 'xavfli';
-        return 'xavfsiz';
+        if (overRate >= 0.03 || D >= 3_000_000 || G >= 51) return 'Xavfli';
+        return 'Xavfsiz';
     }
 
 
