@@ -721,7 +721,7 @@ class b1HANA {
                 invoiceDocEntry:item.invoiceDocEntry || null,
                 invoiceDocNum:item.invoiceDocNum || null,
                 invoiceCreatedAt:item.invoiceCreatedAt || null,
-                status: item.purchase ? 'Purchased' : item.status,
+                status: (item.purchase || item.invoiceCreated) ? 'Purchased' : item.status,
                 isBlocked: item?.isBlocked ?? false,
                 clientName: item.clientName || '',
                 jsshir: item.jshshir || '',
@@ -1016,8 +1016,195 @@ class b1HANA {
         return Number((total / count).toFixed(2));
     };
 
+    calcInternalScore({
+                                   score,          // A2
+                                   totalAmount,    // B2
+                                   totalPaid,      // C2
+                                   overdueDebt,    // D2
+                                   totalContracts, // E2
+                                   openContracts,  // F2
+                                   maxDelay,       // G2
+                                   avgPaymentDelay // H2
+                               }) {
+        // Excel: IF(A2="";""; ...)
+        if (score == null) return null;
+
+        const B = Number(totalAmount) || 0;
+        const C = Number(totalPaid) || 0;
+        const D = Number(overdueDebt) || 0;
+        const E = Number(totalContracts) || 0;
+        const F = Number(openContracts) || 0;
+        const G = Number(maxDelay) || 0;
+        const H = Number(avgPaymentDelay) || 0;
+
+        const paid = B > 0 ? C / B : 0;        // paid = IFERROR(C2/B2;0)
+        const overRate = B > 0 ? D / B : 0;    // IFERROR(D2/B2;0)
+
+        // --- H2 blok (avgPaymentDelay) ---
+        // Excel IFS(H2<=0;10; H2<=2;9; ... H2<=30;-15; TRUE;-20)
+        let hScore = 0;
+        if (avgPaymentDelay !== "" && avgPaymentDelay != null) {
+            if (H <= 0) hScore = 10;
+            else if (H <= 2) hScore = 9;
+            else if (H <= 4) hScore = 8;
+            else if (H <= 6) hScore = 7;
+            else if (H <= 8) hScore = 6;
+            else if (H <= 10) hScore = 5;
+            else if (H <= 12) hScore = 4;
+            else if (H <= 14) hScore = 3;
+            else if (H <= 16) hScore = 2;
+            else if (H <= 18) hScore = 1;
+            else if (H <= 20) hScore = 0;
+            else if (H <= 22) hScore = -3;
+            else if (H <= 24) hScore = -6;
+            else if (H <= 26) hScore = -9;
+            else if (H <= 28) hScore = -12;
+            else if (H <= 30) hScore = -15;
+            else hScore = -20;
+        }
+
+        // --- G2 blok (maxDelay) ---
+        // Excel IFS(G2<=2;15; ... G2<=30;1; TRUE;-5)
+        let gScore = 0;
+        if (maxDelay !== "" && maxDelay != null) {
+            if (G <= 2) gScore = 15;
+            else if (G <= 4) gScore = 14;
+            else if (G <= 6) gScore = 13;
+            else if (G <= 8) gScore = 12;
+            else if (G <= 10) gScore = 11;
+            else if (G <= 12) gScore = 10;
+            else if (G <= 14) gScore = 9;
+            else if (G <= 16) gScore = 8;
+            else if (G <= 18) gScore = 7;
+            else if (G <= 20) gScore = 6;
+            else if (G <= 22) gScore = 5;
+            else if (G <= 24) gScore = 4;
+            else if (G <= 26) gScore = 3;
+            else if (G <= 28) gScore = 2;
+            else if (G <= 30) gScore = 1;
+            else gScore = -5;
+        }
+
+        // --- overdue rate blok (D2/B2) ---
+        // Excel: 0 -> 15; <=0.01 -> 12; <=0.03 -> 6; <=0.05 -> 2; else 0
+        let overScore = 0;
+        if (overRate === 0) overScore = 15;
+        else if (overRate <= 0.01) overScore = 12;
+        else if (overRate <= 0.03) overScore = 6;
+        else if (overRate <= 0.05) overScore = 2;
+        else overScore = 0;
+
+        // --- paid ratio blok (C2/B2) ---
+        // Excel: paid>=0.95 -> 15; ... paid>=0.4 -> 4; else 0
+        let paidScore = 0;
+        if (paid >= 0.95) paidScore = 15;
+        else if (paid >= 0.9) paidScore = 14;
+        else if (paid >= 0.85) paidScore = 13;
+        else if (paid >= 0.8) paidScore = 12;
+        else if (paid >= 0.75) paidScore = 11;
+        else if (paid >= 0.7) paidScore = 10;
+        else if (paid >= 0.65) paidScore = 9;
+        else if (paid >= 0.6) paidScore = 8;
+        else if (paid >= 0.55) paidScore = 7;
+        else if (paid >= 0.5) paidScore = 6;
+        else if (paid >= 0.45) paidScore = 5;
+        else if (paid >= 0.4) paidScore = 4;
+        else paidScore = 0;
+
+        // --- openContracts / totalContracts blok ---
+        // Excel: IFERROR(F2/MAX(E2;1);0) <=0.34 -> 5; <=0.6 -> 3; <=0.8 -> 1; else 0
+        const openRate = E > 0 ? F / Math.max(E, 1) : 0;
+        let openScore = 0;
+        if (openRate <= 0.34) openScore = 5;
+        else if (openRate <= 0.6) openScore = 3;
+        else if (openRate <= 0.8) openScore = 1;
+        else openScore = 0;
+
+        // Excel Score = 40*(A2/10) + Hblock + Gblock + overScore + paidScore + openScore
+        const rawScore =
+            40 * (Number(score) / 10) +
+            hScore +
+            gScore +
+            overScore +
+            paidScore +
+            openScore;
+
+        // Excel baseFinal:
+        // IF(AND(C2=0;D2=0);30; IF(F2>=3; MIN(30;Score); IF(F2=2; MIN(50;Score); Score)))
+        let baseFinal;
+        if (C === 0 && D === 0) baseFinal = 30;
+        else if (F >= 3) baseFinal = Math.min(30, rawScore);
+        else if (F === 2) baseFinal = Math.min(50, rawScore);
+        else baseFinal = rawScore;
+
+        // Excel penalty:
+        // paid>=0.9 ->0; >=0.8 ->5; >=0.7 ->10; >=0.6 ->15; else 20
+        let penalty = 20;
+        if (paid >= 0.9) penalty = 0;
+        else if (paid >= 0.8) penalty = 5;
+        else if (paid >= 0.7) penalty = 10;
+        else if (paid >= 0.6) penalty = 15;
+
+        // Excel: baseFinal - penalty
+        return Math.floor(baseFinal - penalty);
+    }
+
+    calcTrustLabel({ totalAmount, overdueDebt, maxDelay }) {
+        const B = Number(totalAmount) || 0;
+        const D = Number(overdueDebt) || 0;
+        const G = Number(maxDelay) || 0;
+
+        const overRate = B > 0 ? D / B : 0;
+
+        if (overRate >= 0.03 || D >= 3_000_000 || G >= 51) return 'xavfli';
+        return 'xavfsiz';
+    }
+
+
+    calcLimit(internalScore, trustLabel) {
+        const Risk = Number(internalScore) || 0;
+        const hard = String(trustLabel || '').toLowerCase() === 'xavfli';
+
+        let base = 0;
+        if (Risk >= 85) base = 30_000_000;
+        else if (Risk >= 84) base = 29_000_000;
+        else if (Risk >= 83) base = 28_000_000;
+        else if (Risk >= 82) base = 27_000_000;
+        else if (Risk >= 81) base = 26_000_000;
+        else if (Risk >= 80) base = 25_000_000;
+        else if (Risk >= 79) base = 24_000_000;
+        else if (Risk >= 78) base = 23_000_000;
+        else if (Risk >= 77) base = 22_000_000;
+        else if (Risk >= 76) base = 21_000_000;
+        else if (Risk >= 75) base = 20_000_000;
+        else if (Risk >= 74) base = 19_000_000;
+        else if (Risk >= 73) base = 18_000_000;
+        else if (Risk >= 72) base = 17_000_000;
+        else if (Risk >= 71) base = 16_000_000;
+        else if (Risk >= 70) base = 15_000_000;
+        else if (Risk >= 69) base = 14_000_000;
+        else if (Risk >= 68) base = 13_000_000;
+        else if (Risk >= 67) base = 12_000_000;
+        else if (Risk >= 66) base = 11_000_000;
+        else if (Risk >= 65) base = 10_000_000;
+        else if (Risk >= 64) base = 9_000_000;
+        else if (Risk >= 63) base = 8_000_000;
+        else if (Risk >= 62) base = 7_000_000;
+        else if (Risk >= 61) base = 6_000_000;
+        else if (Risk >= 60) base = 5_000_000;
+        else if (Risk >= 55) base = 4_000_000;
+        else if (Risk >= 50) base = 3_000_000;
+        else if (Risk >= 45) base = 2_000_000;
+        else if (Risk >= 40) base = 1_000_000;
+        else base = 0;
+
+        return hard ? Math.min(base, 10_000_000) : base;
+    }
+
+
+
     calculateLeadPaymentScore = async (cardCode) => {
-        const sql = DataRepositories.getInstallmentPayments(cardCode);
+        const sql = DataRepositories.getInstallmentPaymentsByPerson(cardCode);
         let rows = await this.execute(sql);
         if (!rows || rows.length === 0) {
             return {
@@ -1164,7 +1351,7 @@ class b1HANA {
         // ===============================
         const score = this.calculateTotalScore(installments);
 
-        return {
+        const internalScore = this.calcInternalScore({
             score,
             totalContracts,
             openContracts,
@@ -1173,6 +1360,23 @@ class b1HANA {
             overdueDebt,
             maxDelay,
             avgPaymentDelay
+        });
+
+        const trustLabel = this.calcTrustLabel({ totalAmount, overdueDebt, maxDelay });
+        const limit = this.calcLimit(internalScore, trustLabel);
+
+        return {
+            score,
+            totalContracts,
+            openContracts,
+            totalAmount,
+            totalPaid,
+            overdueDebt,
+            maxDelay,
+            avgPaymentDelay,
+            internalScore,
+            trustLabel,   // "xavfli" | "xavfsiz"
+            limit
         };
     };
 

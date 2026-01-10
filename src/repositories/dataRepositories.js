@@ -936,47 +936,133 @@ ORDER BY
         `;
     }
 
-    getInstallmentPayments(cardCode) {
+    getInstallmentPaymentsByPerson(cardCode) {
         return `
-           SELECT 
-                T0."DocEntry",
-                T0."CardCode",
-                T1."DueDate",
-                T1."InsTotal",
-                T1."InstlmntID",
-                (Select SUM(A1."DocTotal") FROM ${this.db}.OINV A1  WHERE  T0."DocEntry" = A1."DocEntry" and  A1."CANCELED" = 'N') as "Total",
-                (Select SUM(A1."PaidToDate") FROM ${this.db}.OINV A1  WHERE T0."DocEntry" = A1."DocEntry" and A1."CANCELED" = 'N') as "TotalPaid",
-                SUM(T2."SumApplied") as "SumApplied",
-                MAX(T3."DocDate") as "DocDate",
-                T3."Canceled"
-            FROM ${this.db}.INV6 T1
-            INNER JOIN ${this.db}.OINV T0 ON T0."DocEntry" = T1."DocEntry"
-             LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry"= T0."DocEntry" 
-                AND T1."InstlmntID" = T2."InstId"
-             LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"
-            WHERE 
-                T0."CardCode" = '${cardCode}' and T0."CANCELED" = 'N'
-              AND NOT EXISTS (
-                SELECT 1
-                FROM ${this.db}.RIN1 CM1
-                         INNER JOIN ${this.db}.ORIN CM0
-                                    ON CM0."DocEntry" = CM1."DocEntry"
-                WHERE CM1."BaseType" = 13              -- A/R Invoice
-                  AND CM1."BaseEntry" = T0."DocEntry"
-            )
-            GROUP BY 
-                T1."InstlmntID",
-                T0."DocEntry",
-                T0."CardCode",
-                T1."DueDate",
-                T1."InsTotal",
-                T3."DocDate",
-                T3."Canceled"
-            ORDER BY
-                T0."DocEntry",
-                T1."InstlmntID";
-        `;
+WITH base_bp AS (
+  SELECT
+    NULLIF(TRIM(BP."U_jshshir"), '') AS "U_jshshir",
+    NULLIF(TRIM(BP."Cellular"), '')  AS "Cellular"
+  FROM ${this.db}.OCRD BP
+  WHERE BP."CardCode" = '${cardCode}'
+  LIMIT 1
+),
+bp_codes AS (
+  SELECT BP2."CardCode"
+  FROM ${this.db}.OCRD BP2
+  CROSS JOIN base_bp B
+  WHERE B."U_jshshir" IS NOT NULL
+    AND TRIM(BP2."U_jshshir") = B."U_jshshir"
+
+  UNION
+
+  SELECT BP3."CardCode"
+  FROM ${this.db}.OCRD BP3
+  CROSS JOIN base_bp B
+  WHERE B."U_jshshir" IS NULL
+    AND B."Cellular" IS NOT NULL
+    AND TRIM(BP3."Cellular") = B."Cellular"
+)
+
+SELECT
+  T0."DocEntry",
+  T0."CardCode",
+  T1."DueDate",
+  T1."InsTotal",
+  T1."InstlmntID",
+
+  -- bu ikkisi aslida SUM emas, lekin sizda shunaqa bo'lgani uchun qoldirdim:
+  (SELECT SUM(A1."DocTotal")
+   FROM ${this.db}.OINV A1
+   WHERE A1."DocEntry" = T0."DocEntry" AND A1."CANCELED" = 'N') AS "Total",
+
+  (SELECT SUM(A1."PaidToDate")
+   FROM ${this.db}.OINV A1
+   WHERE A1."DocEntry" = T0."DocEntry" AND A1."CANCELED" = 'N') AS "TotalPaid",
+
+  COALESCE(SUM(T2."SumApplied"), 0) AS "SumApplied",
+  MAX(T3."DocDate")  AS "DocDate",
+  MAX(T3."Canceled") AS "Canceled"
+
+FROM ${this.db}.INV6 T1
+INNER JOIN ${this.db}.OINV T0
+  ON T0."DocEntry" = T1."DocEntry"
+
+LEFT JOIN ${this.db}.RCT2 T2
+  ON T2."DocEntry" = T0."DocEntry"
+ AND T2."InstId"    = T1."InstlmntID"
+
+LEFT JOIN ${this.db}.ORCT T3
+  ON T3."DocEntry" = T2."DocNum"
+
+WHERE
+  T0."CANCELED" = 'N'
+  AND T0."CardCode" IN (SELECT "CardCode" FROM bp_codes)
+
+  -- CreditMemo (ORIN/RIN1) bilan yopilgan invoice'larni chiqarib tashlash
+  AND NOT EXISTS (
+    SELECT 1
+    FROM ${this.db}.RIN1 CM1
+    INNER JOIN ${this.db}.ORIN CM0
+      ON CM0."DocEntry" = CM1."DocEntry"
+    WHERE CM1."BaseType"  = 13
+      AND CM1."BaseEntry" = T0."DocEntry"
+  )
+
+GROUP BY
+  T0."DocEntry",
+  T0."CardCode",
+  T1."InstlmntID",
+  T1."DueDate",
+  T1."InsTotal"
+
+ORDER BY
+  T0."DocEntry",
+  T1."InstlmntID"
+  `;
     }
+
+
+    // getInstallmentPayments(cardCode) {
+    //     return `
+    //        SELECT
+    //             T0."DocEntry",
+    //             T0."CardCode",
+    //             T1."DueDate",
+    //             T1."InsTotal",
+    //             T1."InstlmntID",
+    //             (Select SUM(A1."DocTotal") FROM ${this.db}.OINV A1  WHERE  T0."DocEntry" = A1."DocEntry" and  A1."CANCELED" = 'N') as "Total",
+    //             (Select SUM(A1."PaidToDate") FROM ${this.db}.OINV A1  WHERE T0."DocEntry" = A1."DocEntry" and A1."CANCELED" = 'N') as "TotalPaid",
+    //             SUM(T2."SumApplied") as "SumApplied",
+    //             MAX(T3."DocDate") as "DocDate",
+    //             T3."Canceled"
+    //         FROM ${this.db}.INV6 T1
+    //         INNER JOIN ${this.db}.OINV T0 ON T0."DocEntry" = T1."DocEntry"
+    //          LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry"= T0."DocEntry"
+    //             AND T1."InstlmntID" = T2."InstId"
+    //          LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"
+    //         WHERE
+    //             T0."CardCode" = '${cardCode}' and T0."CANCELED" = 'N'
+    //           AND NOT EXISTS (
+    //             SELECT 1
+    //             FROM ${this.db}.RIN1 CM1
+    //                      INNER JOIN ${this.db}.ORIN CM0
+    //                                 ON CM0."DocEntry" = CM1."DocEntry"
+    //             WHERE CM1."BaseType" = 13              -- A/R Invoice
+    //               AND CM1."BaseEntry" = T0."DocEntry"
+    //         )
+    //         GROUP BY
+    //             T1."InstlmntID",
+    //             T0."DocEntry",
+    //             T0."CardCode",
+    //             T1."DueDate",
+    //             T1."InsTotal",
+    //             T3."DocDate",
+    //             T3."Canceled"
+    //         ORDER BY
+    //             T0."DocEntry",
+    //             T1."InstlmntID";
+    //     `;
+    // }
 
     getDistribution({ startDate, endDate, }) {
         let statusCondition = 'AND ((T0."PaidToDate" = 0) OR (T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"))';
