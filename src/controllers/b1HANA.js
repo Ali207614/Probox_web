@@ -642,7 +642,6 @@ class b1HANA {
                         $or: [
                             { isBlocked: { $exists: false } },
                             { isBlocked: null },
-                            { isBlocked: '' },
                         ],
                     });
 
