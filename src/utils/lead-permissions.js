@@ -29,7 +29,8 @@ const permissions = {
         'region',
         'district',
         'address',
-        'comment'
+        'comment',
+        'clientPhone2'
     ],
     Operator2: [
         'called2',
@@ -43,7 +44,8 @@ const permissions = {
         'region',
         'district',
         'address',
-        'comment'
+        'comment',
+        'clientPhone2'
     ],
     Seller: [
         'meetingConfirmed',
@@ -59,7 +61,8 @@ const permissions = {
         'region',
         'district',
         'address',
-        'comment'
+        'comment',
+        'clientPhone2'
     ],
     Scoring: [
         'clientFullName',
@@ -82,7 +85,8 @@ const permissions = {
         'acceptReason',
         "acceptedReason",
         'comment',
-        'status'
+        'status',
+        'clientPhone2'
     ],
 };
 
@@ -93,7 +97,8 @@ permissions.OperatorM = [
     'operator',
     'operator2',
     'status',
-    'isBlocked'
+    'isBlocked',
+
 ];
 
 permissions.CEO = [

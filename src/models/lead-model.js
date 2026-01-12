@@ -21,6 +21,7 @@ const LeadSchema = new Schema(
         avgPaymentDelay: { type: String, description: 'Payment Score' },
         clientName: { type: String, trim: true, description: 'Mijozning to‘liq ismi (Umumiy ozgarmaydi)' },
         clientPhone: { type: String, trim: true, description: 'Mijozning telefon raqami (Umumiy ozgarmaydi)' },
+        clientPhone2: { type: String, trim: true, description: 'Mijozning telefon raqami (Umumiy ozgarmaydi)' },
         cardCode: { type: String, trim: true, description: 'CardCode' },
         cardName: { type: String, trim: true, description: 'CardName' },
         source: { type: String, description: 'Manba (reklama, ijtimoiy tarmoq, va hokazo) (Umumiy ozgarmaydi)' },

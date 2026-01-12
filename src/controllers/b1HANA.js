@@ -553,9 +553,9 @@ class b1HANA {
                 if (/^\d+$/.test(phoneSearch) && phoneSearch.length >= 2) {
                     filter.$or = [
                         { clientPhone: { $regex: phoneSearch, $options: '' } },
+                        { clientPhone2: { $regex: phoneSearch, $options: '' } },
                     ];
                 }
-                // aks holda → text qidirish
                 else {
                     filter.$or = [
                         { clientName: { $regex: safeSearch, $options: 'i' } },
@@ -720,6 +720,7 @@ class b1HANA {
             const data = rawData.map((item) => ({
                 n: item.n,
                 id: item._id,
+                clientPhone2: item.clientPhone2 || null,
                 paymentScore: item.paymentScore || null,
                 totalContracts: item.totalContracts || null,
                 openContracts: item.openContracts || null,
@@ -1391,7 +1392,8 @@ class b1HANA {
             avgPaymentDelay,
             internalScore,
             trustLabel,   // "xavfli" | "xavfsiz"
-            limit
+            limit,
+            monthlyLimit: Math.floor(limit / 12)
         };
     };
 
