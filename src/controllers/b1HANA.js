@@ -631,8 +631,16 @@ class b1HANA {
             parseYesNoUnmarked(mib, 'mib');
             parseYesNoUnmarked(aliment, 'aliment');
             parseYesNoUnmarked(finalLimit, 'finalLimit', true);
-            parseYesNoUnmarked(isBlocked, 'isBlocked');
             parseYesNoUnmarked(meetingHappened, 'meetingHappened');
+
+            if(isBlocked){
+                if(isBlocked === 'yes'){
+                    filter.isBlocked = true;
+                }
+                else if(isBlocked === 'unmarked' || isBlocked === 'no'){
+                    addAndCondition(filter, { isBlocked: null });
+                }
+            }
 
             if (passportId) {
                 if (passportId === 'yes') {
