@@ -638,11 +638,13 @@ class b1HANA {
                     filter.isBlocked = true;
                 }
                 else if(isBlocked === 'unmarked' || isBlocked === 'no'){
-                    addAndCondition(filter, {  $or: [
+                    addAndCondition(filter, {
+                        $or: [
                             { isBlocked: { $exists: false } },
                             { isBlocked: null },
                             { isBlocked: '' },
-                        ], });
+                        ],
+                    });
 
                 }
             }
