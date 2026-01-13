@@ -55,8 +55,6 @@ const permissions = {
     Seller: [
         'meetingConfirmed',
         'meetingConfirmedDate',
-        'purchase',
-        'purchaseDate',
         'saleType',
         'jshshir',
         'passportId',
@@ -69,7 +67,6 @@ const permissions = {
         'comment',
         'clientPhone2',
         'clientPhone',
-
         'address2'
     ],
     Scoring: [
@@ -119,6 +116,8 @@ permissions.CEO = [
     ...permissions.Scoring,
     'isBlocked',
     'status',
+    'purchase',
+    'purchaseDate',
 ];
 
 module.exports = permissions;
