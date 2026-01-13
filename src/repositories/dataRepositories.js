@@ -1116,8 +1116,8 @@ ORDER BY
 
                 -- Sotuv narxi Price List
                 PR."Price" AS "SalePrice",
-
-                -- IMEI bo‘yicha REAL zakup narxi (OSRN.CostTotal)
+                
+                COUNT(*) OVER() AS "TotalCount",
                 R."CostTotal" AS "PurchasePrice"
 
             FROM ${this.db}."OSRN" R

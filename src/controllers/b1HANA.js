@@ -109,10 +109,11 @@ class b1HANA {
 
             const rows = await this.execute(query);
 
-            res.json({
-                total: rows.length,
-                items: rows
-            });
+            const total = rows[0]?.TotalCount ?? 0;
+
+            const items = rows.map(({ TotalCount, ...rest }) => rest);
+
+            res.json({ total, items });
         }
         catch (e) {
             next(e);
