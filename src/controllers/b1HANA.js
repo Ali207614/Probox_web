@@ -1683,6 +1683,8 @@ class b1HANA {
 
             if(validData.purchase){
                 validData.status = 'Purchased'
+            }else if(validData.purchase === false){
+                validData.status = 'Closed'
             }
 
 

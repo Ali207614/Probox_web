@@ -372,7 +372,6 @@ class b1SL {
                 });
             }
 
-            // 2) SAP’da shu leadId bilan invoice bor-yo‘qligini tekshirish
             const sapInvoiceQuery = `
                 SELECT
                     T0."DocEntry",
@@ -386,10 +385,10 @@ class b1SL {
             `;
 
             const existingInvoices = await execute(sapInvoiceQuery);
-            if (existingInvoices?.length > 0) {
+            if (existingInvoices?.length > 2) {
                 return res.status(400).json({
                     status: false,
-                    message: "This lead already has an invoice in SAP",
+                    message: "This lead already has 2 invoices in SAP",
                     DocEntry: existingInvoices[0].DocEntry,
                     DocNum: existingInvoices[0].DocNum,
                 });

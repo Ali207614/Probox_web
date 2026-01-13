@@ -31,6 +31,7 @@ const permissions = {
         'address',
         'comment',
         'clientPhone2',
+        'clientPhone',
         'address2'
     ],
     Operator2: [
@@ -47,6 +48,8 @@ const permissions = {
         'address',
         'comment',
         'clientPhone2',
+        'clientPhone',
+
         'address2'
     ],
     Seller: [
@@ -65,6 +68,8 @@ const permissions = {
         'address',
         'comment',
         'clientPhone2',
+        'clientPhone',
+
         'address2'
     ],
     Scoring: [
@@ -90,6 +95,8 @@ const permissions = {
         'comment',
         'status',
         'clientPhone2',
+        'clientPhone',
+
         'address2'
     ],
 };
