@@ -721,6 +721,7 @@ class b1HANA {
                 n: item.n,
                 id: item._id,
                 clientPhone2: item.clientPhone2 || null,
+                address2: item.address2 || null,
                 paymentScore: item.paymentScore || null,
                 totalContracts: item.totalContracts || null,
                 openContracts: item.openContracts || null,

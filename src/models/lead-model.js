@@ -62,6 +62,7 @@ const LeadSchema = new Schema(
         region: { type: String, description: 'Viloyat (Scoring ozgariradi)' },
         district: { type: String, description: 'Tuman (Scoring ozgariradi)' },
         address: { type: String, description: 'Yashash manzili (Scoring ozgariradi)' },
+        address2: { type: String, description: 'Yashash manzili (Scoring ozgariradi)' },
         branch2: { type: String, description: 'Filial nomi (Seller ozgaradi)' },
         birthDate: { type: Date, description: 'Tug‘ilgan sana (Scoring ozgariradi)' },
         applicationDate: { type: Date, description: 'Ariza topshirilgan sana (Scoring ozgariradi)' },

@@ -169,6 +169,7 @@ class LeadController {
                 id: lead._id,
                 n: lead.n ?? null,
                 status: lead?.status,
+                address2: lead?.address2 || null,
                 clientPhone2: lead?.clientPhone2 || null,
                 paymentScore: lead.paymentScore || null,
                 totalContracts: lead.totalContracts || null,
@@ -178,7 +179,6 @@ class LeadController {
                 overdueDebt: lead.overdueDebt || null,
                 maxDelay: lead.maxDelay || null,
                 avgPaymentDelay: lead.avgPaymentDelay || null,
-
                 cardCode: lead?.cardCode || null,
                 acceptedReason: lead?.acceptedReason || null,
                 invoiceCreated: lead?.invoiceCreated || null,

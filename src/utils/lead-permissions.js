@@ -30,7 +30,8 @@ const permissions = {
         'district',
         'address',
         'comment',
-        'clientPhone2'
+        'clientPhone2',
+        'address2'
     ],
     Operator2: [
         'called2',
@@ -45,7 +46,8 @@ const permissions = {
         'district',
         'address',
         'comment',
-        'clientPhone2'
+        'clientPhone2',
+        'address2'
     ],
     Seller: [
         'meetingConfirmed',
@@ -62,7 +64,8 @@ const permissions = {
         'district',
         'address',
         'comment',
-        'clientPhone2'
+        'clientPhone2',
+        'address2'
     ],
     Scoring: [
         'clientFullName',
@@ -86,7 +89,8 @@ const permissions = {
         "acceptedReason",
         'comment',
         'status',
-        'clientPhone2'
+        'clientPhone2',
+        'address2'
     ],
 };
 
