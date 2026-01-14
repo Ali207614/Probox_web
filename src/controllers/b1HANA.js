@@ -55,7 +55,7 @@ class b1HANA {
 
             const items = await this.execute(dataSql);
 
-            res.json({ total, totalPage:total/limit, items });
+            res.json({ total, totalPage:Math.ceil(total/limit), items });
         } catch (e) {
             next(e);
         }
