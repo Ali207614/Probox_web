@@ -90,7 +90,7 @@ class b1HANA {
                 whsCode,
             } = req.query;
 
-            if (!whsCode || !itemCode) {
+            if (!itemCode) {
                 return next(ApiError.BadRequest('WhsCode/ItemCode is required '));
             }
 

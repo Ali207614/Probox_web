@@ -1114,7 +1114,6 @@ ORDER BY
                 Q."WhsCode",
                 Q."Quantity",
 
-                -- Sotuv narxi Price List
                 PR."Price" AS "SalePrice",
                 
                 COUNT(*) OVER() AS "TotalCount",
@@ -1125,7 +1124,7 @@ ORDER BY
                      JOIN ${this.db}."OSRQ" Q
                           ON Q."ItemCode" = R."ItemCode"
                               AND Q."SysNumber" = R."SysNumber"
-                              AND Q."WhsCode" = '${whsCode}'
+                    ${whsCode ?  'AND Q."WhsCode" ' + `= '${whsCode}'` : ''}
 
                 -- PriceList
                      LEFT JOIN ${this.db}."ITM1" PR
