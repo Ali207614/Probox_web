@@ -1226,7 +1226,7 @@ ORDER BY
       ${isIMEI ? `R."CostTotal" AS "PurchasePrice"` : `NULL AS "PurchasePrice"`}
     ${baseFrom}
     ORDER BY CAST(T0."OnHand" AS INTEGER) DESC,
-     T0."U_Model" DESC
+     T1."U_Model" DESC
     LIMIT ${limit}
     OFFSET ${offset};
   `;
