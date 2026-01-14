@@ -66,6 +66,8 @@ const permissions = {
         'address',
         'comment',
         'clientPhone2',
+        'rejectionReason2',
+        'rejectionReason',
         'clientPhone',
         'address2'
     ],
