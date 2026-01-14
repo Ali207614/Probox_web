@@ -1106,38 +1106,77 @@ ORDER BY
     }
 
     getItemSeries({ itemCode, whsCode, priceList = 1 }) {
+        const whsFilter = whsCode ? `AND Q."WhsCode" = '${whsCode}'` : '';
+
         return `
-            SELECT
-                R."ItemCode",
-                R."DistNumber" AS "IMEI",
-                R."SysNumber",
-                Q."WhsCode",
-                Q."Quantity",
+    WITH serials AS (
+      SELECT
+        R."ItemCode",
+        R."DistNumber" AS "IMEI",
+        R."SysNumber",
+        Q."WhsCode",
+        Q."Quantity"
+      FROM ${this.db}."OSRN" R
+      JOIN ${this.db}."OSRQ" Q
+        ON Q."ItemCode" = R."ItemCode"
+       AND Q."SysNumber" = R."SysNumber"
+       ${whsFilter}
+      WHERE
+        R."ItemCode" = '${itemCode}'
+        AND Q."Quantity" > 0
+    ),
+    ap_last AS (
+      SELECT
+        S."ItemCode",
+        S."SysNumber",
 
-                PR."Price" AS "SalePrice",
-                
-                COUNT(*) OVER() AS "TotalCount",
-                R."CostTotal" AS "PurchasePrice",
-                R."U_battery_capacity" AS "Battery"
-            FROM ${this.db}."OSRN" R
+        P1."Price" AS "PurchasePrice",
+        P1."U_battery_capacity" AS "Battery",
 
-                     JOIN ${this.db}."OSRQ" Q
-                          ON Q."ItemCode" = R."ItemCode"
-                              AND Q."SysNumber" = R."SysNumber"
-                    ${whsCode ?  'AND Q."WhsCode" ' + `= '${whsCode}'` : ''}
+        ROW_NUMBER() OVER (
+          PARTITION BY S."ItemCode", S."SysNumber"
+          ORDER BY H."DocDate" DESC, H."DocEntry" DESC
+        ) AS rn
+      FROM serials S
+      JOIN ${this.db}."SRI1" T
+        ON T."ItemCode" = S."ItemCode"
+       AND T."SysSerial" = S."SysNumber"
+      JOIN ${this.db}."OPCH" H
+        ON H."DocEntry" = T."BaseEntry"
+      JOIN ${this.db}."PCH1" P1
+        ON P1."DocEntry" = T."BaseEntry"
+       AND P1."LineNum"  = T."BaseLinNum"
+      WHERE
+        T."BaseType" = 18  -- A/P Invoice
+    )
+    SELECT
+      S."ItemCode",
+      S."IMEI",
+      S."SysNumber",
+      S."WhsCode",
+      S."Quantity",
 
-                -- PriceList
-                     LEFT JOIN ${this.db}."ITM1" PR
-                               ON PR."ItemCode" = R."ItemCode"
-                                   AND PR."PriceList" = ${priceList}
+      PR."Price" AS "SalePrice",
+      COUNT(*) OVER() AS "TotalCount",
 
-            WHERE
-                R."ItemCode" = '${itemCode}'
-              AND Q."Quantity" > 0
+      A."PurchasePrice",
+      A."Battery"
 
-            ORDER BY R."DistNumber";
-        `;
+    FROM serials S
+
+    LEFT JOIN ap_last A
+      ON A."ItemCode"  = S."ItemCode"
+     AND A."SysNumber" = S."SysNumber"
+     AND A.rn = 1
+
+    LEFT JOIN ${this.db}."ITM1" PR
+      ON PR."ItemCode" = S."ItemCode"
+     AND PR."PriceList" = ${priceList}
+
+    ORDER BY S."IMEI";
+  `;
     }
+
 
     // 352820546993929
     getItems({ search, filters = {}, limit = 50, offset = 0, whsCode }) {
