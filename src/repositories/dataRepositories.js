@@ -1141,14 +1141,7 @@ ORDER BY
     }
 
     // 352820546993929
-
-    getItems({
-                 search,
-                 filters = {},
-                 limit = 50,
-                 offset = 0,
-                 whsCode
-             }) {
+    getItems({ search, filters = {}, limit = 50, offset = 0, whsCode }) {
         let whereClauses = ['1=1', `T0."OnHand" > 0`];
         let imeiJoin = '';
         let imeiWhere = '';
@@ -1156,38 +1149,33 @@ ORDER BY
         const isIMEI = search && /^\d+$/.test(search) && search.length >= 4;
 
         // Warehouse filter
-        if (whsCode) {
-            whereClauses.push(`T0."WhsCode" = '${whsCode}'`);
-        }
+        if (whsCode) whereClauses.push(`T0."WhsCode" = '${whsCode}'`);
 
         if (isIMEI) {
             const whsCondition = whsCode ? `AND Q."WhsCode" = '${whsCode}'` : ``;
 
             imeiJoin = `
-            LEFT JOIN ${this.db}."OSRN" R
-                ON R."ItemCode" = T1."ItemCode"
-
-            LEFT JOIN ${this.db}."OSRQ" Q
-                ON Q."ItemCode" = R."ItemCode"
-               AND Q."SysNumber" = R."SysNumber"
-               ${whsCondition}
-        `;
+      LEFT JOIN ${this.db}."OSRN" R
+        ON R."ItemCode" = T1."ItemCode"
+      LEFT JOIN ${this.db}."OSRQ" Q
+        ON Q."ItemCode" = R."ItemCode"
+       AND Q."SysNumber" = R."SysNumber"
+       ${whsCondition}
+    `;
 
             imeiWhere = `
-            AND R."DistNumber" LIKE '%${search}%'
-            AND Q."Quantity" > 0
-        `;
-        }
-
-        else if (search) {
+      AND R."DistNumber" LIKE '%${search}%'
+      AND Q."Quantity" > 0
+    `;
+        } else if (search) {
             const s = search.toLowerCase();
             whereClauses.push(`
-            (
-                LOWER(T1."ItemCode") LIKE '%${s}%'
-                OR LOWER(T1."ItemName") LIKE '%${s}%'
-                OR LOWER(T1."U_Model") LIKE '%${s}%'
-            )
-        `);
+      (
+        LOWER(T1."ItemCode") LIKE '%${s}%'
+        OR LOWER(T1."ItemName") LIKE '%${s}%'
+        OR LOWER(T1."U_Model") LIKE '%${s}%'
+      )
+    `);
         }
 
         // Filters
@@ -1202,48 +1190,55 @@ ORDER BY
 
         const imeiSelect = isIMEI ? `R."DistNumber" AS "IMEI",` : '';
 
-        return `
-        SELECT
-            ${imeiSelect}
-            T0."ItemCode",
-            T0."WhsCode",
-            CAST(T0."OnHand" AS INTEGER) AS "OnHand",
-            T1."ItemName",
-            T1."U_Color",
-            T1."U_Condition",
-            T1."U_Model",
-            T1."U_DeviceType",
-            T1."U_Memory",
-            T1."U_Sim_type",
-            T1."U_PROD_CONDITION",
-            T2."WhsName",
+        // ✅ total hisoblash uchun DISTINCT nima bo‘lishini tanlang:
+        // - IMEI qidiruvda: bitta serial = bitta row → DistNumber bo‘yicha
+        // - Oddiy listda: bitta item+warehouse = bitta row → ItemCode+WhsCode bo‘yicha
+        const distinctExpr = isIMEI
+            ? `R."DistNumber"`
+            : `T0."ItemCode" || ':' || T0."WhsCode"`; // HANA string concat: ||
 
-            -- Sale Price (Price List)
-            PR."Price" AS "SalePrice",
+        const baseFrom = `
+    FROM ${this.db}."OITW" T0
+      INNER JOIN ${this.db}."OITM" T1 ON T0."ItemCode" = T1."ItemCode"
+      INNER JOIN ${this.db}."OWHS" T2 ON T0."WhsCode" = T2."WhsCode"
+      ${imeiJoin}
+      LEFT JOIN ${this.db}."ITM1" PR
+        ON PR."ItemCode" = T1."ItemCode"
+       AND PR."PriceList" = 1
+    ${whereQuery}
+  `;
 
-            -- IMEI bo'yicha real zakup narxi (OSRN.CostTotal)
-            ${isIMEI ? `R."CostTotal" AS "PurchasePrice"` : `NULL AS "PurchasePrice"`}
+        const dataSql = `
+    SELECT
+      ${imeiSelect}
+      T0."ItemCode",
+      T0."WhsCode",
+      CAST(T0."OnHand" AS INTEGER) AS "OnHand",
+      T1."ItemName",
+      T1."U_Color",
+      T1."U_Condition",
+      T1."U_Model",
+      T1."U_DeviceType",
+      T1."U_Memory",
+      T1."U_Sim_type",
+      T1."U_PROD_CONDITION",
+      T2."WhsName",
+      PR."Price" AS "SalePrice",
+      ${isIMEI ? `R."CostTotal" AS "PurchasePrice"` : `NULL AS "PurchasePrice"`}
+    ${baseFrom}
+    ORDER BY CAST(T0."OnHand" AS INTEGER) DESC
+    LIMIT ${limit}
+    OFFSET ${offset};
+  `;
 
-        FROM ${this.db}."OITW" T0
-            INNER JOIN ${this.db}."OITM" T1
-                ON T0."ItemCode" = T1."ItemCode"
-            INNER JOIN ${this.db}."OWHS" T2
-                ON T0."WhsCode" = T2."WhsCode"
+        const countSql = `
+    SELECT COUNT(DISTINCT ${distinctExpr}) AS "total"
+    ${baseFrom};
+  `;
 
-            ${imeiJoin}
-
-        -- PRICE LIST
-        LEFT JOIN ${this.db}."ITM1" PR
-            ON PR."ItemCode" = T1."ItemCode"
-           AND PR."PriceList" = 1
-
-        ${whereQuery}
-
-        ORDER BY CAST(T0."OnHand" AS INTEGER) DESC
-        LIMIT ${limit}
-        OFFSET ${offset};
-    `;
+        return { dataSql, countSql };
     }
+
 }
 
 module.exports = new DataRepositories(db);

@@ -529,6 +529,8 @@ class b1SL {
                         invoiceDocNum,
                         status:'Purchased',
                         purchase:true,
+                        finalLimit: 0,
+                        finalPercentage: 0,
                         invoiceCreatedAt: new Date(),
                         paymentCreated: paymentBodies.length > 0,
                         paymentCreatedAt: paymentBodies.length > 0 ? new Date() : null,

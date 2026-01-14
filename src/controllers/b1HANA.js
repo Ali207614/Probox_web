@@ -40,31 +40,23 @@ class b1HANA {
 
     getItems = async (req, res, next) => {
         try {
-            const {
-                search,
-                whsCode,
-                limit = 20,
-                offset = 0,
-                ...filters
-            } = req.query;
+            const { search, whsCode, limit = 20, offset = 0, ...filters } = req.query;
 
-            const query = DataRepositories.getItems({
+            const { dataSql, countSql } = DataRepositories.getItems({
                 search,
                 filters,
-                limit,
-                offset,
-                whsCode
+                limit: Number(limit),
+                offset: Number(offset),
+                whsCode,
             });
 
+            const totalRow = await this.execute(countSql);
+            const total = Number(totalRow?.[0]?.total ?? 0);
 
-            const rows = await this.execute(query);
+            const items = await this.execute(dataSql);
 
-            res.json({
-                total: rows.length,
-                items: rows
-            });
-        }
-        catch (e) {
+            res.json({ total, items });
+        } catch (e) {
             next(e);
         }
     };
