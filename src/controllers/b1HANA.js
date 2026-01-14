@@ -1170,7 +1170,6 @@ class b1HANA {
         return 'Xavfsiz';
     }
 
-
     calcLimit(internalScore, trustLabel) {
         const Risk = Number(internalScore) || 0;
         const hard = String(trustLabel || '').toLowerCase() === 'xavfli';
@@ -1210,8 +1209,6 @@ class b1HANA {
 
         return hard ? Math.min(base, 10_000_000) : base;
     }
-
-
 
     calculateLeadPaymentScore = async (cardCode) => {
         const sql = DataRepositories.getInstallmentPaymentsByPerson(cardCode);

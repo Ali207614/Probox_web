@@ -1117,8 +1117,8 @@ ORDER BY
                 PR."Price" AS "SalePrice",
                 
                 COUNT(*) OVER() AS "TotalCount",
-                R."CostTotal" AS "PurchasePrice"
-
+                R."CostTotal" AS "PurchasePrice",
+                R."U_battery_capacity" AS "Battery"
             FROM ${this.db}."OSRN" R
 
                      JOIN ${this.db}."OSRQ" Q
@@ -1225,7 +1225,8 @@ ORDER BY
       PR."Price" AS "SalePrice",
       ${isIMEI ? `R."CostTotal" AS "PurchasePrice"` : `NULL AS "PurchasePrice"`}
     ${baseFrom}
-    ORDER BY CAST(T0."OnHand" AS INTEGER) DESC
+    ORDER BY CAST(T0."OnHand" AS INTEGER) DESC,
+     T0."U_Model" DESC
     LIMIT ${limit}
     OFFSET ${offset};
   `;
