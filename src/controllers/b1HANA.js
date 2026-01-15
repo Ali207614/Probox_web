@@ -1677,7 +1677,7 @@ class b1HANA {
             }
 
             if(validData.finalLimit){
-                validDate.limitDate = new Date();
+                validData.limitDate = new Date();
             }
 
 
