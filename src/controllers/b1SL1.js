@@ -580,7 +580,8 @@ class b1SL {
             const actor = {
                 type: 'user',
                 id: String(req.user?._id || req.user?.id || null),
-                name: String(req.user?.U_userName || req.user?.name || null),
+                cardCode: body.CardCode,
+                name:null,
             };
 
             await LeadLimitUsageModel.create({
