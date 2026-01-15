@@ -24,7 +24,7 @@ const { generateShortId } = require("../utils/createLead");
 const assignBalancedOperator = require("../utils/assignBalancedOperator");
 const LeadChat = require("../models/lead-chat-model");
 
-
+const LeadLimitUsageModel = require('../models/lead-limit-usage');
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
@@ -76,6 +76,27 @@ class b1HANA {
             res.json({
                 score
             });
+            return
+        }
+        catch (e) {
+            next(e);
+        }
+    };
+
+    getLimitUsage = async (req, res, next) => {
+        try {
+
+            const { CardCode } = req.query
+
+            if(!CardCode){
+                return res.status(400).json({
+                    message: 'CardCode is required'
+                });
+            }
+            const limitUsage = await LeadLimitUsageModel.find({"actor.cardCode": CardCode});
+
+
+            res.json(limitUsage);
             return
         }
         catch (e) {

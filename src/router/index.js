@@ -20,6 +20,8 @@ router.post('/login', b1HANA.login);
 router.use('/google-sheet', googleSheetWebhook);
 
 router.get('/executors', authMiddleware, b1HANA.executors)
+router.get('/limit/usage', authMiddleware, b1HANA.getLimitUsage)
+
 
 router.get('/items', authMiddleware, b1HANA.getItems)
 
