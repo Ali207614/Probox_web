@@ -396,6 +396,10 @@ class b1SL {
 
             let body = { ...req.body };
 
+            let total  = body.DocumentLines?.length ? body.DocumentLines.reduce((a,b) => a + +b.Price,0) : 0
+            let firstP = total - body.U_FirstPayment;
+            let lastLimit = (((body.monthlyLimit * 12) > 30000000 ? 30000000 : (body.monthlyLimit * 12)) - firstP) / 12;
+
             const rawPhone = body.clientPhone;
             const normalizedPhone = this.normalizePhone(rawPhone);
 
@@ -520,6 +524,8 @@ class b1SL {
             const invoiceDocEntry = parsed.invoice.DocEntry;
             const invoiceDocNum = parsed.invoice.DocNum;
 
+
+
             await LeadModel.updateOne(
                 { _id: leadId },
                 {
@@ -529,7 +535,7 @@ class b1SL {
                         invoiceDocNum,
                         status:'Purchased',
                         purchase:true,
-                        finalLimit: 0,
+                        finalLimit: lastLimit > 0 ? lastLimit : 0,
                         finalPercentage: 0,
                         invoiceCreatedAt: new Date(),
                         paymentCreated: paymentBodies.length > 0,

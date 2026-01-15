@@ -15,11 +15,11 @@ require('dotenv').config();
         await Branch.deleteMany({});
 
 
-        // === 3️⃣ Yangi filiallarni qo‘shamiz
         const branches = [
             { id: 1, code:'02', name: 'Qoratosh', region: 'Toshkent', address: 'Qoratosh ko‘chasi', phone: '+998901111111' },
             { id: 2, code:'01', name: 'Sag‘bon', region: 'Toshkent', address: 'Sag‘bon ko‘chasi', phone: '+998902222222' },
             { id: 3, code:'04', name: 'Parkent', region: 'Toshkent', address: 'Parkent ko‘chasi', phone: '+998903333333' },
+            { id: 4, code:'03', name: 'Bosh Ofis', region: 'Toshkent', address: 'Parkent ko‘chasi', phone: '+998903333333' },
         ];
 
         const inserted = await Branch.insertMany(branches);
