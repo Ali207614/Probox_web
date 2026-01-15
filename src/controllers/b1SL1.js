@@ -356,7 +356,7 @@ class b1SL {
             if (!req.user?.U_branch) {
                 return res.status(400).json({
                     status: false,
-                    message: "Siz Sotuvchi emassiz",
+                    message: 'Siz Sotuvchi emassiz',
                 });
             }
 
@@ -368,27 +368,34 @@ class b1SL {
             if (!leadId) {
                 return res.status(400).json({
                     status: false,
-                    message: "leadId is required",
+                    message: 'leadId is required',
                 });
             }
 
+            // 1.1) usedType validate
+            const usedTypeRaw = req.body.usedType;
+            const allowedUsedTypes = new Set(['finalLimit', 'percentage', 'internalLimit']);
+            const usedType = allowedUsedTypes.has(usedTypeRaw) ? usedTypeRaw : 'finalLimit';
+            delete req.body.usedType;
+
+            // 2) existing invoices check (max 2)
             const sapInvoiceQuery = `
-                SELECT
-                    T0."DocEntry",
-                    T0."DocNum",
-                    T0."U_leadId",
-                    T0."CANCELED"
-                FROM ${db}."OINV" T0
-                WHERE
-                    T0."CANCELED" = 'N'
-                  AND T0."U_leadId" = '${leadId}'
-            `;
+      SELECT
+        T0."DocEntry",
+        T0."DocNum",
+        T0."U_leadId",
+        T0."CANCELED"
+      FROM ${db}."OINV" T0
+      WHERE
+        T0."CANCELED" = 'N'
+        AND T0."U_leadId" = '${leadId}'
+    `;
 
             const existingInvoices = await execute(sapInvoiceQuery);
             if (existingInvoices?.length > 2) {
                 return res.status(400).json({
                     status: false,
-                    message: "This lead already has 2 invoices in SAP",
+                    message: 'This lead already has 2 invoices in SAP',
                     DocEntry: existingInvoices[0].DocEntry,
                     DocNum: existingInvoices[0].DocNum,
                 });
@@ -396,25 +403,43 @@ class b1SL {
 
             let body = { ...req.body };
 
-            let total  = body.DocumentLines?.length ? body.DocumentLines.reduce((a,b) => a + +b.Price,0) : 0
-            let firstP = total - body.U_FirstPayment;
-            let lastLimit = (((body.monthlyLimit * 12) > 30000000 ? 30000000 : (body.monthlyLimit * 12)) - firstP) / 12;
+            // 3) totals + calculations
+            const lines = Array.isArray(body.DocumentLines) ? body.DocumentLines : [];
+            const total = lines.reduce((sum, l) => {
+                const price = Number(l?.Price || 0);
+                const qty = Number(l?.Quantity || 1);
+                return sum + price * qty;
+            }, 0);
 
+            const firstPayment = Number(body.U_FirstPayment || 0);
+            const financedAmount = Math.max(0, total - firstPayment); // ✅ usedAmount (hamma holatda)
+
+            const maximumLimit = Number(body.maximumLimit || 0);
+            const annualMaxLimit = Math.min(maximumLimit * 12, 30000000); // ✅ snapshot finalLimit (UZS)
+
+            const finalPercentage = total > 0 ? (firstPayment / total) * 100 : 0; // ✅ snapshot percentage
+
+            // only for usedType=finalLimit (lead.finalLimit)
+            const remainingAnnual = annualMaxLimit - financedAmount;
+            const lastLimitMonthly = remainingAnnual / 12;
+            const finalLimitMonthlyRounded = lastLimitMonthly > 0 ? Math.round(lastLimitMonthly) : 0;
+
+            // 4) client phone normalize
             const rawPhone = body.clientPhone;
             const normalizedPhone = this.normalizePhone(rawPhone);
 
             if (!normalizedPhone) {
                 return res.status(400).json({
                     status: false,
-                    message: "Invalid client phone number",
+                    message: 'Invalid client phone number',
                 });
             }
 
+            // 5) BP find/create by docs
             const safeJshshir = body.jshshir ? String(body.jshshir).replace(/\D/g, '') : '1';
             const safePassport = body.passportId ? String(body.passportId).replace(/['"]/g, '').trim() : '1';
 
             const bpRows = await execute(this.findBpByDocUnsafeSql(safeJshshir, safePassport));
-
 
             let cardCode;
             let createdBP = false;
@@ -423,9 +448,9 @@ class b1SL {
                 cardCode = bpRows[0].CardCode;
             } else {
                 const bp = await this.createBusinessPartner({
-                    CardName: body.clientName || "No Name",
+                    CardName: body.clientName || 'No Name',
                     Phone1: normalizedPhone,
-                    Currency: "UZS",
+                    Currency: 'UZS',
                     U_jshshir: body.jshshir,
                     Cellular: body.passportId,
                 });
@@ -433,7 +458,7 @@ class b1SL {
                 if (!bp?.CardCode) {
                     return res.status(400).json({
                         status: false,
-                        message: bp?.message || "Failed to create Business Partner",
+                        message: bp?.message || 'Failed to create Business Partner',
                     });
                 }
 
@@ -443,6 +468,7 @@ class b1SL {
 
             body.CardCode = cardCode;
 
+            // 6) cleanup client fields
             delete body.clientPhone;
             delete body.clientName;
             delete body.jshshir;
@@ -451,14 +477,11 @@ class b1SL {
             delete body.monthlyLimit;
             delete body.sellerName;
 
-
+            // 7) payments prepare
             const paymentsInput = body.payments;
             const docRate = Number(body.DocRate || 11990);
 
-
-            // ✅ payments input (0..3)
             delete body.payments;
-
             delete body.DocRate;
             delete body.CashSum;
             delete body.paymentType;
@@ -470,33 +493,28 @@ class b1SL {
                 payments: paymentsInput,
             });
 
-            delete body.payments;
-            delete body.DocRate;
-            delete body.CashSum;
-            delete body.paymentType;
-
+            // 8) SAP batch build + call
             const { batchId, payload } = this.buildBatchInvoiceAndPayments(body, paymentBodies);
-            console.log(payload)
 
             const axiosInstance = Axios.create({
                 baseURL: `${this.api}`,
                 timeout: 30000,
                 headers: {
-                    "Content-Type": `multipart/mixed;boundary=${batchId}`,
-                    Cookie: get(getSession(), "Cookie[0]", "") + get(getSession(), "Cookie[1]", ""),
-                    SessionId: get(getSession(), "SessionId", ""),
+                    'Content-Type': `multipart/mixed;boundary=${batchId}`,
+                    Cookie: get(getSession(), 'Cookie[0]', '') + get(getSession(), 'Cookie[1]', ''),
+                    SessionId: get(getSession(), 'SessionId', ''),
                 },
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            const response = await axiosInstance.post(`/$batch`, payload);
+            const response = await axiosInstance.post('/$batch', payload);
 
             const parsed = this.parseSapBatchResponseMulti(response.data);
 
             if (!parsed.ok) {
                 return res.status(400).json({
                     status: false,
-                    message: "SAP batch error",
+                    message: 'SAP batch error',
                     errors: parsed.errors,
                     raw: response.data,
                 });
@@ -505,7 +523,7 @@ class b1SL {
             if (!parsed.invoice?.DocEntry) {
                 return res.status(400).json({
                     status: false,
-                    message: `Invoice was not created in SAP`,
+                    message: 'Invoice was not created in SAP',
                     raw: response.data,
                 });
             }
@@ -513,7 +531,7 @@ class b1SL {
             if (paymentBodies.length > 0 && parsed.payments.length !== paymentBodies.length) {
                 return res.status(400).json({
                     status: false,
-                    message: "Some Incoming Payments were not created in SAP",
+                    message: 'Some Incoming Payments were not created in SAP',
                     expected: paymentBodies.length,
                     created: parsed.payments.length,
                     errors: parsed.errors,
@@ -524,7 +542,9 @@ class b1SL {
             const invoiceDocEntry = parsed.invoice.DocEntry;
             const invoiceDocNum = parsed.invoice.DocNum;
 
-
+            // 9) lead fields depending on usedType
+            const leadFinalLimit = usedType === 'finalLimit' ? finalLimitMonthlyRounded : 0;
+            const leadFinalPercentage = 0; // ✅ siz aytganday, hammasida 0
 
             await LeadModel.updateOne(
                 { _id: leadId },
@@ -533,10 +553,12 @@ class b1SL {
                         invoiceCreated: true,
                         invoiceDocEntry,
                         invoiceDocNum,
-                        status:'Purchased',
-                        purchase:true,
-                        finalLimit: lastLimit > 0 ? lastLimit : 0,
-                        finalPercentage: 0,
+                        status: 'Purchased',
+                        purchase: true,
+
+                        finalLimit: leadFinalLimit,
+                        finalPercentage: leadFinalPercentage,
+
                         invoiceCreatedAt: new Date(),
                         paymentCreated: paymentBodies.length > 0,
                         paymentCreatedAt: paymentBodies.length > 0 ? new Date() : null,
@@ -546,29 +568,61 @@ class b1SL {
                 }
             );
 
+            // 10) usage log (ONE record)
+            const actor = {
+                type: 'user',
+                id: String(req.user?._id || req.user?.id || null),
+                name: String(req.user?.U_userName || req.user?.name || null),
+            };
+
+            await LeadLimitUsageModel.create({
+                leadId,
+                usedType,                 // ✅ finalLimit | percentage | internalLimit
+                usedAmount: financedAmount, // ✅ doim (total - firstPayment)
+
+                snapshot: {
+                    finalLimit: annualMaxLimit, // ✅ doim maxLimit*12 cap
+                    internalLimit: body.internalLimit != null ? Number(body.internalLimit) : null,
+                    percentage: Number(finalPercentage.toFixed(2)),
+                    currency: 'UZS',
+                },
+
+                actor,
+                reason: 'invoice_created',
+            });
+
             return res.status(201).json({
                 status: true,
                 invoiceDocEntry,
                 invoiceDocNum,
                 paymentsCreated: parsed.payments.length,
+                usedType,
+                usedAmount: financedAmount,
+                snapshot: {
+                    finalLimit: annualMaxLimit,
+                    internalLimit: body.internalLimit != null ? Number(body.internalLimit) : null,
+                    percentage: Number(finalPercentage.toFixed(2)),
+                    currency: 'UZS',
+                },
                 raw: response.data,
             });
         } catch (err) {
-            console.log("Batch SAP Error:", err?.response?.data || err);
+            console.log('Batch SAP Error:', err?.response?.data || err);
 
-            if (get(err, "response.status") == 401) {
+            if (get(err, 'response.status') == 401) {
                 const token = await this.auth();
                 if (token.status) return this.createInvoiceAndPayment(req, res, next);
                 return res.status(401).json({ status: false, message: token.message });
             }
 
-            const sapErr = get(err, "response.data.error.message.value", "SAP error");
+            const sapErr = get(err, 'response.data.error.message.value', 'SAP error');
             return res.status(400).json({
                 status: false,
                 message: sapErr,
             });
         }
     };
+
 
     findOrCreateBusinessPartner = async (phone, cardName) => {
         if (!phone) return null;
