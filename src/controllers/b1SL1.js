@@ -2,6 +2,7 @@ const Axios = require("axios");
 const https = require("https");
 const { get } = require("lodash");
 const LeadModel = require('../models/lead-model');
+const LeadLimitUsageModel = require('../models/lead-limit-usage');
 const moment = require('moment');
 const { getSession, saveSession } = require("../helpers");
 const { api_params, api, db} = require("../config");
@@ -375,6 +376,13 @@ class b1SL {
             // 1.1) usedType validate
             const usedTypeRaw = req.body.usedType;
             const allowedUsedTypes = new Set(['finalLimit', 'percentage', 'internalLimit']);
+
+            if(!allowedUsedTypes.has(usedTypeRaw)){
+                return res.status(400).json({
+                    status: false,
+                    message: 'Invalid usedType',
+                });
+            }
             const usedType = allowedUsedTypes.has(usedTypeRaw) ? usedTypeRaw : 'finalLimit';
             delete req.body.usedType;
 
@@ -402,7 +410,7 @@ class b1SL {
             }
 
             let body = { ...req.body };
-
+            console.log(body)
             // 3) totals + calculations
             const lines = Array.isArray(body.DocumentLines) ? body.DocumentLines : [];
             const total = lines.reduce((sum, l) => {
@@ -417,7 +425,7 @@ class b1SL {
             const maximumLimit = Number(body.maximumLimit || 0);
             const annualMaxLimit = Math.min(maximumLimit * 12, 30000000); // ✅ snapshot finalLimit (UZS)
 
-            const finalPercentage = total > 0 ? (firstPayment / total) * 100 : 0; // ✅ snapshot percentage
+            const finalPercentage = total > 0 ? body.finalPercentage: 0; // ✅ snapshot percentage
 
             // only for usedType=finalLimit (lead.finalLimit)
             const remainingAnnual = annualMaxLimit - financedAmount;
@@ -492,7 +500,6 @@ class b1SL {
                 docRate,
                 payments: paymentsInput,
             });
-
             // 8) SAP batch build + call
             const { batchId, payload } = this.buildBatchInvoiceAndPayments(body, paymentBodies);
 
@@ -507,43 +514,45 @@ class b1SL {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            const response = await axiosInstance.post('/$batch', payload);
+            //const response = await axiosInstance.post('/$batch', payload);
+            const response ={data:""}
 
             const parsed = this.parseSapBatchResponseMulti(response.data);
 
-            if (!parsed.ok) {
-                return res.status(400).json({
-                    status: false,
-                    message: 'SAP batch error',
-                    errors: parsed.errors,
-                    raw: response.data,
-                });
-            }
+            // if (!parsed.ok) {
+            //     return res.status(400).json({
+            //         status: false,
+            //         message: 'SAP batch error',
+            //         errors: parsed.errors,
+            //         raw: response.data,
+            //     });
+            // }
+            //
+            // if (!parsed.invoice?.DocEntry) {
+            //     return res.status(400).json({
+            //         status: false,
+            //         message: 'Invoice was not created in SAP',
+            //         raw: response.data,
+            //     });
+            // }
+            //
+            // if (paymentBodies.length > 0 && parsed.payments.length !== paymentBodies.length) {
+            //     return res.status(400).json({
+            //         status: false,
+            //         message: 'Some Incoming Payments were not created in SAP',
+            //         expected: paymentBodies.length,
+            //         created: parsed.payments.length,
+            //         errors: parsed.errors,
+            //         raw: response.data,
+            //     });
+            // }
 
-            if (!parsed.invoice?.DocEntry) {
-                return res.status(400).json({
-                    status: false,
-                    message: 'Invoice was not created in SAP',
-                    raw: response.data,
-                });
-            }
-
-            if (paymentBodies.length > 0 && parsed.payments.length !== paymentBodies.length) {
-                return res.status(400).json({
-                    status: false,
-                    message: 'Some Incoming Payments were not created in SAP',
-                    expected: paymentBodies.length,
-                    created: parsed.payments.length,
-                    errors: parsed.errors,
-                    raw: response.data,
-                });
-            }
-
-            const invoiceDocEntry = parsed.invoice.DocEntry;
-            const invoiceDocNum = parsed.invoice.DocNum;
+            const invoiceDocEntry = parsed?.invoice?.DocEntry || 0;
+            const invoiceDocNum = parsed?.invoice?.DocNum || 0;
 
             // 9) lead fields depending on usedType
             const leadFinalLimit = usedType === 'finalLimit' ? finalLimitMonthlyRounded : 0;
+            console.log(leadFinalLimit)
             const leadFinalPercentage = 0; // ✅ siz aytganday, hammasida 0
 
             await LeadModel.updateOne(

@@ -15,7 +15,8 @@ const leadImageRoute = require('../src/router/leadImageRoute');
 const path = require('path');
 const app = express();
 const server = http.createServer(app);
-require("./utils/cronInvoice");
+const { startExpireLeadLimitsCron } = require('./utils/expire-lead-limits');
+
 // === SOCKET.IO ===
 const io = new Server(server, {
     cors: {
@@ -61,6 +62,10 @@ io.on('connection', (socket) => {
     console.log('🟣 Client connected:', socket.id);
     socket.on('disconnect', () => console.log('🔴 Client disconnected:', socket.id));
 });
+
+//require("./utils/cronInvoice");
+
+startExpireLeadLimitsCron();
 
 // === SERVER ===
 const port = PORT || 3019;

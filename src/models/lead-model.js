@@ -80,6 +80,10 @@ const LeadSchema = new Schema(
         officialSalary: { type: Number, description: 'Rasmiy oylik daromad (Scoring ozgariradi)' },
         finalLimit: { type: Number, description: 'Yakuniy tasdiqlangan limit (Scoring ozgariradi)' },
         finalPercentage: { type: Number, description: 'Yakuniy foiz stavkasi (Scoring ozgariradi)' },
+        limitDate: {
+            type: Date,
+            default: null,
+        },
         status: {
             type: String,
             description: "Status",

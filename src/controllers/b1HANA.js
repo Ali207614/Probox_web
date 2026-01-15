@@ -1676,6 +1676,11 @@ class b1HANA {
                 validData.status = 'Closed'
             }
 
+            if(validData.finalLimit){
+                validDate.limitDate = new Date();
+            }
+
+
 
             const updated = await LeadModel.findByIdAndUpdate(id, validData, {
                 new: true,

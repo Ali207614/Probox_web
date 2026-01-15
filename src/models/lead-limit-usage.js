@@ -1,6 +1,5 @@
-import mongoose from 'mongoose';
+const { Schema, model } = require('mongoose');
 
-const { Schema } = mongoose;
 
 const LeadLimitUsageSchema = new Schema(
     {
@@ -32,4 +31,4 @@ const LeadLimitUsageSchema = new Schema(
     { timestamps: true }
 );
 
-module.exports = mongoose.model('LeadLimitUsage', LeadLimitUsageSchema);
+module.exports = model('LeadLimitUsage', LeadLimitUsageSchema);
