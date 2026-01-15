@@ -514,38 +514,37 @@ class b1SL {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            //const response = await axiosInstance.post('/$batch', payload);
-            const response ={data:""}
+            const response = await axiosInstance.post('/$batch', payload);
 
             const parsed = this.parseSapBatchResponseMulti(response.data);
 
-            // if (!parsed.ok) {
-            //     return res.status(400).json({
-            //         status: false,
-            //         message: 'SAP batch error',
-            //         errors: parsed.errors,
-            //         raw: response.data,
-            //     });
-            // }
-            //
-            // if (!parsed.invoice?.DocEntry) {
-            //     return res.status(400).json({
-            //         status: false,
-            //         message: 'Invoice was not created in SAP',
-            //         raw: response.data,
-            //     });
-            // }
-            //
-            // if (paymentBodies.length > 0 && parsed.payments.length !== paymentBodies.length) {
-            //     return res.status(400).json({
-            //         status: false,
-            //         message: 'Some Incoming Payments were not created in SAP',
-            //         expected: paymentBodies.length,
-            //         created: parsed.payments.length,
-            //         errors: parsed.errors,
-            //         raw: response.data,
-            //     });
-            // }
+            if (!parsed.ok) {
+                return res.status(400).json({
+                    status: false,
+                    message: 'SAP batch error',
+                    errors: parsed.errors,
+                    raw: response.data,
+                });
+            }
+
+            if (!parsed.invoice?.DocEntry) {
+                return res.status(400).json({
+                    status: false,
+                    message: 'Invoice was not created in SAP',
+                    raw: response.data,
+                });
+            }
+
+            if (paymentBodies.length > 0 && parsed.payments.length !== paymentBodies.length) {
+                return res.status(400).json({
+                    status: false,
+                    message: 'Some Incoming Payments were not created in SAP',
+                    expected: paymentBodies.length,
+                    created: parsed.payments.length,
+                    errors: parsed.errors,
+                    raw: response.data,
+                });
+            }
 
             const invoiceDocEntry = parsed?.invoice?.DocEntry || 0;
             const invoiceDocNum = parsed?.invoice?.DocNum || 0;
