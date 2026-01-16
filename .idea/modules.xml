@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/Probox_web.iml" filepath="$PROJECT_DIR$/.idea/Probox_web.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/probox-web.iml" filepath="$PROJECT_DIR$/.idea/probox-web.iml" />
     </modules>
   </component>
 </project>

@@ -1507,6 +1507,13 @@ class b1HANA {
             }
 
 
+            if(validData.meetingConfirmed){
+                validData.meetingHappened = true
+            }
+
+            if((validData.rejectionReason2 || validData.rejectionReason) && req.user?.U_role === 'Seller'){
+                validData.meetingHappened = true
+            }
 
             // === Normalize fields
             if (validData?.clientFullName) {
@@ -1633,8 +1640,6 @@ class b1HANA {
                     }
                 }
             }
-
-
 
             if (
                 validData.jshshir ||
