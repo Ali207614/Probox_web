@@ -354,7 +354,9 @@ class b1SL {
     createInvoiceAndPayment = async (req, res, next) => {
         try {
             // 0) seller check
+            console.log('Keldi')
             if (!req.user?.U_branch) {
+                console.log('Siz Sotuvchi emassiz')
                 return res.status(400).json({
                     status: false,
                     message: 'Siz Sotuvchi emassiz',
@@ -367,6 +369,7 @@ class b1SL {
             delete req.body.selectedDevices;
 
             if (!leadId) {
+                console.log('leadId bo`lgan emassiz')
                 return res.status(400).json({
                     status: false,
                     message: 'leadId is required',
@@ -378,6 +381,7 @@ class b1SL {
             const allowedUsedTypes = new Set(['finalLimit', 'percentage', 'internalLimit']);
 
             if(!allowedUsedTypes.has(usedTypeRaw)){
+                console.log('Invalid usedType')
                 return res.status(400).json({
                     status: false,
                     message: 'Invalid usedType',
@@ -401,6 +405,7 @@ class b1SL {
 
             const existingInvoices = await execute(sapInvoiceQuery);
             if (existingInvoices?.length > 2) {
+                console.log('This lead already has 2 invoices in SAP')
                 return res.status(400).json({
                     status: false,
                     message: 'This lead already has 2 invoices in SAP',
@@ -410,7 +415,6 @@ class b1SL {
             }
 
             let body = { ...req.body };
-            console.log(body)
             // 3) totals + calculations
             const lines = Array.isArray(body.DocumentLines) ? body.DocumentLines : [];
             const total = lines.reduce((sum, l) => {
@@ -437,6 +441,7 @@ class b1SL {
             const normalizedPhone = this.normalizePhone(rawPhone);
 
             if (!normalizedPhone) {
+                console.log('Invalid client phone number')
                 return res.status(400).json({
                     status: false,
                     message: 'Invalid client phone number',
@@ -464,6 +469,7 @@ class b1SL {
                 });
 
                 if (!bp?.CardCode) {
+                    console.log('Failed to create Business Partner', bp?.message)
                     return res.status(400).json({
                         status: false,
                         message: bp?.message || 'Failed to create Business Partner',
@@ -514,37 +520,40 @@ class b1SL {
                 httpsAgent: new https.Agent({ rejectUnauthorized: false }),
             });
 
-            const response = await axiosInstance.post('/$batch', payload);
+            //const response = await axiosInstance.post('/$batch', payload);
+            const response = {data:'OK'};
 
-            const parsed = this.parseSapBatchResponseMulti(response.data);
+            // const parsed = this.parseSapBatchResponseMulti(response.data);
 
-            if (!parsed.ok) {
-                return res.status(400).json({
-                    status: false,
-                    message: 'SAP batch error',
-                    errors: parsed.errors,
-                    raw: response.data,
-                });
-            }
-
-            if (!parsed.invoice?.DocEntry) {
-                return res.status(400).json({
-                    status: false,
-                    message: 'Invoice was not created in SAP',
-                    raw: response.data,
-                });
-            }
-
-            if (paymentBodies.length > 0 && parsed.payments.length !== paymentBodies.length) {
-                return res.status(400).json({
-                    status: false,
-                    message: 'Some Incoming Payments were not created in SAP',
-                    expected: paymentBodies.length,
-                    created: parsed.payments.length,
-                    errors: parsed.errors,
-                    raw: response.data,
-                });
-            }
+            // if (!parsed.ok) {
+            //     console.log('SAP batch error', parsed.errors)
+            //     return res.status(400).json({
+            //         status: false,
+            //         message: 'SAP batch error',
+            //         errors: parsed.errors,
+            //         raw: response.data,
+            //     });
+            // }
+            //
+            // if (!parsed.invoice?.DocEntry) {
+            //     console.log('Invoice was not created in SAP')
+            //     return res.status(400).json({
+            //         status: false,
+            //         message: 'Invoice was not created in SAP',
+            //         raw: response.data,
+            //     });
+            // }
+            //
+            // if (paymentBodies.length > 0 && parsed.payments.length !== paymentBodies.length) {
+            //     return res.status(400).json({
+            //         status: false,
+            //         message: 'Some Incoming Payments were not created in SAP',
+            //         expected: paymentBodies.length,
+            //         created: parsed.payments.length,
+            //         errors: parsed.errors,
+            //         raw: response.data,
+            //     });
+            // }
 
             const invoiceDocEntry = parsed?.invoice?.DocEntry || 0;
             const invoiceDocNum = parsed?.invoice?.DocNum || 0;
@@ -587,7 +596,7 @@ class b1SL {
                 leadId,
                 usedType,                 // ✅ finalLimit | percentage | internalLimit
                 usedAmount: financedAmount, // ✅ doim (total - firstPayment)
-                month:body?.NumberOfInstallments || 1,
+                month:body?.`NumberOfInstallments` || 1,
                 firstPayment:firstPayment,
                 snapshot: {
                     finalLimit: annualMaxLimit, // ✅ doim maxLimit*12 cap
@@ -604,16 +613,16 @@ class b1SL {
                 status: true,
                 invoiceDocEntry,
                 invoiceDocNum,
-                paymentsCreated: parsed.payments.length,
-                usedType,
-                usedAmount: financedAmount,
-                snapshot: {
-                    finalLimit: annualMaxLimit,
-                    internalLimit: body.internalLimit != null ? Number(body.internalLimit) : null,
-                    percentage: Number(finalPercentage.toFixed(2)),
-                    currency: 'UZS',
-                },
-                raw: response.data,
+                // paymentsCreated: parsed.payments.length,
+                // usedType,
+                // usedAmount: financedAmount,
+                // snapshot: {
+                //     finalLimit: annualMaxLimit,
+                //     internalLimit: body.internalLimit != null ? Number(body.internalLimit) : null,
+                //     percentage: Number(finalPercentage.toFixed(2)),
+                //     currency: 'UZS',
+                // },
+                // raw: response.data,
             });
         } catch (err) {
             console.log('Batch SAP Error:', err?.response?.data || err);
@@ -631,7 +640,6 @@ class b1SL {
             });
         }
     };
-
 
     findOrCreateBusinessPartner = async (phone, cardName) => {
         if (!phone) return null;
