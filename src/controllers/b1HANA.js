@@ -1160,7 +1160,6 @@ class b1HANA {
             paidScore +
             openScore;
 
-        // Excel baseFinal:
         // IF(AND(C2=0;D2=0);30; IF(F2>=3; MIN(30;Score); IF(F2=2; MIN(50;Score); Score)))
         let baseFinal;
         if (C === 0 && D === 0) baseFinal = 30;
@@ -1168,7 +1167,6 @@ class b1HANA {
         else if (F === 2) baseFinal = Math.min(50, rawScore);
         else baseFinal = rawScore;
 
-        // Excel penalty:
         // paid>=0.9 ->0; >=0.8 ->5; >=0.7 ->10; >=0.6 ->15; else 20
         let penalty = 20;
         if (paid >= 0.9) penalty = 0;

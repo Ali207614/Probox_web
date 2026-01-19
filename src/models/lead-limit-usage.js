@@ -10,6 +10,8 @@ const LeadLimitUsageSchema = new Schema(
             enum: ['finalLimit', 'internalLimit', 'percentage'],
             index: true,
         },
+        month: { type: String },
+        firstPayment: { type: String },
 
         snapshot: {
             finalLimit: { type: Number, default: null },

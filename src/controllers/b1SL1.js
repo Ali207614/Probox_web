@@ -38,21 +38,21 @@ class b1SL {
     };
 
     findBpByPhoneSql = (phone) => `
-    SELECT
-        T0."CardCode",
-        T0."CardName",
-        T0."Currency",
-        T0."Phone1",
-        T0."Phone2"
-    FROM ${db}.OCRD T0
-    WHERE
-        AND T0."Currency" = 'UZS'
-        AND (
-            REPLACE(REPLACE(REPLACE(T0."Phone1", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
-            OR
-            REPLACE(REPLACE(REPLACE(T0."Phone2", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
-        )
-    LIMIT 1
+        SELECT
+            T0."CardCode",
+            T0."CardName",
+            T0."Currency",
+            T0."Phone1",
+            T0."Phone2"
+        FROM ${db}.OCRD T0
+        WHERE
+            AND T0."Currency" = 'UZS'
+            AND (
+                REPLACE(REPLACE(REPLACE(T0."Phone1", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
+                OR
+                REPLACE(REPLACE(REPLACE(T0."Phone2", '+', ''), ' ', ''), '-', '') LIKE '%${phone}%'
+            )
+        LIMIT 1
 `;
 
     findBpByDocUnsafeSql = (jshshir, passportId) => `
@@ -551,7 +551,6 @@ class b1SL {
 
             // 9) lead fields depending on usedType
             const leadFinalLimit = usedType === 'finalLimit' ? finalLimitMonthlyRounded : 0;
-            console.log(leadFinalLimit)
             const leadFinalPercentage = 0; // ✅ siz aytganday, hammasida 0
 
             await LeadModel.updateOne(
@@ -588,7 +587,8 @@ class b1SL {
                 leadId,
                 usedType,                 // ✅ finalLimit | percentage | internalLimit
                 usedAmount: financedAmount, // ✅ doim (total - firstPayment)
-
+                month:body?.NumberOfInstallments || 1,
+                firstPayment:firstPayment,
                 snapshot: {
                     finalLimit: annualMaxLimit, // ✅ doim maxLimit*12 cap
                     internalLimit: body.internalLimit != null ? Number(body.internalLimit) : null,
