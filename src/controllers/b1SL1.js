@@ -596,7 +596,7 @@ class b1SL {
                 leadId,
                 usedType,                 // ✅ finalLimit | percentage | internalLimit
                 usedAmount: financedAmount, // ✅ doim (total - firstPayment)
-                month:body?.`NumberOfInstallments` || 1,
+                month:body?.NumberOfInstallments || 1,
                 firstPayment:firstPayment,
                 snapshot: {
                     finalLimit: annualMaxLimit, // ✅ doim maxLimit*12 cap
