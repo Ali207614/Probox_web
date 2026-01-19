@@ -413,7 +413,6 @@ class b1SL {
             }
 
             let body = { ...req.body };
-            console.log(body)
             // 3) totals + calculations
             const lines = Array.isArray(body.DocumentLines) ? body.DocumentLines : [];
             const total = lines.reduce((sum, l) => {
@@ -565,7 +564,7 @@ class b1SL {
                         invoiceDocNum,
                         status: 'Purchased',
                         purchase: true,
-
+                        cardCode: body.CardCode,
                         finalLimit: leadFinalLimit,
                         finalPercentage: leadFinalPercentage,
 
