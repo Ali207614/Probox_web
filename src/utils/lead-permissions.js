@@ -32,7 +32,8 @@ const permissions = {
         'comment',
         'clientPhone2',
         'clientPhone',
-        'address2'
+        'address2',
+        'seen'
     ],
     Operator2: [
         'called2',
@@ -49,7 +50,7 @@ const permissions = {
         'comment',
         'clientPhone2',
         'clientPhone',
-
+        'seen',
         'address2'
     ],
     Seller: [
@@ -108,6 +109,7 @@ permissions.OperatorM = [
     'operator2',
     'status',
     'isBlocked',
+    'seen'
 
 ];
 
