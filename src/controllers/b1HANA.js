@@ -1483,7 +1483,7 @@ class b1HANA {
                 return res.status(404).json({ message: 'Lead not found' });
             }
 
-            if((existingLead.purchase === true || existingLead.status === 'Purchased') && body.status ==='Returned'){
+            if((existingLead.purchase === true || existingLead.status === 'Purchased') && body.status){
                 return res.status(400).json({ message: "Mijoz allaqachon mahsulot sotib olgan shu sababli status o'zgarmaydi" });
             }
 
