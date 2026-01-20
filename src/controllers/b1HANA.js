@@ -1483,6 +1483,10 @@ class b1HANA {
                 return res.status(404).json({ message: 'Lead not found' });
             }
 
+            if((existingLead.purchase === true || existingLead.status === 'Purchased') && body.status ==='Returned'){
+                return res.status(400).json({ message: "Mijoz allaqachon mahsulot sotib olgan shu sababli status o'zgarmaydi" });
+            }
+
             if (!permissions[U_role]) {
                 return res.status(403).json({
                     message: `Role ${U_role} is not allowed to update leads`,
