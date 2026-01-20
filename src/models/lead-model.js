@@ -59,8 +59,13 @@ const LeadSchema = new Schema(
         clientFullName: { type: String, description: 'Client F.I.O (Scoring)' },
         source2: {type: String, description:"Manba (reklama, ijtimoiy tarmoq, va hokazo) (Scoring ozgariradi)"},
         seller: { type: String, description: 'Seller (Scoring ozgariradi)' },
+
         region: { type: String, description: 'Viloyat (Scoring ozgariradi)' },
         district: { type: String, description: 'Tuman (Scoring ozgariradi)' },
+        neighborhood: { type: String, trim: true, description: 'MFY (Mahalla fuqarolar yigini)' },
+        street: { type: String, trim: true, description: 'Ko‘cha' },
+        house: { type: String, trim: true, description: 'Uy raqami' },
+
         address: { type: String, description: 'Yashash manzili (Scoring ozgariradi)' },
         address2: { type: String, description: 'Yashash manzili (Scoring ozgariradi)' },
         branch2: { type: String, description: 'Filial nomi (Seller ozgaradi)' },

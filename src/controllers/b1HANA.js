@@ -798,6 +798,7 @@ class b1HANA {
             const data = rawData.map((item) => ({
                 n: item.n,
                 id: item._id,
+                seen:item?.seen,
                 clientPhone2: item.clientPhone2 || null,
                 address2: item.address2 || null,
                 paymentScore: item.paymentScore || null,

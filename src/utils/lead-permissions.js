@@ -32,6 +32,9 @@ const permissions = {
         'comment',
         'clientPhone2',
         'clientPhone',
+        'neighborhood',
+        'street',
+        'house',
         'address2',
         'seen'
     ],
@@ -50,6 +53,9 @@ const permissions = {
         'comment',
         'clientPhone2',
         'clientPhone',
+        'neighborhood',
+        'street',
+        'house',
         'seen',
         'address2'
     ],
@@ -70,6 +76,9 @@ const permissions = {
         'rejectionReason2',
         'rejectionReason',
         'clientPhone',
+        'neighborhood',
+        'street',
+        'house',
         'address2'
     ],
     Scoring: [
@@ -96,7 +105,9 @@ const permissions = {
         'status',
         'clientPhone2',
         'clientPhone',
-
+        'neighborhood',
+        'street',
+        'house',
         'address2'
     ],
 };
