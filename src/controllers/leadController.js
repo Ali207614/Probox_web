@@ -170,6 +170,7 @@ class LeadController {
                 n: lead.n ?? null,
                 status: lead?.status,
                 address2: lead?.address2 || null,
+                seen: lead?.seen || null,
                 clientPhone2: lead?.clientPhone2 || null,
                 paymentScore: lead.paymentScore || null,
                 totalContracts: lead.totalContracts || null,
