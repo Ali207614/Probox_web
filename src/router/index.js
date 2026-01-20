@@ -17,6 +17,11 @@ const invoiceRouter = require("./invoice")
 
 router.post('/login', b1HANA.login);
 
+router.post(
+    '/webhooks/onlinepbx',
+    b1HANA.onlinePbxWebhook
+);
+
 router.use('/google-sheet', googleSheetWebhook);
 
 router.get('/executors', authMiddleware, b1HANA.executors)

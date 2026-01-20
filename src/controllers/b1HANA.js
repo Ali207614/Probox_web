@@ -30,6 +30,50 @@ require('dotenv').config();
 
 
 class b1HANA {
+
+     normalizeOnlinePbxPayload = (body) => {
+        const out = {};
+        for (const [k, v] of Object.entries(body || {})) {
+            if (v === 'no value' || v === '' || v == null) out[k] = null;
+            else out[k] = v;
+        }
+
+        // date: unix seconds -> ISO
+        if (out.date) {
+            const n = Number(out.date);
+            if (!Number.isNaN(n)) out.date_iso = new Date(n * 1000).toISOString();
+        }
+
+        // uuid oxirida xato belgilar kelib qolsa (sizda oxirida "v" kelib qolgan)
+        if (typeof out.uuid === 'string') {
+            out.uuid = out.uuid.trim();
+            // UUID formatdan tashqaridagi oxirgi belgilarni kesib tashlash (eng sodda)
+            const m = out.uuid.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+            if (m) out.uuid = m[0];
+        }
+
+        return out;
+    };
+
+    onlinePbxWebhook = async (req, res, next) => {
+        try {
+            const payload = this.normalizeOnlinePbxPayload(req.body);
+
+            console.log('--- ONLINEPBX ---');
+            console.log('event:', payload.event);
+            console.log('uuid:', payload.uuid);
+            console.log('caller:', payload.caller);
+            console.log('callee:', payload.callee);
+            console.log('direction:', payload.direction);
+            console.log('date:', payload.date_iso || payload.date);
+            console.log('full:', payload);
+
+            return res.status(200).json({ ok: true });
+        } catch (e) {
+            next(e);
+        }
+    };
+
     execute = async (sql) => {
         try {
             return dbService.execute(sql);
@@ -722,14 +766,34 @@ class b1HANA {
             addRangeFilter('finalPercentage', finalPercentageMin, finalPercentageMax);
 
             const total = await LeadModel.countDocuments(filter);
-            const rawData = await LeadModel.find(filter)
-                .select(
-                    '_id paymentScore totalContracts openContracts totalAmount totalPaid overdueDebt maxDelay avgPaymentDelay callCount callCount2 acceptedReason meetingHappened cardCode invoiceCreated invoiceDocEntry invoiceDocNum invoiceCreatedAt isBlocked status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
-                )
-                .sort({ time: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean();
+            // const rawData = await LeadModel.find(filter)
+            //     .select(
+            //         '_id paymentScore totalContracts openContracts totalAmount totalPaid overdueDebt maxDelay avgPaymentDelay callCount callCount2 acceptedReason meetingHappened cardCode invoiceCreated invoiceDocEntry invoiceDocNum invoiceCreatedAt isBlocked status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
+            //     )
+            //     .sort({ time: -1 })
+            //     .skip(skip)
+            //     .limit(limit)
+            //     .lean();
+
+            const rawData = await LeadModel.aggregate([
+                { $match: filter },
+
+                // Returned bo'lsa sort uchun 0, bo'lmasa 1
+                {
+                    $addFields: {
+                        _statusOrder: { $cond: [{ $eq: ['$status', 'Returned'] }, 0, 1] },
+                    },
+                },
+
+                // 1) Returned birinchi, 2) time yangi -> eski
+                { $sort: { _statusOrder: 1, time: -1 } },
+
+                { $skip: skip },
+                { $limit: limit },
+
+                // _statusOrder clientga chiqmasin
+                { $project: { _statusOrder: 0 } },
+            ]);
 
             const data = rawData.map((item) => ({
                 n: item.n,
@@ -1495,6 +1559,10 @@ class b1HANA {
 
             if(validData.rejectionReason2){
                 validData.status = 'Closed';
+            }
+
+            if(validData.status === 'Returned'){
+                validData.seen = false
             }
 
             if (
