@@ -56,19 +56,17 @@ class b1SL {
 `;
 
     findBpByDocUnsafeSql = (jshshir, passportId) => `
-  SELECT T0."CardCode", T0."CardName"
-  FROM ${db}.OCRD T0
-  WHERE
-    T0."Currency" = 'UZS'
-    AND (
-      (${jshshir ? `T0."U_jshshir" = '${jshshir}'` : '1=0'})
-      OR
-      (${passportId ? `T0."Cellular" = '${passportId}'` : '1=0'})
-    )
-  LIMIT 1
+              SELECT T0."CardCode", T0."CardName"
+              FROM ${db}.OCRD T0
+              WHERE
+                T0."Currency" = 'UZS'
+                AND (
+                  (${jshshir ? `T0."U_jshshir" = '${jshshir}'` : '1=0'})
+                  OR
+                  (${passportId ? `T0."Cellular" = '${passportId}'` : '1=0'})
+                )
+              LIMIT 1
 `;
-
-
 
     auth = async () => {
         let obj = api_params

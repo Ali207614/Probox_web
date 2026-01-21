@@ -2,7 +2,6 @@ const moment = require("moment-timezone");
 const Lead = require("../models/lead-model");
 
 class AnalyticsController {
-
     getLeadsAnalytics = async (req, res, next) => {
         try {
             const { start, end } = req.query;

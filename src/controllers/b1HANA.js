@@ -30,7 +30,6 @@ require('dotenv').config();
 
 
 class b1HANA {
-
      normalizeOnlinePbxPayload = (body) => {
         const out = {};
         for (const [k, v] of Object.entries(body || {})) {
@@ -1291,7 +1290,7 @@ class b1HANA {
         else if (Risk >= 40) base = 1_000_000;
         else base = 0;
 
-        return hard ? Math.min(base, 10_000_000) : base;
+        return hard ? Math.min(base, 5_000_000) : base;
     }
 
     calculateLeadPaymentScore = async (cardCode) => {
@@ -1472,6 +1471,83 @@ class b1HANA {
         };
     };
 
+     buildActor = (req , lead) => {
+        const u = req.user || {};
+        return {
+            type: u.U_role, // sizda qanday role bo‘lsa moslang
+            id: u._id ? String(u._id) : (u.id ? String(u.id) : null),
+            cardCode: lead.cardCode,
+            name:lead.cardName,
+        };
+    };
+
+     toNumberOrNull = (v) => {
+        if (v === undefined || v === null || v === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+    };
+
+      writeLimitUsageHistory = async ({ leadId, existingLead, validData, req }) => {
+        const docs = [];
+
+        const newFinalLimit = validData.finalLimit !== undefined ? this.toNumberOrNull(validData.finalLimit) : undefined;
+        const newInternalLimit = validData.internalLimit !== undefined ? this.toNumberOrNull(validData.internalLimit) : undefined;
+        const newPercentage = validData.finalPercentage !== undefined ? this.toNumberOrNull(validData.finalPercentage) : undefined;
+
+        const oldFinalLimit = this.toNumberOrNull(existingLead.finalLimit);
+        const oldInternalLimit = this.toNumberOrNull(existingLead.internalLimit);
+        const oldPercentage = this.toNumberOrNull(existingLead.finalPercentage);
+
+        const actor = this.buildActor(req,existingLead);
+
+        const snapshot = {
+            finalLimit: newFinalLimit !== undefined ? newFinalLimit : oldFinalLimit,
+            internalLimit: newInternalLimit !== undefined ? newInternalLimit : oldInternalLimit,
+            percentage: newPercentage !== undefined ? newPercentage : oldPercentage,
+            currency: existingLead.currency || 'UZS',
+        };
+
+        if (newFinalLimit !== undefined && newFinalLimit !== oldFinalLimit) {
+            docs.push({
+                leadId,
+                usedType: 'finalLimit',
+                usedAmount: Math.abs((newFinalLimit ?? 0) - (oldFinalLimit ?? 0)),
+                snapshot,
+                actor,
+                reason: 'manual',
+            });
+        }
+
+        // internalLimit changed?
+        if (newInternalLimit !== undefined && newInternalLimit !== oldInternalLimit) {
+            docs.push({
+                leadId,
+                usedType: 'internalLimit',
+                usedAmount: Math.abs((newInternalLimit ?? 0) - (oldInternalLimit ?? 0)),
+                snapshot,
+                actor,
+                reason: 'manual',
+            });
+        }
+
+        // percentage changed?
+        if (newPercentage !== undefined && newPercentage !== oldPercentage) {
+            docs.push({
+                leadId,
+                usedType: 'percentage',
+                usedAmount: Math.abs((newPercentage ?? 0) - (oldPercentage ?? 0)),
+                snapshot,
+                actor,
+                reason: 'manual',
+            });
+        }
+
+        if (docs.length) {
+            await LeadLimitUsageModel.insertMany(docs);
+        }
+    }
+
+
     updateLead = async (req, res, next) => {
         try {
             const { id } = req.params;
@@ -1492,7 +1568,6 @@ class b1HANA {
                     message: `Role ${U_role} is not allowed to update leads`,
                 });
             }
-
 
             const allowedFields = permissions[U_role];
             const { validData, errors } = validateFields(
@@ -1532,7 +1607,7 @@ class b1HANA {
             }
 
 
-            if( validData.callCount2 &&  existingLead.callCount2  !== validData.callCount2) {
+            if(validData.callCount2 &&  existingLead.callCount2  !== validData.callCount2) {
                 const prev = existingLead.callCount2 || 0;
 
                 if (validData.callCount2 - prev !== 1) {
@@ -1777,7 +1852,12 @@ class b1HANA {
                 validData.limitDate = new Date();
             }
 
-
+            await this.writeLimitUsageHistory({
+                leadId: existingLead._id,
+                existingLead,
+                validData,
+                req,
+            });
 
             const updated = await LeadModel.findByIdAndUpdate(id, validData, {
                 new: true,

@@ -23,7 +23,7 @@ const LeadLimitUsageSchema = new Schema(
         usedAmount: { type: Number, required: true, min: 0 },
 
         actor: {
-            type: { type: String, enum: ['user', 'admin', 'system'], default: 'system' },
+            type: { type: String,default: null },
             id: { type: String, default: null }, // userId/adminId (string)
             cardCode: { type: String, default: null }, // userId/adminId (string)
             name: { type: String, default: null },
