@@ -147,7 +147,7 @@ class b1HANA {
             }
 
             const limitUsage = await LeadLimitUsageModel.find(filter).sort({ createdAt: -1 });
-            return res.json({ items: limitUsage });
+            return res.json(limitUsage);
 
         }
         catch (e) {
