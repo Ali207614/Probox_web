@@ -352,7 +352,6 @@ class b1SL {
     createInvoiceAndPayment = async (req, res, next) => {
         try {
             // 0) seller check
-            console.log('Keldi')
             if (!req.user?.U_branch) {
                 console.log('Siz Sotuvchi emassiz')
                 return res.status(400).json({
@@ -581,6 +580,8 @@ class b1SL {
                 id: String(req.user?._id || req.user?.id || null),
                 cardCode: body.CardCode,
                 name:null,
+                jshshir: body.jshshir,
+                passportId: body.passportId,
             };
 
             await LeadLimitUsageModel.create({

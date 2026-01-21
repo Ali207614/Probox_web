@@ -128,19 +128,27 @@ class b1HANA {
 
     getLimitUsage = async (req, res, next) => {
         try {
+            const { CardCode, jshshir, passportId } = req.query;
 
-            const { CardCode } = req.query
+            let filter = null;
 
-            if(!CardCode){
+            if (CardCode) {
+                filter = { "actor.cardCode": CardCode };
+            } else if (jshshir) {
+                filter = { "actor.jshshir": jshshir };
+            } else if (passportId) {
+                filter = { "actor.passportId": passportId };
+            }
+
+            if (!filter) {
                 return res.status(400).json({
-                    message: 'CardCode is required'
+                    message: "CardCode yoki jshshir yoki passportId kerak",
                 });
             }
-            const limitUsage = await LeadLimitUsageModel.find({"actor.cardCode": CardCode});
 
+            const limitUsage = await LeadLimitUsageModel.find(filter).sort({ createdAt: -1 });
+            return res.json({ items: limitUsage });
 
-            res.json(limitUsage);
-            return
         }
         catch (e) {
             next(e);
@@ -1478,6 +1486,8 @@ class b1HANA {
             id: u._id ? String(u._id) : (u.id ? String(u.id) : null),
             cardCode: lead.cardCode,
             name:lead.cardName,
+            jshshir: lead.jshshir,
+            passportId: lead.passportId,
         };
     };
 

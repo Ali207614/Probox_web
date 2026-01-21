@@ -27,6 +27,8 @@ const LeadLimitUsageSchema = new Schema(
             id: { type: String, default: null }, // userId/adminId (string)
             cardCode: { type: String, default: null }, // userId/adminId (string)
             name: { type: String, default: null },
+            jshshir: { type: String, default: null },
+            passportId: { type: String, default: null },
         },
 
         reason: { type: String, default: null }, // ixtiyoriy: manual/scoring/rule
