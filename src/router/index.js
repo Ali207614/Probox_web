@@ -25,6 +25,11 @@ router.post(
 router.use('/google-sheet', googleSheetWebhook);
 
 router.get('/executors', authMiddleware, b1HANA.executors)
+
+router.get('/purchases', authMiddleware, b1HANA.getPurchases)
+
+router.get('/purchases/:source/:docEntry', authMiddleware, b1HANA.getPurchaseDetail)
+
 router.get('/limit/usage', authMiddleware, b1HANA.getLimitUsage)
 
 

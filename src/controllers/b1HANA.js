@@ -30,7 +30,76 @@ require('dotenv').config();
 
 
 class b1HANA {
-     normalizeOnlinePbxPayload = (body) => {
+
+    getPurchaseDetail = async (req, res, next) => {
+        try {
+            const { source, docEntry } = req.params;
+
+            if (source !== 'doc' && source !== 'draft') {
+                return res.status(400).json({ message: 'source must be doc or draft' });
+            }
+            if (!docEntry) {
+                return res.status(400).json({ message: 'docEntry is required' });
+            }
+
+            const { headerSql, dataSql } = DataRepositories.getPurchaseDetail({
+                source,
+                docEntry,
+            });
+
+            const headerRows = await this.execute(headerSql);
+            const header = headerRows?.[0];
+
+            if (!header) {
+                return res.status(404).json({ message: 'Document not found' });
+            }
+
+            const items = await this.execute(dataSql);
+
+            res.json({ header, items });
+        } catch (e) {
+            next(e);
+        }
+    };
+
+
+    getPurchases = async (req, res, next) => {
+        try {
+            const {
+                search,
+                status,      // approved | draft | waiting
+                dateFrom,    // 'YYYY-MM-DD'
+                dateTo,      // 'YYYY-MM-DD'
+                limit = 20,
+                offset = 0,
+            } = req.query;
+
+            const { dataSql, countSql } = DataRepositories.getPurchases({
+                search,
+                status,
+                dateFrom,
+                dateTo,
+                limit: Number(limit),
+                offset: Number(offset),
+            });
+
+            const totalRow = await this.execute(countSql);
+            const total = Number(totalRow?.[0]?.total ?? 0);
+
+            const items = await this.execute(dataSql);
+
+            res.json({
+                total,
+                totalPage: Math.ceil(total / Number(limit)),
+                items,
+            });
+        } catch (e) {
+            next(e);
+        }
+    };
+
+
+    normalizeOnlinePbxPayload = (body) => {
         const out = {};
         for (const [k, v] of Object.entries(body || {})) {
             if (v === 'no value' || v === '' || v == null) out[k] = null;
@@ -53,6 +122,8 @@ class b1HANA {
 
         return out;
     };
+
+
 
     onlinePbxWebhook = async (req, res, next) => {
         try {
@@ -1066,34 +1137,6 @@ class b1HANA {
         return 0;
     }
 
-    mergeInstallments(rows) {
-        const map = {};
-
-        for (const r of rows) {
-            const key = `${r.DocEntry}_${r.InstlmntID}`;
-
-            if (!map[key]) {
-                map[key] = {
-                    DocEntry: r.DocEntry,
-                    InstlmntID: r.InstlmntID,
-                    DueDate: r.DueDate,
-                    InsTotal: Number(r.InsTotal),
-                    TotalPaid: 0,
-                    PaidDate: null
-                };
-            }
-
-            map[key].TotalPaid += Number(r.SumApplied || 0);
-
-            const paymentDate = r.DocDate ?  new Date(r.DocDate) : new Date();
-            if (!map[key].PaidDate || paymentDate > map[key].PaidDate) {
-                map[key].PaidDate = paymentDate;
-            }
-        }
-
-        return Object.values(map);
-    }
-
     calculateTotalScore = (installments) => {
         let total = 0;
         let count = 0;
@@ -1497,7 +1540,7 @@ class b1HANA {
         return Number.isFinite(n) ? n : null;
     };
 
-      writeLimitUsageHistory = async ({ leadId, existingLead, validData, req }) => {
+     writeLimitUsageHistory = async ({ leadId, existingLead, validData, req }) => {
         const docs = [];
 
         const newFinalLimit = validData.finalLimit !== undefined ? this.toNumberOrNull(validData.finalLimit) : undefined;
@@ -1556,7 +1599,6 @@ class b1HANA {
             await LeadLimitUsageModel.insertMany(docs);
         }
     }
-
 
     updateLead = async (req, res, next) => {
         try {
@@ -1811,7 +1853,6 @@ class b1HANA {
                     const phone = phoneRaw.replace(/\D/g, '');
                     const query = DataRepositories.getBusinessPartners({ jshshir, passport, phone: `%${phone}` })
                     const sapResult = await this.execute(query);
-                    console.log(sapResult ,' bu spaResult')
                     if (sapResult.length > 0) {
                         const record = sapResult[0];
 

@@ -16,6 +16,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const { startExpireLeadLimitsCron } = require('./utils/expire-lead-limits');
+//require('./utils/cronBusinessPartners');
 
 // === SOCKET.IO ===
 const io = new Server(server, {
@@ -29,8 +30,6 @@ const io = new Server(server, {
 global.io = io;
 
 // === MIDDLEWARES ===
-
-
 
 app.use(cors({
     origin: '*',
@@ -66,7 +65,6 @@ io.on('connection', (socket) => {
 //require("./utils/cronInvoice");
 
 startExpireLeadLimitsCron();
-
 // === SERVER ===
 const port = PORT || 3019;
 server.listen(port, () => {
@@ -85,7 +83,6 @@ server.listen(port, () => {
             } else {
                 console.log('🟢 Hanaga ulanish muvaffaqiyatli amalga oshirildi');
                 global.connection = connection;
-
                 if (process.env.LEAD === 'true') {
                     await main(io);
                 }
