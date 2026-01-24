@@ -16,6 +16,18 @@ class b1SL {
         this.api = api;
     }
 
+    getAxiosSL() {
+        return Axios.create({
+            baseURL: `${this.api}`,
+            timeout: 30000,
+            headers: {
+                Cookie: get(getSession(), 'Cookie[0]', '') + get(getSession(), 'Cookie[1]', ''),
+                SessionId: get(getSession(), 'SessionId', ''),
+            },
+            httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+        });
+    }
+
     normalizePhone = (phone = '') => {
         let p = String(phone).trim();
 
@@ -691,6 +703,120 @@ class b1SL {
             created: true,
         };
     }
+
+
+    createPurchaseDraft = async (req, res, next) => {
+        try {
+            const { cardCode, docDate, whsCode, comments, rows } = req.body;
+
+            if (!cardCode) return res.status(400).json({ message: 'cardCode is required' });
+            if (!Array.isArray(rows) || rows.length === 0) {
+                return res.status(400).json({ message: 'rows must be non-empty array' });
+            }
+
+            const draftBody = {
+                DocObjectCode: 'oPurchaseInvoices',
+                CardCode: String(cardCode),
+                DocDate: docDate,
+                DocDueDate: docDate,
+                Comments: comments || null,
+                DocumentLines: rows.map((r, idx) => {
+                    if (!r.itemCode) throw new Error(`rows[${idx}].itemCode is required`);
+                    if (!r.imei) throw new Error(`rows[${idx}].imei is required`);
+
+                    return {
+                        ItemCode: String(r.itemCode),
+                        Quantity: 1,
+                        UnitPrice: Number(r.price || 0),
+                        WarehouseCode: r.whsCode || whsCode || null,
+
+                        // ✅ line UDF lar
+                        U_battery_capacity: r.batteryCapacity ?? null,
+                        U_condition: r.prodCondition ?? null,
+
+                        // ✅ 1 line = 1 serial
+                        SerialNumbers: [
+                            {
+                                InternalSerialNumber: String(r.imei) ,
+                                "ManufacturerSerialNumber": String(r.imei)
+                            }
+                        ],
+                    };
+                }),
+            };
+
+            console.log("Draft body:", draftBody);
+
+            const axios = this.getAxiosSL();
+            const { data } = await axios.post(`/Drafts`, draftBody);
+
+            return res.status(201).json({
+                status: true,
+                draftDocEntry: data?.DocEntry,
+                draftDocNum: data?.DocNum,
+            });
+        } catch (err) {
+            if (get(err, 'response.status') == 401) {
+                const token = await this.auth();
+                if (token.status) return this.createPurchaseDraft(req, res, next);
+                return res.status(401).json({ status: false, message: token.message });
+            }
+
+            console.log("Draft create error:", err?.response?.data || err);
+
+            return res.status(400).json({
+                status: false,
+                message: get(err, 'response.data.error.message.value', err.message || 'Error'),
+            });
+        }
+    };
+
+    patchDraftLine = async (req, res, next) => {
+        try {
+            const { docEntry, lineNum } = req.params;
+            const { itemCode, price, batteryCapacity, prodCondition, imei } = req.body;
+
+            if (!docEntry) return res.status(400).json({ message: 'docEntry is required' });
+            if (lineNum == null) return res.status(400).json({ message: 'lineNum is required' });
+            if (!itemCode) return res.status(400).json({ message: 'itemCode is required' });
+
+            const linePatch = {
+                LineNum: Number(lineNum),
+                ItemCode: String(itemCode),
+                ...(price != null ? { UnitPrice: Number(price) } : {}),
+                ...(batteryCapacity != null ? { U_battery_capacity: Number(batteryCapacity) } : {}),
+                ...(prodCondition != null ? { U_PROD_CONDITION: prodCondition } : {}),
+                ...(imei ? { SerialNumbers: [{ InternalSerialNumber: String(imei) }] } : {}),
+            };
+
+            const axios = this.getAxiosSL();
+            const { data } = await axios.patch(`/Drafts(${docEntry})`, {
+                DocumentLines: [linePatch],
+            });
+
+            return res.json({
+                status: true,
+                docEntry: Number(docEntry),
+                lineNum: Number(lineNum),
+                sap: data,
+            });
+        } catch (err) {
+            if (get(err, 'response.status') == 401) {
+                const token = await this.auth();
+                if (token.status) return this.patchDraftLine(req, res, next);
+                return res.status(401).json({ status: false, message: token.message });
+            }
+
+            const sapMsg = get(err, 'response.data.error.message.value');
+            return res.status(400).json({
+                status: false,
+                message: sapMsg || err.message || 'Error',
+                raw: get(err, 'response.data'),
+            });
+        }
+    };
+
+
 }
 
 module.exports = new b1SL();

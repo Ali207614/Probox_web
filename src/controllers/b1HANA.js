@@ -31,6 +31,10 @@ require('dotenv').config();
 
 class b1HANA {
 
+
+
+
+
     getPurchaseDetail = async (req, res, next) => {
         try {
             const { source, docEntry } = req.params;
@@ -62,12 +66,11 @@ class b1HANA {
         }
     };
 
-
     getPurchases = async (req, res, next) => {
         try {
             const {
                 search,
-                status,      // approved | draft | waiting
+                status,      // approved | draft | pending | rejected
                 dateFrom,    // 'YYYY-MM-DD'
                 dateTo,      // 'YYYY-MM-DD'
                 limit = 20,
@@ -98,7 +101,6 @@ class b1HANA {
         }
     };
 
-
     normalizeOnlinePbxPayload = (body) => {
         const out = {};
         for (const [k, v] of Object.entries(body || {})) {
@@ -122,8 +124,6 @@ class b1HANA {
 
         return out;
     };
-
-
 
     onlinePbxWebhook = async (req, res, next) => {
         try {
@@ -1886,6 +1886,9 @@ class b1HANA {
 
                         console.log(`SAP match found → ${record.CardCode} | ${record.CardName}`);
                     } else {
+
+                        validData.cardCode = null;
+                        validData.cardName = null;
                         console.log(`SAP: No record found for ${jshshir || passport || phone}`);
                     }
                 } catch (sapErr) {

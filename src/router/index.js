@@ -30,6 +30,10 @@ router.get('/purchases', authMiddleware, b1HANA.getPurchases)
 
 router.get('/purchases/:source/:docEntry', authMiddleware, b1HANA.getPurchaseDetail)
 
+router.post('/purchases/drafts', authMiddleware, b1SL1.createPurchaseDraft)
+
+router.post('/purchases/drafts/:docEntry/lines/:lineNum', authMiddleware, b1SL1.patchDraftLine)
+
 router.get('/limit/usage', authMiddleware, b1HANA.getLimitUsage)
 
 

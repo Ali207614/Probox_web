@@ -1662,27 +1662,27 @@ ORDER BY "limit" DESC
         // ✅ Sizning mapping:
         // approve  -> OPCH
         // pending  -> ODRF (CANCELED='N')
-        // reject   -> ODRF (CANCELED='Y')
+        // rejected   -> ODRF (CANCELED='Y')
         const statusCond_OPCH =
             status === 'approve'
                 ? ''
                 : (status ? `AND 1=0` : '');
 
-        // pending/reject filter ODRF tarafida qilinadi
+        // pending/rejected filter ODRF tarafida qilinadi
         const statusCond_ODRF =
             !status
                 ? '' // hammasi
                 : status === 'pending'
                     ? `AND D."CANCELED" = 'N'`
-                    : status === 'reject'
+                    : status === 'rejected'
                         ? `AND D."CANCELED" = 'Y'`
                         : `AND 1=0`;
 
 
 
         const hideConvertedDraftCond =
-            status === 'reject'
-                ? '' // reject listda ko‘rinsin
+            status === 'rejected'
+                ? '' // rejected listda ko‘rinsin
                 : `
         AND NOT EXISTS (
           SELECT 1
@@ -1718,7 +1718,7 @@ ORDER BY "limit" DESC
     SELECT
       'draft' AS "source",
       CASE
-        WHEN D."CANCELED" = 'Y' THEN 'reject'
+        WHEN D."CANCELED" = 'Y' THEN 'rejected'
         ELSE 'pending'
       END AS "status",
       D."DocEntry" AS "docEntry",
@@ -1760,76 +1760,80 @@ ORDER BY "limit" DESC
 
         const headerTable = isDoc ? `${this.db}.OPCH` : `${this.db}.ODRF`;
         const linesTable  = isDoc ? `${this.db}.PCH1` : `${this.db}.DRF1`;
-        const baseType    = isDoc ? 18 : 112;
 
         const headerSql = `
-            SELECT
-                '${isDoc ? 'doc' : 'draft'}' AS "source",
-                ${isDoc ? `'approve'` : `CASE WHEN T0."CANCELED"='Y' THEN 'reject' ELSE 'pending' END`} AS "status",
-                T0."DocEntry" AS "docEntry",
-                T0."DocNum" AS "docNum",
-                T0."DocDate" AS "docDate",
-                T0."DocDueDate" AS "docDueDate",
-                T0."CardCode" AS "cardCode",
-                T0."CardName" AS "cardName",
-                T0."DocCur" AS "docCur",
-                T0."DocRate" AS "docRate",
-                T0."DocTotal" AS "docTotal",
-                T0."Comments" AS "comments"
-            FROM ${headerTable} T0
-            WHERE
-                ${isDoc ? `T0."CANCELED"='N'` : `T0."ObjType"=18`}
-              AND T0."DocEntry"='${docEntry}'
-        `;
+    SELECT
+      '${isDoc ? 'doc' : 'draft'}' AS "source",
+      ${isDoc ? `'approve'` : `CASE WHEN T0."CANCELED"='Y' THEN 'rejected' ELSE 'pending' END`} AS "status",
+      T0."DocEntry" AS "docEntry",
+      T0."DocNum" AS "docNum",
+      T0."DocDate" AS "docDate",
+      T0."DocDueDate" AS "docDueDate",
+      T0."CardCode" AS "cardCode",
+      T0."CardName" AS "cardName",
+      T0."DocCur" AS "docCur",
+      T0."DocRate" AS "docRate",
+      T0."DocTotal" AS "docTotal",
+      T0."Comments" AS "comments"
+    FROM ${headerTable} T0
+    WHERE
+      ${isDoc ? `T0."CANCELED"='N'` : `T0."ObjType"=18`}
+      AND T0."DocEntry"='${docEntry}'
+  `;
 
-        const dataSql = `
-            SELECT
-                L."DocEntry" AS "docEntry",
-                L."LineNum"  AS "lineNum",
-                L."ItemCode" AS "itemCode",
-                L."Dscription" AS "dscription",
-                L."WhsCode"  AS "whsCode",
-
-                L."Price"    AS "price",
-                L."LineTotal" AS "lineTotal",
-                L."Quantity" AS "lineQuantity",
-
-                CASE
-                    WHEN I."ManSerNum" = 'Y' AND S."IntrSerial" IS NOT NULL THEN 1
-                    ELSE L."Quantity"
-                    END AS "rowQuantity",
-
-                I."ManSerNum" AS "isSerialManaged",
-                I."U_PROD_CONDITION" as "prodCondition",
-                S."IntrSerial" AS "serial",
-
-                -- ✅ Battery faqat LINE’dan
-                L."U_battery_capacity" AS "batteryCapacity"
-
-            FROM ${linesTable} L
-                     JOIN ${this.db}.OITM I
-                          ON I."ItemCode" = L."ItemCode"
-
-                     LEFT JOIN ${this.db}.SRI1 R
-                               ON R."BaseType"   = ${baseType}
-                                   AND R."BaseEntry"  = L."DocEntry"
-                                   AND R."BaseLinNum" = L."LineNum"
-                                   AND R."ItemCode"   = L."ItemCode"
-
-                     LEFT JOIN ${this.db}.OSRI S
-                               ON S."SysSerial" = R."SysSerial"
-                                   AND S."ItemCode"  = R."ItemCode"
-
-            WHERE
-                L."DocEntry"='${docEntry}'
-
-            ORDER BY
-                L."LineNum" ASC,
-                S."IntrSerial" ASC
-        `;
+        const dataSql = isDoc ? `
+    SELECT
+      L."DocEntry" AS "docEntry",
+      L."LineNum"  AS "lineNum",
+      L."ItemCode" AS "itemCode",
+      L."Dscription" AS "dscription",
+      L."WhsCode"  AS "whsCode",
+      L."Price"    AS "price",
+      L."LineTotal" AS "lineTotal",
+      L."Quantity" AS "lineQuantity",
+      I."ManSerNum" AS "isSerialManaged",
+      S."IntrSerial" AS "serial",
+      L."U_battery_capacity" AS "batteryCapacity",
+      COALESCE(L."U_PROD_CONDITION", I."U_PROD_CONDITION") AS "prodCondition"
+    FROM ${linesTable} L
+    JOIN ${this.db}.OITM I ON I."ItemCode" = L."ItemCode"
+    LEFT JOIN ${this.db}.SRI1 R
+      ON R."BaseType"   = 18
+     AND R."BaseEntry"  = L."DocEntry"
+     AND R."BaseLinNum" = L."LineNum"
+     AND R."ItemCode"   = L."ItemCode"
+    LEFT JOIN ${this.db}.OSRI S
+      ON S."SysSerial" = R."SysSerial"
+     AND S."ItemCode"  = R."ItemCode"
+    WHERE L."DocEntry"='${docEntry}'
+    ORDER BY L."LineNum" ASC, S."IntrSerial" ASC
+  ` : `
+    SELECT
+      L."DocEntry" AS "docEntry",
+      L."LineNum"  AS "lineNum",
+      L."ItemCode" AS "itemCode",
+      L."Dscription" AS "dscription",
+      L."WhsCode"  AS "whsCode",
+      L."Price"    AS "price",
+      L."LineTotal" AS "lineTotal",
+      L."Quantity" AS "lineQuantity",
+      I."ManSerNum" AS "isSerialManaged",
+      DS."IntrSerial" AS "serial",
+      L."U_battery_capacity" AS "batteryCapacity",
+      COALESCE(L."U_PROD_CONDITION", I."U_PROD_CONDITION") AS "prodCondition"
+    FROM ${linesTable} L
+    JOIN ${this.db}.OITM I ON I."ItemCode" = L."ItemCode"
+    LEFT JOIN ${this.db}.ODSR DS
+      ON DS."BaseEntry"  = L."DocEntry"
+     AND DS."BaseLinNum" = L."LineNum"
+     AND DS."ItemCode"   = L."ItemCode"
+    WHERE L."DocEntry"='${docEntry}'
+    ORDER BY L."LineNum" ASC, DS."IntrSerial" ASC
+  `;
 
         return { headerSql, dataSql };
     }
+
 
 
 
