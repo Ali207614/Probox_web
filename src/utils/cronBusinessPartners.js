@@ -84,6 +84,8 @@ cron.schedule(
                                 clientName: r.CardName ?? null,
                                 clientPhone: String( r.Phone1 || '').trim() || null,
                                 clientPhone2: String(r.Phone2 || '').trim() || null,
+                                address: '',
+                                address2: '',
                                 finalLimit:null,
                                 finalPercentage:null,
                                 jshshir: String(r.jshshir || '').trim() || null,
