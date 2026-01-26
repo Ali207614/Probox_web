@@ -1344,6 +1344,7 @@ inv_base AS (
   FROM ${this.db}."OINV" I
   WHERE I."CANCELED" = 'N'
     AND I."DocDate" >= DATE'2024-01-01'
+    AND I."PaidToDate" >= I."DocTotal" - 5
     -- CreditMemo bilan yopilgan invoice'larni chiqarib tashlash
     AND NOT EXISTS (
       SELECT 1
