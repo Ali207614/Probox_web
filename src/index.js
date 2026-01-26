@@ -16,7 +16,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const { startExpireLeadLimitsCron } = require('./utils/expire-lead-limits');
-//require('./utils/cronBusinessPartners');
+require('./utils/cronBusinessPartners');
 
 // === SOCKET.IO ===
 const io = new Server(server, {
