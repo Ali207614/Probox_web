@@ -12,6 +12,8 @@ cron.schedule(
     async () => {
         try {
             console.log('[CRON] High limit lead job started');
+            const res = await Lead.deleteMany({ source: 'Qayta sotuv' });
+            console.log('Deleted:', res.deletedCount);
 
             // 1) Kandidatlar (SAP/HANA)
             const sql = DataRepositories.getAllHighLimitCandidatesByCardCode();
@@ -77,20 +79,19 @@ cron.schedule(
                             $setOnInsert: {
                                 uniqueId,
                                 source: SOURCE_NAME,
-
                                 cardCode,
                                 cardName: r.CardName ?? null,
-
                                 clientName: r.CardName ?? null,
-
-                                clientPhone: String(r.Cellular || r.Phone1 || '').trim() || null,
+                                clientPhone: String( r.Phone1 || '').trim() || null,
                                 clientPhone2: String(r.Phone2 || '').trim() || null,
                                 finalLimit:null,
                                 finalPercentage:null,
                                 jshshir: String(r.jshshir || '').trim() || null,
-
                                 limit: Number(r.limit) || 0,
+
                                 paymentScore: String(r.score ?? ''),
+
+                                passportId: r.Cellular || null,
 
                                 totalContracts: String(r.totalContracts ?? ''),
                                 openContracts: String(r.openContracts ?? ''),
