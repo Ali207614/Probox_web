@@ -4,7 +4,7 @@ const Lead = require('../models/lead-model');
 const dbService = require('../services/dbService');
 const DataRepositories = require('../repositories/dataRepositories');
 
-const BATCH_SIZE = 20;          // har run 20 ta
+const BATCH_SIZE = 10;          // har run 20 ta
 const SOURCE_NAME = 'Qayta sotuv';
 
 cron.schedule(
