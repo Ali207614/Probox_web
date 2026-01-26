@@ -719,18 +719,16 @@ class b1SL {
                 Comments: comments || null,
                 DocumentLines: rows.map((r, idx) => {
                     if (!r.itemCode) throw new Error(`rows[${idx}].itemCode is required`);
-                    if (!r.imei) throw new Error(`rows[${idx}].imei is required`);
 
                     return {
                         ItemCode: String(r.itemCode),
                         Quantity: 1,
                         UnitPrice: Number(r.price || 0),
                         WarehouseCode: r.whsCode || whsCode || null,
-
-                        // ✅ line UDF lar
+                        Currency: r.Currency,
                         U_battery_capacity: r.batteryCapacity ?? null,
                         U_condition: r.prodCondition ?? null,
-                        U_series: String(r.imei),
+                        U_series: r.imei ? String(r.imei) : null,
                         ...(r.imei ? { SerialNumbers: [{ InternalSerialNumber: String(r.imei) }] } : {}),
                     };
                 }),

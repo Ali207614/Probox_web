@@ -714,7 +714,7 @@ class b1HANA {
             if(callCount2) filter.callCount2 = parseInt(callCount2);
             if(callCount) filter.callCount = parseInt(callCount);
 
-            if (sources?.length) filter.source = { $in: sources };
+            if (sources?.length) addAndCondition(filter, { source: { $in: sources } });
             if (branches?.length) filter.branch = { $in: branches };
             if (operators?.length) filter.operator = { $in: operators };
             if (operators2?.length) filter.operator2 = { $in: operators2 };
@@ -825,11 +825,42 @@ class b1HANA {
             if (req.user?.U_role === 'Scoring') {
                 addAndCondition(filter, {
                     $or: [
-                        { passportId: { $exists: true, $nin: [null, ''] } },
-                        { jshshir: { $exists: true, $nin: [null, ''] } },
+                        // 1) Qayta sotuv - hammasi
+                        { source: 'Qayta sotuv' },
+
+                        // 2) boshqa source - faqat passport/jshshir bor bo'lsa
+                        {
+                            $and: [
+                                { source: { $ne: 'Qayta sotuv' } },
+                                {
+                                    $or: [
+                                        { passportId: { $exists: true, $nin: [null, ''] } },
+                                        { jshshir: { $exists: true, $nin: [null, ''] } },
+                                    ],
+                                },
+                            ],
+                        },
                     ],
                 });
             }
+
+            if (req.user?.U_role !== 'Scoring') {
+                addAndCondition(filter, {
+                    $or: [
+                        { source: { $ne: 'Qayta sotuv' } },
+                        {
+                            source: 'Qayta sotuv',
+                            $or: [
+                                { finalLimit: { $gt: 0 } },
+                                { finalPercentage: { $gt: 0 } }
+                            ],
+                        },
+                    ],
+                });
+            }
+
+
+
 
             const addRangeFilter = (field, min, max) => {
                 if (min || max) {
@@ -844,14 +875,10 @@ class b1HANA {
             addRangeFilter('finalPercentage', finalPercentageMin, finalPercentageMax);
 
             const total = await LeadModel.countDocuments(filter);
-            // const rawData = await LeadModel.find(filter)
-            //     .select(
-            //         '_id paymentScore totalContracts openContracts totalAmount totalPaid overdueDebt maxDelay avgPaymentDelay callCount callCount2 acceptedReason meetingHappened cardCode invoiceCreated invoiceDocEntry invoiceDocNum invoiceCreatedAt isBlocked status jshshir idX branch2 seller n scoring clientName clientPhone source time operator operator2 branch comment meetingConfirmed meetingDate createdAt purchase called answered interested called2 answered2 passportId jshshir2 score mib aliment officialSalary finalLimit finalPercentage'
-            //     )
-            //     .sort({ time: -1 })
-            //     .skip(skip)
-            //     .limit(limit)
-            //     .lean();
+
+            console.log('REQ source param:', req.query.source);
+            console.log('FINAL FILTER:', JSON.stringify(filter, null, 2));
+
 
             const rawData = await LeadModel.aggregate([
                 { $match: filter },

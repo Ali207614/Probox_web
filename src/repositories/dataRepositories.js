@@ -1285,31 +1285,56 @@ WITH bp AS (
   SELECT
     BP."CardCode",
     BP."CardName",
+
+    -- OCRD contact fields
+    NULLIF(TRIM(BP."Phone1"), '')    AS "Phone1",
+    NULLIF(TRIM(BP."Phone2"), '')    AS "Phone2",
+    NULLIF(TRIM(BP."Cellular"), '')  AS "Cellular",
     NULLIF(TRIM(BP."U_jshshir"), '') AS "jshshir",
-    NULLIF(TRIM(BP."Cellular"), '')  AS "cellular_raw",
+
+    -- normalized Cellular (digits only)
     REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Cellular"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '') AS "cellular_norm",
+
+    -- person_key: prefer JSHSHIR, else normalized phone
     CASE
       WHEN NULLIF(TRIM(BP."U_jshshir"), '') IS NOT NULL THEN TRIM(BP."U_jshshir")
       WHEN NULLIF(TRIM(BP."Cellular"), '') IS NOT NULL THEN
         REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Cellular"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')
+      WHEN NULLIF(TRIM(BP."Phone1"), '') IS NOT NULL THEN
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Phone1"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')
+      WHEN NULLIF(TRIM(BP."Phone2"), '') IS NOT NULL THEN
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Phone2"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')
       ELSE NULL
     END AS "person_key"
+
   FROM ${this.db}."OCRD" BP
-  WHERE BP."CardType" = 'C' and BP."U_blocked" = 'no'
+  WHERE BP."CardType" = 'C'
+    AND BP."U_blocked" = 'no'
 ),
 bp_person AS (
   SELECT *
   FROM bp
   WHERE "person_key" IS NOT NULL
 ),
+
+-- main profile per person_key (contacts aggregated)
 person_main AS (
   SELECT
     "person_key",
     MIN("CardCode") AS "CardCode",
-    MAX("CardName") AS "CardName"
+    MAX("CardName") AS "CardName",
+
+    -- Prefer not-null values (MAX works because NULL is ignored)
+    MAX("jshshir")       AS "jshshir",
+    MAX("Cellular")      AS "Cellular",
+    MAX("cellular_norm") AS "CellularNorm",
+    MAX("Phone1")        AS "Phone1",
+    MAX("Phone2")        AS "Phone2"
+
   FROM bp_person
   GROUP BY "person_key"
 ),
+
 inv_base AS (
   SELECT
     I."DocEntry",
@@ -1318,6 +1343,7 @@ inv_base AS (
     I."PaidToDate"
   FROM ${this.db}."OINV" I
   WHERE I."CANCELED" = 'N'
+    AND I."DocDate" >= DATE'2024-01-01'
     -- CreditMemo bilan yopilgan invoice'larni chiqarib tashlash
     AND NOT EXISTS (
       SELECT 1
@@ -1327,6 +1353,7 @@ inv_base AS (
         AND CM1."BaseEntry" = I."DocEntry"
     )
 ),
+
 inst_payments AS (
   SELECT
     P."person_key",
@@ -1335,11 +1362,12 @@ inst_payments AS (
     S."InstlmntID",
     S."DueDate",
     S."InsTotal",
-    I."DocTotal"    AS "InvoiceTotal",
-    I."PaidToDate"  AS "InvoicePaidToDate",
+    I."DocTotal"   AS "InvoiceTotal",
+    I."PaidToDate" AS "InvoicePaidToDate",
 
     COALESCE(SUM(R2."SumApplied"), 0) AS "SumApplied",
     MAX(R0."DocDate") AS "LastPayDate"
+
   FROM bp_person P
   INNER JOIN inv_base I ON I."CardCode" = P."CardCode"
   INNER JOIN ${this.db}."INV6" S ON S."DocEntry" = I."DocEntry"
@@ -1362,10 +1390,12 @@ inst_payments AS (
     I."DocTotal",
     I."PaidToDate"
 ),
+
 inst_calc AS (
   SELECT
     A.*,
     CURRENT_DATE AS "Today",
+
     CASE WHEN A."SumApplied" >= A."InsTotal" THEN 1 ELSE 0 END AS "IsFullyPaid",
 
     DAYS_BETWEEN(
@@ -1382,6 +1412,7 @@ inst_calc AS (
     END AS "Unpaid"
   FROM inst_payments A
 ),
+
 inst_scored AS (
   SELECT
     C.*,
@@ -1400,6 +1431,7 @@ inst_scored AS (
     END AS "DelayScore"
   FROM inst_calc C
 ),
+
 person_agg AS (
   SELECT
     X."person_key",
@@ -1409,10 +1441,9 @@ person_agg AS (
     -- openContracts: invoice total > paidtodate + 5
     COUNT(DISTINCT CASE WHEN X."InvoiceTotal" > X."InvoicePaidToDate" + 5 THEN X."DocEntry" ELSE NULL END) AS "openContracts",
 
-    -- Siz JS’da totalAmount += c.Total (OINV.DocTotal), totalPaid += c.PaidTodate (OINV.PaidToDate) qilgansiz.
-    -- Shu uchun DocEntry bo‘yicha bitta marta olish:
-    SUM(DISTINCT X."InvoiceTotal")      AS "totalAmount",
-    SUM(DISTINCT X."InvoicePaidToDate") AS "totalPaid",
+    -- DocEntry bo‘yicha bitta marta olish:
+    SUM(DISTINCT X."InvoiceTotal")       AS "totalAmount",
+    SUM(DISTINCT X."InvoicePaidToDate")  AS "totalPaid",
 
     -- overdueDebt: DueDate < today va unpaid>0
     SUM(CASE WHEN X."DueDate" < X."Today" AND X."Unpaid" > 0 THEN X."Unpaid" ELSE 0 END) AS "overdueDebt",
@@ -1426,6 +1457,7 @@ person_agg AS (
   FROM inst_scored X
   GROUP BY X."person_key"
 ),
+
 scoring AS (
   SELECT
     P.*,
@@ -1433,7 +1465,7 @@ scoring AS (
     CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END AS "paidRatio",
     CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END AS "overRate",
 
-    -- hScore (avgPaymentDelay blok)
+    -- hScore (avgPaymentDelay)
     CASE
       WHEN P."avgPaymentDelay" <= 0  THEN 10
       WHEN P."avgPaymentDelay" <= 2  THEN 9
@@ -1454,7 +1486,7 @@ scoring AS (
       ELSE -20
     END AS "hScore",
 
-    -- gScore (maxDelay blok)
+    -- gScore (maxDelay)
     CASE
       WHEN P."maxDelay" <= 2  THEN 15
       WHEN P."maxDelay" <= 4  THEN 14
@@ -1474,7 +1506,7 @@ scoring AS (
       ELSE -5
     END AS "gScore",
 
-    -- overScore (overdue rate blok)
+    -- overScore (overdue rate)
     CASE
       WHEN (CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END) = 0 THEN 15
       WHEN (CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END) <= 0.01 THEN 12
@@ -1483,7 +1515,7 @@ scoring AS (
       ELSE 0
     END AS "overScore",
 
-    -- paidScore (paid ratio blok)
+    -- paidScore (paid ratio)
     CASE
       WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.95 THEN 15
       WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.9  THEN 14
@@ -1510,6 +1542,7 @@ scoring AS (
 
   FROM person_agg P
 ),
+
 final_calc AS (
   SELECT
     S.*,
@@ -1532,6 +1565,7 @@ final_calc AS (
     END AS "penalty"
   FROM scoring S
 ),
+
 limits AS (
   SELECT
     F.*,
@@ -1579,8 +1613,15 @@ limits AS (
 )
 
 SELECT
-  PM."CardCode" AS "CardCode",
-  PM."CardName" AS "CardName",
+  PM."CardCode"     AS "CardCode",
+  PM."CardName"     AS "CardName",
+
+  -- ✅ contacts (from OCRD via bp/person_main)
+  PM."Phone1"       AS "Phone1",
+  PM."Phone2"       AS "Phone2",
+  PM."Cellular"     AS "Cellular",
+  PM."CellularNorm" AS "CellularNorm",
+  PM."jshshir"      AS "jshshir",
 
   L."score",
   L."totalContracts",
@@ -1618,6 +1659,7 @@ WHERE
 ORDER BY "limit" DESC
 `;
     }
+
 
     escapeLike = (v = '') => String(v).replace(/[%_\\]/g, (m) => '\\' + m);
 
