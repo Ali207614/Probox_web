@@ -1619,291 +1619,261 @@ ORDER BY "limit" DESC
 `;
     }
 
-
     escapeLike = (v = '') => String(v).replace(/[%_\\]/g, (m) => '\\' + m);
 
-    /**
-     * Purchases list (approve=OPCH, pending/rejected=ODRF ObjType=18)
-     * - search: DocNum/CardCode/CardName/Comments + IMEI/Serial
-     * - dateFrom/dateTo: DocDate filter
-     * - status: approve | pending | rejected | null
-     * - hide converted drafts (OPCH.draftKey = ODRF.DocEntry) except rejected list
-     */
+// SQL string escape: ' -> ''
+    sqlStr = (v) => String(v ?? '').replace(/'/g, "''");
+
+// number only
+    sqlNum = (v, def = 0) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : def;
+    };
+
+
     getPurchases({ search, status, limit = 20, offset = 0, dateFrom, dateTo }) {
-        const s = search ? this.escapeLike(search.trim().toLowerCase()) : null;
-        const searchLike = s ? `%${s}%` : null;
+        const normalizedLimit = Math.max(1, Math.min(this.sqlNum(limit, 20), 200));
+        const normalizedOffset = Math.max(0, this.sqlNum(offset, 0));
+
+        const sRaw = search ? search.trim() : '';
+        const s = sRaw ? this.escapeLike(sRaw.toLowerCase()) : '';
+        const searchLike = s ? `%${s}%` : '';
 
         const normalizedStatus =
             status === 'approve' || status === 'pending' || status === 'rejected'
                 ? status
                 : null;
 
-        const normalizedLimit = Math.max(1, Math.min(Number(limit) || 20, 200));
-        const normalizedOffset = Math.max(0, Number(offset) || 0);
+        // DATE CONDITIONS
+        const dateCondition_OPCH = `
+    ${dateFrom ? `AND H."DocDate" >= '${this.sqlStr(dateFrom)}'` : ''}
+    ${dateTo ? `AND H."DocDate" <= '${this.sqlStr(dateTo)}'` : ''}
+  `;
 
-        // Param order for both queries (very important):
-        // 1) dateFrom, 2) dateTo, 3) searchLike, 4) status, 5) limit, 6) offset
-        const baseParams = [
-            dateFrom || null,
-            dateTo || null,
-            searchLike,
-            normalizedStatus,
-        ];
+        const dateCondition_ODRF = `
+    ${dateFrom ? `AND D."DocDate" >= '${this.sqlStr(dateFrom)}'` : ''}
+    ${dateTo ? `AND D."DocDate" <= '${this.sqlStr(dateTo)}'` : ''}
+  `;
+
+        // STATUS CONDITIONS
+        const statusCond_OPCH =
+            normalizedStatus === 'approve'
+                ? ''
+                : normalizedStatus
+                    ? 'AND 1=0'
+                    : '';
+
+        const statusCond_ODRF =
+            !normalizedStatus
+                ? ''
+                : normalizedStatus === 'pending'
+                    ? `AND D."CANCELED" = 'N'`
+                    : normalizedStatus === 'rejected'
+                        ? `AND D."CANCELED" = 'Y'`
+                        : `AND 1=0`;
+
+        // hide converted drafts except rejected list
+        const hideConvertedDraftCond =
+            normalizedStatus === 'rejected'
+                ? ''
+                : `
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ${this.db}."OPCH" X
+          WHERE X."CANCELED" = 'N'
+            AND X."draftKey" = D."DocEntry"
+        )
+      `;
+
+        // SEARCH CONDITIONS (include IMEI)
+        const searchCondition_OPCH = s
+            ? `
+      AND (
+        LOWER(CAST(H."DocNum" AS NVARCHAR(50))) LIKE '${this.sqlStr(searchLike)}' ESCAPE '\\'
+        OR LOWER(IFNULL(H."CardCode", ''))      LIKE '${this.sqlStr(searchLike)}' ESCAPE '\\'
+        OR LOWER(IFNULL(H."CardName", ''))      LIKE '${this.sqlStr(searchLike)}' ESCAPE '\\'
+        OR LOWER(IFNULL(H."Comments", ''))      LIKE '${this.sqlStr(searchLike)}' ESCAPE '\\'
+        OR EXISTS (
+          SELECT 1
+          FROM ${this.db}."PCH1" L
+          JOIN ${this.db}."SRI1" R
+            ON R."BaseType"   = 18
+           AND R."BaseEntry"  = L."DocEntry"
+           AND R."BaseLinNum" = L."LineNum"
+           AND R."ItemCode"   = L."ItemCode"
+          JOIN ${this.db}."OSRI" S
+            ON S."SysSerial" = R."SysSerial"
+           AND S."ItemCode"  = R."ItemCode"
+          WHERE L."DocEntry" = H."DocEntry"
+            AND LOWER(IFNULL(S."IntrSerial", '')) LIKE '${this.sqlStr(searchLike)}' ESCAPE '\\'
+        )
+      )
+    `
+            : '';
+
+        const searchCondition_ODRF = s
+            ? `
+      AND (
+        LOWER(CAST(D."DocNum" AS NVARCHAR(50))) LIKE '${this.sqlStr(searchLike)}' ESCAPE '\\'
+        OR LOWER(IFNULL(D."CardCode", ''))      LIKE '${this.sqlStr(searchLike)}' ESCAPE '\\'
+        OR LOWER(IFNULL(D."CardName", ''))      LIKE '${this.sqlStr(searchLike)}' ESCAPE '\\'
+        OR LOWER(IFNULL(D."Comments", ''))      LIKE '${this.sqlStr(searchLike)}' ESCAPE '\\'
+        OR EXISTS (
+          SELECT 1
+          FROM ${this.db}."DRF1" L
+          WHERE L."DocEntry" = D."DocEntry"
+            AND LOWER(IFNULL(L."U_series", '')) LIKE '${this.sqlStr(searchLike)}' ESCAPE '\\'
+        )
+      )
+    `
+            : '';
 
         const baseUnion = `
-WITH
-params AS (
-  SELECT
-    CAST(? AS NVARCHAR(20))  AS "dateFrom",
-    CAST(? AS NVARCHAR(20))  AS "dateTo",
-    CAST(? AS NVARCHAR(200)) AS "searchLike",
-    CAST(? AS NVARCHAR(20))  AS "status"
-  FROM DUMMY
-),
+    SELECT
+      'doc' AS "source",
+      'approve' AS "status",
+      H."DocEntry" AS "docEntry",
+      H."DocNum" AS "docNum",
+      H."DocDate" AS "docDate",
+      H."DocDueDate" AS "docDueDate",
+      H."CardCode" AS "cardCode",
+      H."CardName" AS "cardName",
+      H."DocCur" AS "docCur",
+      H."DocRate" AS "docRate",
+      H."DocTotal" AS "docTotal",
+      H."Comments" AS "comments"
+    FROM ${this.db}."OPCH" H
+    WHERE
+      H."CANCELED" = 'N'
+      ${dateCondition_OPCH}
+      ${statusCond_OPCH}
+      ${searchCondition_OPCH}
 
-docs AS (
-  SELECT
-    'doc'      AS "source",
-    'approve'  AS "status",
-    H."DocEntry"  AS "docEntry",
-    H."DocNum"    AS "docNum",
-    H."DocDate"   AS "docDate",
-    H."DocDueDate" AS "docDueDate",
-    H."CardCode"  AS "cardCode",
-    H."CardName"  AS "cardName",
-    H."DocCur"    AS "docCur",
-    H."DocRate"   AS "docRate",
-    H."DocTotal"  AS "docTotal",
-    H."Comments"  AS "comments"
-  FROM ${this.db}."OPCH" H
-  CROSS JOIN params P
-  WHERE
-    H."CANCELED" = 'N'
-    AND (P."dateFrom" IS NULL OR H."DocDate" >= P."dateFrom")
-    AND (P."dateTo"   IS NULL OR H."DocDate" <= P."dateTo")
-    AND (
-      P."status" IS NULL OR P."status" = '' OR P."status" = 'approve'
-    )
-    AND (
-      P."searchLike" IS NULL
-      OR LOWER(CAST(H."DocNum" AS NVARCHAR(50))) LIKE P."searchLike" ESCAPE '\\'
-      OR LOWER(IFNULL(H."CardCode", ''))         LIKE P."searchLike" ESCAPE '\\'
-      OR LOWER(IFNULL(H."CardName", ''))         LIKE P."searchLike" ESCAPE '\\'
-      OR LOWER(IFNULL(H."Comments", ''))         LIKE P."searchLike" ESCAPE '\\'
-      OR EXISTS (
-        SELECT 1
-        FROM ${this.db}."PCH1" L
-        JOIN ${this.db}."SRI1" R
-          ON R."BaseType"   = 18
-         AND R."BaseEntry"  = L."DocEntry"
-         AND R."BaseLinNum" = L."LineNum"
-         AND R."ItemCode"   = L."ItemCode"
-        JOIN ${this.db}."OSRI" S
-          ON S."SysSerial" = R."SysSerial"
-         AND S."ItemCode"  = R."ItemCode"
-        WHERE L."DocEntry" = H."DocEntry"
-          AND LOWER(IFNULL(S."IntrSerial", '')) LIKE P."searchLike" ESCAPE '\\'
-      )
-    )
-),
+    UNION ALL
 
-drafts AS (
-  SELECT
-    'draft' AS "source",
-    CASE WHEN D."CANCELED"='Y' THEN 'rejected' ELSE 'pending' END AS "status",
-    D."DocEntry" AS "docEntry",
-    D."DocNum"   AS "docNum",
-    D."DocDate"  AS "docDate",
-    D."DocDueDate" AS "docDueDate",
-    D."CardCode" AS "cardCode",
-    D."CardName" AS "cardName",
-    D."DocCur"   AS "docCur",
-    D."DocRate"  AS "docRate",
-    D."DocTotal" AS "docTotal",
-    D."Comments" AS "comments"
-  FROM ${this.db}."ODRF" D
-  CROSS JOIN params P
-  WHERE
-    D."ObjType" = 18
-    AND (P."dateFrom" IS NULL OR D."DocDate" >= P."dateFrom")
-    AND (P."dateTo"   IS NULL OR D."DocDate" <= P."dateTo")
-    AND (
-      P."status" IS NULL OR P."status" = ''
-      OR (P."status"='pending'  AND D."CANCELED"='N')
-      OR (P."status"='rejected' AND D."CANCELED"='Y')
-    )
-    -- hide converted drafts except in rejected list
-    AND (
-      P."status" = 'rejected'
-      OR NOT EXISTS (
-        SELECT 1
-        FROM ${this.db}."OPCH" X
-        WHERE X."CANCELED" = 'N'
-          AND X."draftKey" = D."DocEntry"
-      )
-    )
-    AND (
-      P."searchLike" IS NULL
-      OR LOWER(CAST(D."DocNum" AS NVARCHAR(50))) LIKE P."searchLike" ESCAPE '\\'
-      OR LOWER(IFNULL(D."CardCode", ''))         LIKE P."searchLike" ESCAPE '\\'
-      OR LOWER(IFNULL(D."CardName", ''))         LIKE P."searchLike" ESCAPE '\\'
-      OR LOWER(IFNULL(D."Comments", ''))         LIKE P."searchLike" ESCAPE '\\'
-      OR EXISTS (
-        SELECT 1
-        FROM ${this.db}."DRF1" L
-        WHERE L."DocEntry" = D."DocEntry"
-          AND LOWER(IFNULL(L."U_series", '')) LIKE P."searchLike" ESCAPE '\\'
-      )
-    )
-),
-
-unioned AS (
-  SELECT * FROM docs
-  UNION ALL
-  SELECT * FROM drafts
-)
-SELECT * FROM unioned
-`;
+    SELECT
+      'draft' AS "source",
+      CASE WHEN D."CANCELED"='Y' THEN 'rejected' ELSE 'pending' END AS "status",
+      D."DocEntry" AS "docEntry",
+      D."DocNum" AS "docNum",
+      D."DocDate" AS "docDate",
+      D."DocDueDate" AS "docDueDate",
+      D."CardCode" AS "cardCode",
+      D."CardName" AS "cardName",
+      D."DocCur" AS "docCur",
+      D."DocRate" AS "docRate",
+      D."DocTotal" AS "docTotal",
+      D."Comments" AS "comments"
+    FROM ${this.db}."ODRF" D
+    WHERE
+      D."ObjType" = 18
+      ${dateCondition_ODRF}
+      ${statusCond_ODRF}
+      ${hideConvertedDraftCond}
+      ${searchCondition_ODRF}
+  `;
 
         const countSql = `
-SELECT COUNT(*) AS "total"
-FROM (
-  ${baseUnion}
-) Z
-`;
+    SELECT COUNT(*) AS "total"
+    FROM (${baseUnion}) Z
+  `;
 
         const dataSql = `
-SELECT
-  Q.*,
-  COUNT(*) OVER() AS "total"
-FROM (
-  ${baseUnion}
-) Q
-ORDER BY Q."docDate" DESC, Q."docEntry" DESC
-LIMIT ? OFFSET ?
-`;
+    SELECT
+      Q.*,
+      COUNT(*) OVER() AS "total"
+    FROM (${baseUnion}) Q
+    ORDER BY Q."docDate" DESC, Q."docEntry" DESC
+    LIMIT ${normalizedLimit} OFFSET ${normalizedOffset}
+  `;
 
-        const dataParams = [...baseParams, normalizedLimit, normalizedOffset];
-        const countParams = [...baseParams];
-
-        return { dataSql, dataParams, countSql, countParams };
+        return { dataSql, countSql };
     }
 
-    /**
-     * Purchase detail
-     * - source: 'doc' | 'draft'
-     * - docEntry: number
-     * Doc lines:
-     *  - doc: OSRI.IntrSerial (real serial)
-     *  - draft: DRF1.U_series (temporary serial)
-     */
+
     getPurchaseDetail({ source, docEntry }) {
         const isDoc = String(source) === 'doc';
-        const docEntryNum = Number(docEntry);
-
-        if (!Number.isFinite(docEntryNum) || docEntryNum <= 0) {
-            throw new Error('docEntry must be positive number');
-        }
+        const docEntryNum = this.sqlNum(docEntry, 0);
+        if (!docEntryNum) throw new Error('docEntry must be positive number');
 
         const headerTable = isDoc ? `${this.db}."OPCH"` : `${this.db}."ODRF"`;
         const linesTable  = isDoc ? `${this.db}."PCH1"` : `${this.db}."DRF1"`;
 
         const headerSql = `
-SELECT
-  ? AS "source",
-  ${
-            isDoc
-                ? `? AS "status"`
-                : `CASE WHEN H."CANCELED"='Y' THEN 'rejected' ELSE 'pending' END AS "status"`
-        },
-  H."DocEntry" AS "docEntry",
-  H."DocNum" AS "docNum",
-  H."DocDate" AS "docDate",
-  H."DocDueDate" AS "docDueDate",
-  H."CardCode" AS "cardCode",
-  H."CardName" AS "cardName",
-  H."DocCur" AS "docCur",
-  H."DocRate" AS "docRate",
-  H."DocTotal" AS "docTotal",
-  H."Comments" AS "comments"
-FROM ${headerTable} H
-WHERE
-  ${
-            isDoc ? `H."CANCELED"='N'` : `H."ObjType"=18`
-        }
-  AND H."DocEntry" = ?
-`;
+    SELECT
+      '${isDoc ? 'doc' : 'draft'}' AS "source",
+      ${isDoc ? `'approve'` : `CASE WHEN H."CANCELED"='Y' THEN 'rejected' ELSE 'pending' END`} AS "status",
+      H."DocEntry" AS "docEntry",
+      H."DocNum" AS "docNum",
+      H."DocDate" AS "docDate",
+      H."DocDueDate" AS "docDueDate",
+      H."CardCode" AS "cardCode",
+      H."CardName" AS "cardName",
+      H."DocCur" AS "docCur",
+      H."DocRate" AS "docRate",
+      H."DocTotal" AS "docTotal",
+      H."Comments" AS "comments"
+    FROM ${headerTable} H
+    WHERE
+      ${isDoc ? `H."CANCELED"='N'` : `H."ObjType"=18`}
+      AND H."DocEntry" = ${docEntryNum}
+  `;
 
-        const headerParams = isDoc
-            ? ['doc', 'approve', docEntryNum]
-            : ['draft', docEntryNum];
+        const dataSql = isDoc ? `
+    SELECT
+      L."DocEntry" AS "docEntry",
+      L."LineNum"  AS "lineNum",
+      L."ItemCode" AS "itemCode",
+      L."Dscription" AS "dscription",
+      L."WhsCode"  AS "whsCode",
+      L."Price"    AS "price",
+      L."LineTotal" AS "lineTotal",
+      L."Quantity" AS "lineQuantity",
+      I."ManSerNum" AS "isSerialManaged",
+      S."IntrSerial" AS "serial",
+      L."U_battery_capacity" AS "batteryCapacity",
+      L."U_condition" AS "prodCondition"
+    FROM ${linesTable} L
+    JOIN ${this.db}."OITM" I
+      ON I."ItemCode" = L."ItemCode"
+    LEFT JOIN ${this.db}."SRI1" R
+      ON R."BaseType"   = 18
+     AND R."BaseEntry"  = L."DocEntry"
+     AND R."BaseLinNum" = L."LineNum"
+     AND R."ItemCode"   = L."ItemCode"
+    LEFT JOIN ${this.db}."OSRI" S
+      ON S."SysSerial" = R."SysSerial"
+     AND S."ItemCode"  = R."ItemCode"
+    WHERE
+      L."DocEntry" = ${docEntryNum}
+    ORDER BY
+      L."LineNum" ASC,
+      S."IntrSerial" ASC
+  ` : `
+    SELECT
+      L."DocEntry" AS "docEntry",
+      L."LineNum"  AS "lineNum",
+      L."ItemCode" AS "itemCode",
+      L."Dscription" AS "dscription",
+      L."WhsCode"  AS "whsCode",
+      L."Price"    AS "price",
+      L."LineTotal" AS "lineTotal",
+      L."Quantity" AS "lineQuantity",
+      I."ManSerNum" AS "isSerialManaged",
+      L."U_series" AS "serial",
+      L."U_battery_capacity" AS "batteryCapacity",
+      L."U_condition" AS "prodCondition"
+    FROM ${linesTable} L
+    JOIN ${this.db}."OITM" I
+      ON I."ItemCode" = L."ItemCode"
+    WHERE
+      L."DocEntry" = ${docEntryNum}
+    ORDER BY
+      L."LineNum" ASC
+  `;
 
-        const linesSql = isDoc
-            ? `
-SELECT
-  L."DocEntry" AS "docEntry",
-  L."LineNum"  AS "lineNum",
-  L."ItemCode" AS "itemCode",
-  L."Dscription" AS "dscription",
-  L."WhsCode"  AS "whsCode",
-  L."Price"    AS "price",
-  L."LineTotal" AS "lineTotal",
-  L."Quantity" AS "lineQuantity",
-  I."ManSerNum" AS "isSerialManaged",
-  S."IntrSerial" AS "serial",
-  L."U_battery_capacity" AS "batteryCapacity",
-  COALESCE(L."U_PROD_CONDITION", I."U_PROD_CONDITION") AS "prodCondition"
-FROM ${linesTable} L
-JOIN ${this.db}."OITM" I
-  ON I."ItemCode" = L."ItemCode"
-LEFT JOIN ${this.db}."SRI1" R
-  ON R."BaseType"   = 18
- AND R."BaseEntry"  = L."DocEntry"
- AND R."BaseLinNum" = L."LineNum"
- AND R."ItemCode"   = L."ItemCode"
-LEFT JOIN ${this.db}."OSRI" S
-  ON S."SysSerial" = R."SysSerial"
- AND S."ItemCode"  = R."ItemCode"
-WHERE
-  L."DocEntry" = ?
-ORDER BY
-  L."LineNum" ASC,
-  S."IntrSerial" ASC
-`
-            : `
-SELECT
-  L."DocEntry" AS "docEntry",
-  L."LineNum"  AS "lineNum",
-  L."ItemCode" AS "itemCode",
-  L."Dscription" AS "dscription",
-  L."WhsCode"  AS "whsCode",
-  L."Price"    AS "price",
-  L."LineTotal" AS "lineTotal",
-  L."Quantity" AS "lineQuantity",
-  I."ManSerNum" AS "isSerialManaged",
-  L."U_series" AS "serial",
-  L."U_battery_capacity" AS "batteryCapacity",
-  COALESCE(L."U_PROD_CONDITION", I."U_PROD_CONDITION") AS "prodCondition"
-FROM ${linesTable} L
-JOIN ${this.db}."OITM" I
-  ON I."ItemCode" = L."ItemCode"
-WHERE
-  L."DocEntry" = ?
-ORDER BY
-  L."LineNum" ASC
-`;
-
-        const linesParams = [docEntryNum];
-
-        return {
-            headerSql,
-            headerParams,
-            dataSql: linesSql,
-            dataParams: linesParams,
-        };
+        return { headerSql, dataSql };
     }
-
-
 
 
 

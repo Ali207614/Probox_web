@@ -365,7 +365,6 @@ class b1SL {
         try {
             // 0) seller check
             if (!req.user?.U_branch) {
-                console.log('Siz Sotuvchi emassiz')
                 return res.status(400).json({
                     status: false,
                     message: 'Siz Sotuvchi emassiz',
@@ -378,7 +377,6 @@ class b1SL {
             delete req.body.selectedDevices;
 
             if (!leadId) {
-                console.log('leadId bo`lgan emassiz')
                 return res.status(400).json({
                     status: false,
                     message: 'leadId is required',
@@ -733,11 +731,10 @@ class b1SL {
                         U_battery_capacity: r.batteryCapacity ?? null,
                         U_condition: r.prodCondition ?? null,
                         U_series: String(r.imei),
+                        ...(r.imei ? { SerialNumbers: [{ InternalSerialNumber: String(r.imei) }] } : {}),
                     };
                 }),
             };
-
-            console.log("Draft body:", draftBody);
 
             const axios = this.getAxiosSL();
             const { data } = await axios.post(`/Drafts`, draftBody);
@@ -803,6 +800,67 @@ class b1SL {
             return res.status(400).json({
                 status: false,
                 message: sapMsg || err.message || 'Error',
+                raw: get(err, 'response.data'),
+            });
+        }
+    };
+
+    cancelPurchaseDraft = async (req, res, next) => {
+        try {
+            const { docEntry } = req.params;
+            if (!docEntry) return res.status(400).json({ status: false, message: 'docEntry is required' });
+
+            const axios = this.getAxiosSL();
+
+            await axios.post(`/Drafts(${Number(docEntry)})/Cancel`);
+
+            return res.json({
+                status: true,
+                docEntry: Number(docEntry),
+                action: 'cancelled',
+            });
+        } catch (err) {
+            if (get(err, 'response.status') === 401) {
+                const token = await this.auth();
+                if (token.status) return this.cancelPurchaseDraft(req, res, next);
+                return res.status(401).json({ status: false, message: token.message });
+            }
+
+            return res.status(400).json({
+                status: false,
+                message: get(err, 'response.data.error.message.value', err.message || 'Error'),
+                raw: get(err, 'response.data'),
+            });
+        }
+    };
+
+    approvePurchaseDraft_convert = async (req, res, next) => {
+        try {
+            const { docEntry } = req.params;
+            if (!docEntry) return res.status(400).json({ status: false, message: 'docEntry is required' });
+
+            const axios = this.getAxiosSL();
+
+            const payload = { Document: { DocEntry: String(Number(docEntry)) } };
+
+            const { data } = await axios.post(`/DraftsService_SaveDraftToDocument`, payload);
+
+            return res.json({
+                status: true,
+                draftDocEntry: Number(docEntry),
+                action: 'converted',
+                sap: data,
+            });
+        } catch (err) {
+            if (get(err, 'response.status') === 401) {
+                const token = await this.auth();
+                if (token.status) return this.approvePurchaseDraft_convert(req, res, next);
+                return res.status(401).json({ status: false, message: token.message });
+            }
+
+            return res.status(400).json({
+                status: false,
+                message: get(err, 'response.data.error.message.value', err.message || 'Error'),
                 raw: get(err, 'response.data'),
             });
         }

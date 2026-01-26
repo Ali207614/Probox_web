@@ -34,6 +34,11 @@ router.post('/purchases/drafts', authMiddleware, b1SL1.createPurchaseDraft)
 
 router.post('/purchases/drafts/:docEntry/lines/:lineNum', authMiddleware, b1SL1.patchDraftLine)
 
+
+router.post('/purchases/drafts/:docEntry/cancel', authMiddleware, b1SL1.cancelPurchaseDraft);
+router.post('/purchases/drafts/:docEntry/approve', authMiddleware, b1SL1.approvePurchaseDraft_convert);
+
+
 router.get('/limit/usage', authMiddleware, b1HANA.getLimitUsage)
 
 
