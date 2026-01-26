@@ -955,10 +955,6 @@ class b1HANA {
                 operator1
             } = req.body;
 
-            const startOfDay = moment().startOf('day').toDate();
-            const endOfDay = moment().endOf('day').toDate();
-
-            // 📌 PHONE VALIDATION
             function validatePhone(phone) {
                 if (!phone) return false;
                 let digits = String(phone).replace(/\D/g, '');
@@ -1007,12 +1003,25 @@ class b1HANA {
                 });
             }
 
-            // 📌 DUPLICATE CHECK (today only)
-            const exists = await LeadModel.exists({
-                clientPhone: cleanedPhone,
-                source,
-                createdAt: { $gte: startOfDay, $lte: endOfDay },
-            });
+            const now = moment();
+
+            const createdAt =
+                source === 'Organika'
+                    ? {
+                        $gte: now.clone().subtract(10, 'days').startOf('day').toDate(),
+                        $lte: now.clone().endOf('day').toDate(),
+                    }
+                    : {
+                        $gte: now.clone().startOf('day').toDate(),
+                        $lte: now.clone().endOf('day').toDate(),
+                    };
+
+            const query =
+                source === 'Organika'
+                    ? { clientPhone: cleanedPhone, createdAt }
+                    : { clientPhone: cleanedPhone, source, createdAt };
+
+            const exists = await LeadModel.exists(query);
 
             if (exists) {
                 return res.status(409).json({

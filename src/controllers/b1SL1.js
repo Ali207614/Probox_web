@@ -704,7 +704,6 @@ class b1SL {
         };
     }
 
-
     createPurchaseDraft = async (req, res, next) => {
         try {
             const { cardCode, docDate, whsCode, comments, rows } = req.body;
@@ -733,14 +732,7 @@ class b1SL {
                         // ✅ line UDF lar
                         U_battery_capacity: r.batteryCapacity ?? null,
                         U_condition: r.prodCondition ?? null,
-
-                        // ✅ 1 line = 1 serial
-                        SerialNumbers: [
-                            {
-                                InternalSerialNumber: String(r.imei) ,
-                                "ManufacturerSerialNumber": String(r.imei)
-                            }
-                        ],
+                        U_series: String(r.imei),
                     };
                 }),
             };
@@ -786,7 +778,7 @@ class b1SL {
                 ...(price != null ? { UnitPrice: Number(price) } : {}),
                 ...(batteryCapacity != null ? { U_battery_capacity: Number(batteryCapacity) } : {}),
                 ...(prodCondition != null ? { U_PROD_CONDITION: prodCondition } : {}),
-                ...(imei ? { SerialNumbers: [{ InternalSerialNumber: String(imei) }] } : {}),
+                ...(imei ? { U_series: String(imei) } : {}),
             };
 
             const axios = this.getAxiosSL();
@@ -815,8 +807,6 @@ class b1SL {
             });
         }
     };
-
-
 }
 
 module.exports = new b1SL();
