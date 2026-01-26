@@ -876,10 +876,6 @@ class b1HANA {
 
             const total = await LeadModel.countDocuments(filter);
 
-            console.log('REQ source param:', req.query.source);
-            console.log('FINAL FILTER:', JSON.stringify(filter, null, 2));
-
-
             const rawData = await LeadModel.aggregate([
                 { $match: filter },
 
