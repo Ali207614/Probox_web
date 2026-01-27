@@ -722,10 +722,10 @@ class b1SL {
 
                     return {
                         ItemCode: String(r.itemCode),
-                        Quantity: 1,
+                        Quantity: Number(r.quantity || 1),
                         UnitPrice: Number(r.price || 0),
                         WarehouseCode: r.whsCode || whsCode || null,
-                        Currency: r.Currency,
+                        Currency: r.currency,
                         U_battery_capacity: r.batteryCapacity ?? null,
                         U_condition: r.prodCondition ?? null,
                         U_series: r.imei ? String(r.imei) : null,

@@ -163,7 +163,6 @@ class b1HANA {
         }
     };
 
-
     getItemGroups = async (req, res, next) => {
         try {
             const { search = '', limit = 50, offset = 0 } = req.query;
@@ -180,7 +179,6 @@ class b1HANA {
             next(e);
         }
     };
-
 
     getItems = async (req, res, next) => {
         try {
