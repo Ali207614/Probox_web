@@ -30,11 +30,6 @@ require('dotenv').config();
 
 
 class b1HANA {
-
-
-
-
-
     getPurchaseDetail = async (req, res, next) => {
         try {
             const { source, docEntry } = req.params;
@@ -152,9 +147,51 @@ class b1HANA {
         }
     };
 
+    getSuppliers = async (req, res, next) => {
+        try {
+            const { search = '', limit = 50, offset = 0 } = req.query;
+
+            const sql = DataRepositories.getSuppliers({ search, limit, offset });
+            const rows = await this.execute(sql);
+
+            const total = rows?.length ? Number(rows[0].total) : 0;
+            const suppliers = (rows || []).map(({ total, ...x }) => x);
+
+            res.json({ total, totalPage: Math.ceil(total / Number(limit || 50)), suppliers });
+        } catch (e) {
+            next(e);
+        }
+    };
+
+
+    getItemGroups = async (req, res, next) => {
+        try {
+            const { search = '', limit = 50, offset = 0 } = req.query;
+
+            const sql = DataRepositories.getItemGroups({ search, limit, offset });
+            const rows = await this.execute(sql);
+
+            const total = rows?.length ? Number(rows[0].total) : 0;
+
+            const groups = (rows || []).map(({ total, ...x }) => x);
+
+            res.json({ total, totalPage: Math.ceil(total / Number(limit || 50)), groups });
+        } catch (e) {
+            next(e);
+        }
+    };
+
+
     getItems = async (req, res, next) => {
         try {
-            const { search, whsCode, limit = 20, offset = 0, ...filters } = req.query;
+            const {
+                search,
+                whsCode,
+                limit = 20,
+                offset = 0,
+                includeZeroOnHand = 'false',
+                ...filters
+            } = req.query;
 
             const { dataSql, countSql } = DataRepositories.getItems({
                 search,
@@ -162,6 +199,7 @@ class b1HANA {
                 limit: Number(limit),
                 offset: Number(offset),
                 whsCode,
+                includeZeroOnHand: String(includeZeroOnHand).toLowerCase() === 'true',
             });
 
             const totalRow = await this.execute(countSql);
@@ -169,7 +207,7 @@ class b1HANA {
 
             const items = await this.execute(dataSql);
 
-            res.json({ total, totalPage:Math.ceil(total/limit), items });
+            res.json({ total, totalPage: Math.ceil(total / limit), items });
         } catch (e) {
             next(e);
         }
@@ -1554,7 +1592,7 @@ class b1HANA {
         };
     };
 
-     buildActor = (req , lead) => {
+    buildActor = (req , lead) => {
         const u = req.user || {};
         return {
             type: u.U_role, // sizda qanday role bo‘lsa moslang
@@ -1566,13 +1604,13 @@ class b1HANA {
         };
     };
 
-     toNumberOrNull = (v) => {
+    toNumberOrNull = (v) => {
         if (v === undefined || v === null || v === '') return null;
         const n = Number(v);
         return Number.isFinite(n) ? n : null;
     };
 
-     writeLimitUsageHistory = async ({ leadId, existingLead, validData, req }) => {
+    writeLimitUsageHistory = async ({ leadId, existingLead, validData, req }) => {
         const docs = [];
 
         const newFinalLimit = validData.finalLimit !== undefined ? this.toNumberOrNull(validData.finalLimit) : undefined;

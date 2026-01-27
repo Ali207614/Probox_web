@@ -6,6 +6,97 @@ class DataRepositories {
         this.db = dbName;
     }
 
+    escapeSqlString = (v = '') => String(v).replace(/'/g, "''");
+
+    getSuppliers({ search = '', limit = 50, offset = 0 } = {}) {
+        const hasSearch = String(search || '').trim().length > 0;
+
+        const s = this.escapeSqlString(String(search || '').trim().toLowerCase());
+        const like = this.escapeSqlString(`%${this.escapeLike(s)}%`);
+
+        const where = hasSearch
+            ? `
+      AND (
+        LOWER(C."CardCode") LIKE '${like}' ESCAPE '\\'
+        OR LOWER(C."CardName") LIKE '${like}' ESCAPE '\\'
+        OR LOWER(COALESCE(C."Phone1", '')) LIKE '${like}' ESCAPE '\\'
+        OR LOWER(COALESCE(C."Cellular", '')) LIKE '${like}' ESCAPE '\\'
+      )
+    `
+            : '';
+
+        return `
+WITH base AS (
+  SELECT
+    C."CardCode" AS "code",
+    C."CardName" AS "name",
+    NULLIF(TRIM(C."Phone1"), '')   AS "phone1",
+    NULLIF(TRIM(C."Phone2"), '')   AS "phone2",
+    NULLIF(TRIM(C."Cellular"), '') AS "cellular",
+    NULLIF(TRIM(C."E_Mail"), '')   AS "email",
+    NULLIF(TRIM(C."Address"), '')  AS "address",
+    C."GroupCode" AS "groupCode",
+    C."validFor"  AS "validFor"
+  FROM ${this.db}."OCRD" C
+  WHERE C."CardType" = 'S'
+  ${where}
+)
+SELECT
+  COUNT(*) OVER() AS "total",
+  "code",
+  "name",
+  "phone1",
+  "phone2",
+  "cellular",
+  "email",
+  "address",
+  "groupCode",
+  "validFor"
+FROM base
+ORDER BY "name" ASC
+LIMIT ${Number(limit) || 50}
+OFFSET ${Number(offset) || 0};
+`;
+    }
+
+
+    getItemGroups({ search = '', limit = 50, offset = 0 } = {}) {
+        const hasSearch = String(search || '').trim().length > 0;
+
+        const s = this.escapeSqlString(String(search || '').trim().toLowerCase());
+        const like = this.escapeSqlString(`%${this.escapeLike(s)}%`);
+
+        const where = hasSearch
+            ? `
+      AND (
+        LOWER(B."ItmsGrpNam") LIKE '${like}' ESCAPE '\\'
+        OR CAST(B."ItmsGrpCod" AS NVARCHAR(20)) LIKE '${like}' ESCAPE '\\'
+      )
+    `
+            : '';
+
+        return `
+            WITH base AS (
+                SELECT
+                    B."ItmsGrpCod" AS "code",
+                    B."ItmsGrpNam" AS "name"
+                FROM ${this.db}."OITB" B
+                WHERE 1=1
+                ${where}
+                )
+            SELECT
+                COUNT(*) OVER() AS "total",
+                "code",
+                "name"
+            FROM base
+            ORDER BY "name" ASC
+                LIMIT ${Number(limit) || 50}
+            OFFSET ${Number(offset) || 0};
+        `;
+    }
+
+
+
     async getSalesManager({ login = '', password = '' }) {
         return `
         SELECT T0."SlpCode", T0."SlpName", T0."GroupCode", T0."Telephone", T0."U_login", T0."U_password",T0."U_role" , T0."U_branch" FROM ${this.db}.OSLP T0 where T0."U_login"= '${login}' and T0."U_password"='${password}'`;
@@ -1178,9 +1269,15 @@ ORDER BY
     }
 
 
-    // 352820546993929
-    getItems({ search, filters = {}, limit = 50, offset = 0, whsCode }) {
-        let whereClauses = ['1=1', `T0."OnHand" > 0`];
+
+
+    getItems({ search, filters = {}, limit = 50, offset = 0, whsCode, includeZeroOnHand = false }) {
+        // ❗️OnHand > 0 ni endi flag bo‘yicha qo‘yamiz
+        let whereClauses = ['1=1'];
+        if (!includeZeroOnHand) {
+            whereClauses.push(`T0."OnHand" > 0`);
+        }
+
         let imeiJoin = '';
         let imeiWhere = '';
 
@@ -1216,7 +1313,6 @@ ORDER BY
     `);
         }
 
-        // Filters
         if (filters.model) whereClauses.push(`T1."U_Model" = '${filters.model}'`);
         if (filters.deviceType) whereClauses.push(`T1."U_DeviceType" = '${filters.deviceType}'`);
         if (filters.memory) whereClauses.push(`T1."U_Memory" = '${filters.memory}'`);
@@ -1224,21 +1320,21 @@ ORDER BY
         if (filters.condition) whereClauses.push(`T1."U_PROD_CONDITION" = '${filters.condition}'`);
         if (filters.color) whereClauses.push(`T1."U_Color" = '${filters.color}'`);
 
+        if (filters.itemGroupCode) whereClauses.push(`T1."ItmsGrpCod" = '${filters.itemGroupCode}'`);
+
         const whereQuery = 'WHERE ' + whereClauses.join(' AND ') + imeiWhere;
 
         const imeiSelect = isIMEI ? `R."DistNumber" AS "IMEI",` : '';
 
-        // ✅ total hisoblash uchun DISTINCT nima bo‘lishini tanlang:
-        // - IMEI qidiruvda: bitta serial = bitta row → DistNumber bo‘yicha
-        // - Oddiy listda: bitta item+warehouse = bitta row → ItemCode+WhsCode bo‘yicha
         const distinctExpr = isIMEI
             ? `R."DistNumber"`
-            : `T0."ItemCode" || ':' || T0."WhsCode"`; // HANA string concat: ||
+            : `T0."ItemCode" || ':' || T0."WhsCode"`;
 
         const baseFrom = `
     FROM ${this.db}."OITW" T0
       INNER JOIN ${this.db}."OITM" T1 ON T0."ItemCode" = T1."ItemCode"
       INNER JOIN ${this.db}."OWHS" T2 ON T0."WhsCode" = T2."WhsCode"
+      INNER JOIN ${this.db}."OITB" G ON G."ItmsGrpCod" = T1."ItmsGrpCod"  -- ✅ item group
       ${imeiJoin}
       LEFT JOIN ${this.db}."ITM1" PR
         ON PR."ItemCode" = T1."ItemCode"
@@ -1253,6 +1349,11 @@ ORDER BY
       T0."WhsCode",
       CAST(T0."OnHand" AS INTEGER) AS "OnHand",
       T1."ItemName",
+
+      -- ✅ group info
+      T1."ItmsGrpCod" AS "ItemGroupCode",
+      G."ItmsGrpNam" AS "ItemGroupName",
+
       T1."U_Color",
       T1."U_Condition",
       T1."U_Model",
@@ -1264,8 +1365,7 @@ ORDER BY
       PR."Price" AS "SalePrice",
       ${isIMEI ? `R."CostTotal" AS "PurchasePrice"` : `NULL AS "PurchasePrice"`}
     ${baseFrom}
-    ORDER BY 
-     T1."U_Model" DESC
+    ORDER BY T1."U_Model" DESC
     LIMIT ${limit}
     OFFSET ${offset};
   `;
@@ -1277,7 +1377,6 @@ ORDER BY
 
         return { dataSql, countSql };
     }
-
 
     getAllHighLimitCandidatesByCardCode() {
         return `
@@ -1658,8 +1757,6 @@ ORDER BY
             ORDER BY "limit" DESC
         `;
     }
-
-
 
     escapeLike = (v = '') => String(v).replace(/[%_\\]/g, (m) => '\\' + m);
 
