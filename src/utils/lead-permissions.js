@@ -39,25 +39,7 @@ const permissions = {
         'seen'
     ],
     Operator2: [
-        'called2',
-        'answered2',
-        'callCount2',
-        'meetingDate',
-        'rejectionReason2',
-        'paymentInterest',
-        'branch',
-        'meetingHappened',
-        'region',
-        'district',
-        'address',
-        'comment',
-        'clientPhone2',
-        'clientPhone',
-        'neighborhood',
-        'street',
-        'house',
-        'seen',
-        'address2'
+
     ],
     Seller: [
         'meetingConfirmed',
