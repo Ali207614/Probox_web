@@ -61,16 +61,21 @@ class b1HANA {
         }
     };
 
+    parseGroupPairs = (groupPairs) => {
+        if (!groupPairs) return [];
+
+        return String(groupPairs)
+            .split('||')
+            .filter(Boolean)
+            .map((p) => {
+                const [code, name] = p.split('::');
+                return { code: Number(code), name };
+            });
+    };
+
     getPurchases = async (req, res, next) => {
         try {
-            const {
-                search,
-                status,      // approved | draft | pending | rejected
-                dateFrom,    // 'YYYY-MM-DD'
-                dateTo,      // 'YYYY-MM-DD'
-                limit = 20,
-                offset = 0,
-            } = req.query;
+            const { search, status, dateFrom, dateTo, limit = 20, offset = 0 } = req.query;
 
             const { dataSql, countSql } = DataRepositories.getPurchases({
                 search,
@@ -84,7 +89,17 @@ class b1HANA {
             const totalRow = await this.execute(countSql);
             const total = Number(totalRow?.[0]?.total ?? 0);
 
-            const items = await this.execute(dataSql);
+            const itemsRaw = await this.execute(dataSql);
+
+            const items = (itemsRaw || []).map((x) => {
+                const groups = this.parseGroupPairs(x.groupPairs);
+
+                return {
+                    ...x,
+                    groups,                              // [{code, name}, ...]
+                    groupCodes: groups.map(g => g.code), // [12, 7]
+                };
+            });
 
             res.json({
                 total,

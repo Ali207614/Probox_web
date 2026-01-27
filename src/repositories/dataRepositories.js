@@ -1877,7 +1877,18 @@ ORDER BY
       H."DocCur" AS "docCur",
       H."DocRate" AS "docRate",
       H."DocTotal" AS "docTotal",
-      H."Comments" AS "comments"
+      H."Comments" AS "comments",
+      (
+          SELECT STRING_AGG(X."pair", '||')
+          FROM (
+                   SELECT DISTINCT
+                       CAST(M."ItmsGrpCod" AS NVARCHAR(20)) || '::' || B."ItmsGrpNam" AS "pair"
+                   FROM ${this.db}."PCH1" L
+                            JOIN ${this.db}."OITM" M ON M."ItemCode" = L."ItemCode"
+                            JOIN ${this.db}."OITB" B ON B."ItmsGrpCod" = M."ItmsGrpCod"
+                   WHERE L."DocEntry" = H."DocEntry"
+               ) X
+      ) AS "groupPairs"
     FROM ${this.db}."OPCH" H
     WHERE
       H."CANCELED" = 'N'
@@ -1899,7 +1910,18 @@ ORDER BY
       D."DocCur" AS "docCur",
       D."DocRate" AS "docRate",
       D."DocTotal" AS "docTotal",
-      D."Comments" AS "comments"
+      D."Comments" AS "comments",
+      (
+          SELECT STRING_AGG(X."pair", '||')
+          FROM (
+                   SELECT DISTINCT
+                       CAST(M."ItmsGrpCod" AS NVARCHAR(20)) || '::' || B."ItmsGrpNam" AS "pair"
+                   FROM ${this.db}."DRF1" L
+                            JOIN ${this.db}."OITM" M ON M."ItemCode" = L."ItemCode"
+                            JOIN ${this.db}."OITB" B ON B."ItmsGrpCod" = M."ItmsGrpCod"
+                   WHERE L."DocEntry" = D."DocEntry"
+               ) X
+      ) AS "groupPairs"
     FROM ${this.db}."ODRF" D
     WHERE
       D."ObjType" = 18
