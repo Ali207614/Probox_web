@@ -59,7 +59,6 @@ OFFSET ${Number(offset) || 0};
 `;
     }
 
-
     getItemGroups({ search = '', limit = 50, offset = 0 } = {}) {
         const hasSearch = String(search || '').trim().length > 0;
 
@@ -94,8 +93,6 @@ OFFSET ${Number(offset) || 0};
             OFFSET ${Number(offset) || 0};
         `;
     }
-
-
 
     async getSalesManager({ login = '', password = '' }) {
         return `
@@ -777,13 +774,27 @@ LIMIT ${limit} OFFSET ${offset};
     }
 
     getRate({ currency = 'UZS', date = '' }) {
-        return  `
+        const cur = this.sqlStr(currency);
+
+        if (date) {
+            return `
+      SELECT T0."RateDate", T0."Currency", T0."Rate"
+      FROM ${this.db}."ORTT" T0
+      WHERE T0."Currency" = '${cur}'
+        AND T0."RateDate" = '${this.sqlStr(date)}'
+      LIMIT 1
+    `;
+        }
+
+        return `
             SELECT T0."RateDate", T0."Currency", T0."Rate"
-            FROM ${this.db}.ORTT T0
-            WHERE T0."Currency" = '${currency}'
-            AND T0."RateDate" = ${date ? `'${date}'` : 'CURRENT_DATE'}
+            FROM ${this.db}."ORTT" T0
+            WHERE T0."Currency" = '${cur}'
+            ORDER BY T0."RateDate" DESC
+                LIMIT 1
         `;
     }
+
 
     getPayList({ docEntry }) {
         return `SELECT
@@ -1061,7 +1072,6 @@ SELECT
   T1."InsTotal",
   T1."InstlmntID",
 
-  -- bu ikkisi aslida SUM emas, lekin sizda shunaqa bo'lgani uchun qoldirdim:
   (SELECT SUM(A1."DocTotal")
    FROM ${this.db}.OINV A1
    WHERE A1."DocEntry" = T0."DocEntry" AND A1."CANCELED" = 'N') AS "Total",
@@ -1089,7 +1099,6 @@ WHERE
   T0."CANCELED" = 'N'
   AND T0."CardCode" IN (SELECT "CardCode" FROM bp_codes)
 
-  -- CreditMemo (ORIN/RIN1) bilan yopilgan invoice'larni chiqarib tashlash
   AND NOT EXISTS (
     SELECT 1
     FROM ${this.db}.RIN1 CM1
@@ -1111,49 +1120,6 @@ ORDER BY
   T1."InstlmntID"
   `;
     }
-
-
-    // getInstallmentPayments(cardCode) {
-    //     return `
-    //        SELECT
-    //             T0."DocEntry",
-    //             T0."CardCode",
-    //             T1."DueDate",
-    //             T1."InsTotal",
-    //             T1."InstlmntID",
-    //             (Select SUM(A1."DocTotal") FROM ${this.db}.OINV A1  WHERE  T0."DocEntry" = A1."DocEntry" and  A1."CANCELED" = 'N') as "Total",
-    //             (Select SUM(A1."PaidToDate") FROM ${this.db}.OINV A1  WHERE T0."DocEntry" = A1."DocEntry" and A1."CANCELED" = 'N') as "TotalPaid",
-    //             SUM(T2."SumApplied") as "SumApplied",
-    //             MAX(T3."DocDate") as "DocDate",
-    //             T3."Canceled"
-    //         FROM ${this.db}.INV6 T1
-    //         INNER JOIN ${this.db}.OINV T0 ON T0."DocEntry" = T1."DocEntry"
-    //          LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry"= T0."DocEntry"
-    //             AND T1."InstlmntID" = T2."InstId"
-    //          LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"
-    //         WHERE
-    //             T0."CardCode" = '${cardCode}' and T0."CANCELED" = 'N'
-    //           AND NOT EXISTS (
-    //             SELECT 1
-    //             FROM ${this.db}.RIN1 CM1
-    //                      INNER JOIN ${this.db}.ORIN CM0
-    //                                 ON CM0."DocEntry" = CM1."DocEntry"
-    //             WHERE CM1."BaseType" = 13              -- A/R Invoice
-    //               AND CM1."BaseEntry" = T0."DocEntry"
-    //         )
-    //         GROUP BY
-    //             T1."InstlmntID",
-    //             T0."DocEntry",
-    //             T0."CardCode",
-    //             T1."DueDate",
-    //             T1."InsTotal",
-    //             T3."DocDate",
-    //             T3."Canceled"
-    //         ORDER BY
-    //             T0."DocEntry",
-    //             T1."InstlmntID";
-    //     `;
-    // }
 
     getDistribution({ startDate, endDate, }) {
         let statusCondition = 'AND ((T0."PaidToDate" = 0) OR (T0."PaidToDate" > 0 AND T0."PaidToDate" < T0."InsTotal"))';
@@ -1267,9 +1233,6 @@ ORDER BY
     ORDER BY S."IMEI";
   `;
     }
-
-
-
 
     getItems({ search, filters = {}, limit = 50, offset = 0, whsCode, includeZeroOnHand = false }) {
         // ❗️OnHand > 0 ni endi flag bo‘yicha qo‘yamiz
