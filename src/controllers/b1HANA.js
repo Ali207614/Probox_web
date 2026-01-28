@@ -2685,28 +2685,22 @@ class b1HANA {
                 ? data.reduce(
                     (acc, item) => ({
                         SumApplied: acc.SumApplied + Number(item.SumApplied ?? 0),
-                        InsTotal: acc.InsTotal + Number(item.InsTotal2 ?? 0),  // ✅ to‘g‘ri
+                        InsTotal: acc.InsTotal + Number(item.InsTotal ?? 0),
                         PaidToDate: acc.PaidToDate + Number(item.PaidToDate ?? 0),
                     }),
                     { SumApplied: 0, InsTotal: 0, PaidToDate: 0 }
                 )
                 : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
-
-
-            if (result.PaidToDate > result.SumApplied) {
-                // bu holatda siz oldin InsTotal ni ham adjust qilgansiz (n bilan).
-                // Bu analytics endpoint uchun ham bir xil bo‘lishi kerak emas (bu business rule),
-                // lekin confiscatedTotal baribir InsTotalga qo‘shilishi shart.
+            if(result.PaidToDate > result.SumApplied){
                 result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
-                result.InsTotal = Number(result.InsTotal) + confiscatedTotal;   // ✅ shart
                 result.PaidToDate = result.SumApplied;
-            } else {
-                result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
-                result.InsTotal = Number(result.InsTotal) + confiscatedTotal;   // ✅ shart
-                result.PaidToDate = Number(result.PaidToDate);
             }
-
+            else{
+                result.SumApplied = Number(result.SumApplied) + confiscatedTotal ;
+                result.InsTotal = Number(result.InsTotal) ;
+                result.PaidToDate = Number(result.PaidToDate) ;
+            }
 
             return res.status(200).json(result);
         }
