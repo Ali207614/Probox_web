@@ -2685,7 +2685,7 @@ class b1HANA {
                 ? data.reduce(
                     (acc, item) => ({
                         SumApplied: acc.SumApplied + Number(item.SumApplied ?? 0),
-                        InsTotal: acc.InsTotal + Number(item.InsTotal ?? 0),
+                        InsTotal: acc.InsTotal + Number(item.InsTotal2 ?? 0),  // ✅ to‘g‘ri
                         PaidToDate: acc.PaidToDate + Number(item.PaidToDate ?? 0),
                     }),
                     { SumApplied: 0, InsTotal: 0, PaidToDate: 0 }
@@ -2695,14 +2695,15 @@ class b1HANA {
 
 
 
+
             if(result.PaidToDate > result.SumApplied){
                 result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
                 result.PaidToDate = result.SumApplied;
             }
-            else{
-                result.SumApplied = Number(result.SumApplied) + confiscatedTotal ;
-                result.InsTotal = Number(result.InsTotal) ;
-                result.PaidToDate = Number(result.PaidToDate) ;
+            else {
+                result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
+                result.InsTotal = Number(result.InsTotal) + confiscatedTotal;  // ✅
+                result.PaidToDate = Number(result.PaidToDate);
             }
 
             return res.status(200).json(result);
