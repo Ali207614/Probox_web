@@ -2624,12 +2624,12 @@ class b1HANA {
 
                 if (result.PaidToDate > result.SumApplied) {
                     const n = result.PaidToDate - result.SumApplied;
-                    result.InsTotal = result.InsTotal - n + confiscatedTotal;
-                    result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
+                    result.InsTotal = result.InsTotal - n + (isUndistributed ? 0 :confiscatedTotal);
+                    result.SumApplied = Number(result.SumApplied) + (isUndistributed ? 0 :confiscatedTotal);
                     result.PaidToDate = result.SumApplied;
                 } else {
-                    result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
-                    result.InsTotal = Number(result.InsTotal) + confiscatedTotal;
+                    result.SumApplied = Number(result.SumApplied) + (isUndistributed ? 0 :confiscatedTotal);
+                    result.InsTotal = Number(result.InsTotal) + (isUndistributed ? 0 :confiscatedTotal);
                     result.PaidToDate = Number(result.PaidToDate);
                 }
 
