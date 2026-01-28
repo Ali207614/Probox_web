@@ -2694,17 +2694,19 @@ class b1HANA {
 
 
 
-
-
-            if(result.PaidToDate > result.SumApplied){
+            if (result.PaidToDate > result.SumApplied) {
+                // bu holatda siz oldin InsTotal ni ham adjust qilgansiz (n bilan).
+                // Bu analytics endpoint uchun ham bir xil bo‘lishi kerak emas (bu business rule),
+                // lekin confiscatedTotal baribir InsTotalga qo‘shilishi shart.
                 result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
+                result.InsTotal = Number(result.InsTotal) + confiscatedTotal;   // ✅ shart
                 result.PaidToDate = result.SumApplied;
-            }
-            else {
+            } else {
                 result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
-                result.InsTotal = Number(result.InsTotal);  // ✅
+                result.InsTotal = Number(result.InsTotal) + confiscatedTotal;   // ✅ shart
                 result.PaidToDate = Number(result.PaidToDate);
             }
+
 
             return res.status(200).json(result);
         }
