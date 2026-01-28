@@ -386,62 +386,106 @@ class b1HANA {
             let invoicesModel = [];
 
             if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
-                let filter = {
-                    SlpCode: { $in: slpCodeArray },
-                    DueDate: {
-                        $gte: startDateMoment,
-                        $lte: endDateMoment
-                    }
-                };
-                let filterPartial = {
-                    SlpCode: { $in: slpCodeArray },
-                    DueDate: {
-                        $gte: startDateMoment,
-                        $lte: endDateMoment
-                    }
+                const isUndistributed = String(slpCode) === '56';
+
+                // 1) Mongo: include/exclude lists
+                let invoicesModel = [];   // include list (oddiy slpCode lar uchun)
+                let excludeModel = [];    // exclude list (slpCode=56 uchun)
+                let partialModel = [];
+
+                // 2) Mongo filters (faqat bo‘linganlar uchun)
+                const baseMongoFilter = {
+                    DueDate: { $gte: startDateMoment, $lte: endDateMoment },
                 };
 
-                if (phoneConfiscated === 'true') {
-                    filter.phoneConfiscated = true;
-                } else if (['false'].includes(phoneConfiscated)) {
-                    filter.$or = [
-                        { phoneConfiscated: false },
-                        { phoneConfiscated: { $exists: false } }
-                    ];
-                }
+                // phoneConfiscated filter (sizdagi logika)
+                const applyPhoneConfiscatedFilter = (f) => {
+                    if (phoneConfiscated === 'true') {
+                        f.phoneConfiscated = true;
+                    } else if (phoneConfiscated === 'false') {
+                        f.$or = [
+                            { phoneConfiscated: false },
+                            { phoneConfiscated: { $exists: false } },
+                        ];
+                    }
+                };
 
-                if (paymentStatus?.split(',').includes('paid') || paymentStatus?.split(',').includes('partial')) {
-                    filterPartial.partial = true
-                }
+                // 3) Undistributed (slpCode=56) => Mongo’dan bo‘linganlarni olib, SAP’da NOT EXISTS qilamiz
+                if (isUndistributed) {
+                    // bu yerda SlpCode IN emas — chunki 56 bo‘linmagan, Mongo’da yo‘q.
+                    // Mongo’da borlari bo‘linganlar, shularni exclude qilamiz.
+                    const excludeFilter = { ...baseMongoFilter };
 
-                let partialModel = []
+                    // Siz xohlasangiz bo‘linganlar sharti: SlpCode mavjud bo‘lsin
+                    excludeFilter.SlpCode = { $exists: true };
 
-                if (get(filterPartial, 'partial')) {
-                    partialModel = await InvoiceModel.find(filterPartial, {
+                    // phoneConfiscated filterini exclude listga qo‘shish shart emas,
+                    // chunki bo‘linmaganlar Mongo’da yo‘q, bu filter SAP natijasiga ta’sir qilmaydi.
+                    // (agar siz 56 uchun ham phoneConfiscated bo‘yicha exclude qilishni xohlasangiz,
+                    // unda bo‘linganlar orasidan phoneConfiscated bo‘yicha ham exclude qilishingiz kerak bo‘ladi.)
+
+                    excludeModel = await InvoiceModel.find(excludeFilter, {
+                        DocEntry: 1,
+                        InstlmntID: 1,
+                    })
+                        .lean();
+                } else {
+                    // 4) Normal case => Mongo’dan bo‘linganlarni olish (include list)
+                    const includeFilter = {
+                        ...baseMongoFilter,
+                        SlpCode: { $in: slpCodeArray },
+                    };
+                    applyPhoneConfiscatedFilter(includeFilter);
+
+                    const partialFilter = {
+                        ...baseMongoFilter,
+                        SlpCode: { $in: slpCodeArray },
+                    };
+                    applyPhoneConfiscatedFilter(partialFilter);
+
+                    // paid/partial bo‘lsa partialModel kerak (sizdagi kabi)
+                    const ps = (paymentStatus || '').split(',').map(s => s.trim());
+                    const needsPartialModel = ps.includes('paid') || ps.includes('partial');
+
+                    if (needsPartialModel) {
+                        partialFilter.partial = true;
+
+                        partialModel = await InvoiceModel.find(partialFilter, {
+                            phoneConfiscated: 1,
+                            DocEntry: 1,
+                            InstlmntID: 1,
+                            SlpCode: 1,
+                            images: 1,
+                            newDueDate: 1,
+                            CardCode: 1,
+                            partial: 1,
+                        })
+                            .sort({ DueDate: 1 })
+                            .hint({ SlpCode: 1, DueDate: 1 })
+                            .lean();
+                    }
+
+                    invoicesModel = await InvoiceModel.find(includeFilter, {
                         phoneConfiscated: 1,
                         DocEntry: 1,
                         InstlmntID: 1,
                         SlpCode: 1,
                         images: 1,
                         newDueDate: 1,
-                        CardCode: 1
-                    }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+                        CardCode: 1,
+                        partial: 1,
+                    })
+                        .sort({ DueDate: 1 })
+                        .hint({ SlpCode: 1, DueDate: 1 })
+                        .lean();
+
+                    // Normal case’da include list bo‘sh bo‘lsa — ha, qaytaramiz (sizdagi kabi)
+                    if (invoicesModel.length === 0) {
+                        return res.status(200).json({ total: 0, page, limit, totalPages: 0, data: [] });
+                    }
                 }
 
-                invoicesModel = await InvoiceModel.find(filter, {
-                    phoneConfiscated: 1,
-                    DocEntry: 1,
-                    InstlmntID: 1,
-                    SlpCode: 1,
-                    images: 1,
-                    newDueDate: 1,
-                    CardCode: 1
-                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
-
-                if (invoicesModel.length === 0) {
-                    return res.status(200).json({ total: 0, page, limit, totalPages: 0, data: [] });
-                }
-
+                // 5) SAP query (include yoki exclude bilan)
                 const query = await DataRepositories.getDistributionInvoice({
                     startDate,
                     endDate,
@@ -451,26 +495,23 @@ class b1HANA {
                     cardCode,
                     serial,
                     phone,
-                    invoices: invoicesModel,
+                    invoices: invoicesModel,          // include list (normal case)
+                    excludeInvoices: excludeModel,    // exclude list (slpCode=56 case)
                     partial: partialModel,
-                    search
+                    search,
                 });
 
                 const invoices = await this.execute(query);
                 const total = get(invoices, '[0].TOTAL', 0) || 0;
 
-                // Map invoiceModel for fast lookup
-                const invoiceMap = new Map();
-                for (const inv of invoicesModel) {
-                    invoiceMap.set(`${inv.DocEntry}_${inv.InstlmntID}`, inv);
-                }
-
                 const commentFilter = invoices.map(el => ({
                     DocEntry: el.DocEntry,
-                    InstlmntID: el.InstlmntID
+                    InstlmntID: el.InstlmntID,
                 }));
 
-                const comments = await CommentModel.find({ $or: commentFilter }).sort({ created_at: 1 });
+                const comments = commentFilter.length
+                    ? await CommentModel.find({ $or: commentFilter }).sort({ created_at: 1 })
+                    : [];
 
                 const commentMap = {};
                 for (const c of comments) {
@@ -479,9 +520,10 @@ class b1HANA {
                     commentMap[key].push(c);
                 }
 
-                let userModel = await UserModel.find({
-                    CardCode: { $in: invoices.map(el => el.CardCode) }
-                });
+                const cardCodes = invoices.map(el => el.CardCode).filter(Boolean);
+                const userModel = cardCodes.length
+                    ? await UserModel.find({ CardCode: { $in: cardCodes } })
+                    : [];
 
                 const userLocationMap = new Map();
                 userModel.forEach(user => {
@@ -493,23 +535,30 @@ class b1HANA {
                     }
                 });
 
+                const invoiceMap = new Map();
+                if (!isUndistributed) {
+                    for (const inv of invoicesModel) {
+                        invoiceMap.set(`${inv.DocEntry}_${inv.InstlmntID}`, inv);
+                    }
+                }
+
                 const data = invoices.map(el => {
                     const key = `${el.DocEntry}_${el.InstlmntID}`;
-                    const inv = invoiceMap.get(key);
+                    const inv = invoiceMap.get(key); // 56 bo‘lsa undefined bo‘ladi
                     const userLocation = userLocationMap.get(el.CardCode) || {};
 
                     return {
                         ...el,
-                        SlpCode: inv?.SlpCode || null,
-                        Images: inv?.images || [],
-                        NewDueDate: inv?.newDueDate || '',
+                        SlpCode: inv?.SlpCode ?? null,
+                        Images: inv?.images ?? [],
+                        NewDueDate: inv?.newDueDate ?? '',
                         Comments: commentMap[key] || [],
-                        phoneConfiscated: inv?.phoneConfiscated || false,
-                        partial: inv?.partial || false,
-                        location:{
+                        phoneConfiscated: inv?.phoneConfiscated ?? false,
+                        partial: inv?.partial ?? false,
+                        location: {
                             lat: userLocation.lat || null,
                             long: userLocation.long || null,
-                        }
+                        },
                     };
                 });
 
@@ -518,9 +567,10 @@ class b1HANA {
                     page,
                     limit,
                     totalPages: Math.ceil(total / limit),
-                    data
+                    data,
                 });
             }
+
 
             // slpCode bo'lmagan holat
             let baseFilter = {
@@ -2482,60 +2532,102 @@ class b1HANA {
             const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
             const tz = 'Asia/Tashkent'
             if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
-                let filter = {
-                    SlpCode: { $in: slpCodeArray },
-                    DueDate: {
-                        $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                        $lte: moment(endDate, 'YYYY.MM.DD').endOf('day').toDate(),
-                    }
+                const isUndistributed = String(slpCode) === '56';
+
+                const startDateMoment = moment(startDate, 'YYYY.MM.DD').startOf('day').toDate();
+                const endDateMoment = moment(endDate, 'YYYY.MM.DD').endOf('day').toDate();
+
+                // Mongo: bo‘linganlar modeli (InvoiceModel faqat bo‘linganlarni saqlaydi)
+                const baseMongoFilter = {
+                    DueDate: { $gte: startDateMoment, $lte: endDateMoment },
                 };
 
-                // if (phoneConfiscated === 'true') {
-                //     filter.phoneConfiscated = true;
-                // } else if (['false'].includes(phoneConfiscated)) {
-                //     filter.$or = [
-                //         { phoneConfiscated: false },
-                //         { phoneConfiscated: { $exists: false } }
-                //     ];
-                // }
+                let invoicesModel = [];    // normal case: include list
+                let excludeModel = [];     // slpCode=56: exclude list
 
-                let invoicesModel = await InvoiceModel.find(filter, {
-                    phoneConfiscated: 1,
-                    DocEntry: 1,
-                    InstlmntID: 1,
-                    SlpCode: 1,
-                    images: 1,
-                    newDueDate: 1,
-                    CardCode: 1,
-                    InsTotal: 1
-                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+                if (isUndistributed) {
+                    // 56 => bo‘linmaganlar: SAP’dan chiqadi
+                    // Mongo’dan shu range ichida bo‘linganlarni olamiz va SAP’da NOT EXISTS qilamiz
+                    const excludeFilter = { ...baseMongoFilter };
 
-                if (invoicesModel.length === 0) {
-                    return res.status(200).json({
-                        SumApplied: 0,
-                        InsTotal: 0,
-                        PaidToDate: 0
-                    });
+                    // agar sizda bo‘linganlik sharti aniq bo‘lsa qo‘shing (masalan SlpCode mavjud)
+                    excludeFilter.SlpCode = { $exists: true };
+
+                    excludeModel = await InvoiceModel.find(excludeFilter, {
+                        DocEntry: 1,
+                        InstlmntID: 1,
+                        phoneConfiscated: 1,
+                        InsTotal: 1,
+                    })
+                        .lean();
+                } else {
+                    // normal => faqat shu slpCodeArray bo‘yicha bo‘linganlar
+                    const includeFilter = {
+                        ...baseMongoFilter,
+                        SlpCode: { $in: slpCodeArray },
+                    };
+
+                    invoicesModel = await InvoiceModel.find(includeFilter, {
+                        phoneConfiscated: 1,
+                        DocEntry: 1,
+                        InstlmntID: 1,
+                        SlpCode: 1,
+                        images: 1,
+                        newDueDate: 1,
+                        CardCode: 1,
+                        InsTotal: 1,
+                    })
+                        .sort({ DueDate: 1 })
+                        .hint({ SlpCode: 1, DueDate: 1 })
+                        .lean();
+
+                    // normal case’da include list bo‘sh bo‘lsa — 0 qaytarish mantiqiy
+                    if (invoicesModel.length === 0) {
+                        return res.status(200).json({ SumApplied: 0, InsTotal: 0, PaidToDate: 0 });
+                    }
                 }
-                let phoneConfisList = invoicesModel.filter(item => !item?.phoneConfiscated)
-                let confiscatedTotal = invoicesModel.filter(item => item?.phoneConfiscated)?.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) || 0
 
-                if (phoneConfisList.length === 0) {
-                    let obj = {
+                /**
+                 * Phone confiscated logikasi:
+                 * Siz bu yerda "Mongo’da phoneConfiscated true bo‘lganlarini SAP query’dan chetlatib,
+                 * confiscatedTotal ni qo‘shib qo‘yayapsiz."
+                 *
+                 * 56 holatda: invoicesModel yo‘q, excludeModel bor.
+                 * ConfiscatedTotal ni qayerdan olamiz?
+                 * - Siz istasangiz bo‘linmaganlar uchun confiscated umuman bo‘lmaydi (Mongo’da yo‘q), demak 0.
+                 * - Yoki: excludeModel ichidan phoneConfiscated true bo‘lganlarni ham hisoblash mumkin (bo‘linganlar orasidan).
+                 * Men pastda 56 holatda ham excludeModel dan confiscatedTotal hisoblayman (sizdagi semantikaga yaqin).
+                 */
+
+                const sourceForConfiscated = isUndistributed ? excludeModel : invoicesModel;
+
+                const phoneConfisList = (isUndistributed ? [] : invoicesModel).filter(item => !item?.phoneConfiscated);
+                const confiscatedTotal =
+                    sourceForConfiscated
+                        .filter(item => item?.phoneConfiscated)
+                        .reduce((a, b) => a + Number(b?.InsTotal || 0), 0) || 0;
+
+                // Agar normal case’da hammasi confiscated bo‘lsa — sizdagi kabi to‘liq shu summani qaytaramiz
+                if (!isUndistributed && phoneConfisList.length === 0) {
+                    const obj = {
                         SumApplied: confiscatedTotal,
                         InsTotal: confiscatedTotal,
-                        PaidToDate: confiscatedTotal
+                        PaidToDate: confiscatedTotal,
                     };
                     return res.status(200).json(obj);
                 }
 
+                // SAP analytics query:
                 const query = await DataRepositories.getAnalytics({
                     startDate,
                     endDate,
-                    invoices: phoneConfisList,
-                    // phoneConfiscated: 'false'
+                    invoices: phoneConfisList,        // normal case include (confiscatedlar olib tashlangan)
+                    excludeInvoices: excludeModel,    // 56 case exclude
+                    isUndistributed,                 // flag
                 });
-                let data = await this.execute(query);
+
+                const data = await this.execute(query);
+
                 const result = data.length
                     ? data.reduce(
                         (acc, item) => ({
@@ -2547,20 +2639,21 @@ class b1HANA {
                     )
                     : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
-                if(result.PaidToDate > result.SumApplied){
-                    let n = result.PaidToDate - result.SumApplied;
+                // Sizdagi post-fix logika (saqlab qoldim)
+                if (result.PaidToDate > result.SumApplied) {
+                    const n = result.PaidToDate - result.SumApplied;
                     result.InsTotal = result.InsTotal - n + confiscatedTotal;
                     result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
                     result.PaidToDate = result.SumApplied;
-                }
-                else{
-                    result.SumApplied = Number(result.SumApplied) + confiscatedTotal ;
-                    result.InsTotal = Number(result.InsTotal) + confiscatedTotal ;
-                    result.PaidToDate = Number(result.PaidToDate) ;
+                } else {
+                    result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
+                    result.InsTotal = Number(result.InsTotal) + confiscatedTotal;
+                    result.PaidToDate = Number(result.PaidToDate);
                 }
 
                 return res.status(200).json(result);
             }
+
 
             let baseFilter = {
                 DueDate: {

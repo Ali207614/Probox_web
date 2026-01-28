@@ -278,13 +278,13 @@ OFFSET ${Number(offset) || 0};
                 `;
     }
 
-    async getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices, search, partial }) {
+    async getDistributionInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, invoices,excludeInvoices, search, partial }) {
         let statusCondition = '';
         let businessPartnerCondition = '';
         let seriesCondition = '';
         let phoneCondition = '';
         let salesCondition = '';
-
+        let excludeCondition = '';
 
         let searchCondition = '';
         if (search) {
@@ -337,35 +337,47 @@ OFFSET ${Number(offset) || 0};
             }
         }
 
-        // 2. CARD CODE filter
         if (cardCode) {
             businessPartnerCondition = `AND T2."CardCode" = '${cardCode}'`;
         }
 
-        // 3. SERIAL filter
         if (serial) {
             const serialPatched = serial.toUpperCase().replace(/'/g, "");
             seriesCondition = `AND UPPER(TOSRI."IntrSerial") LIKE '%${serialPatched}%'`;
         }
 
-        // 4. PHONE filter
         if (phone && phone !== '998') {
             const trimmedPhone = phone.startsWith('998') ? phone.slice(3) : phone;
             phoneCondition = `AND (T2."Phone1" LIKE '%${trimmedPhone}%' OR T2."Phone2" LIKE '%${trimmedPhone}%')`;
         }
 
-        // 5. SALES CONDITION (EXISTS bilan)
-        if (invoices.length > 0) {
+
+        if (invoices?.length > 0) {
             salesCondition = `
-        AND EXISTS (
-            SELECT 1 FROM DUMMY
-            WHERE (
-                ${invoices.map(item =>
-                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
+    AND EXISTS (
+      SELECT 1 FROM DUMMY
+      WHERE (
+        ${invoices.map(item =>
+                `(T0."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
             ).join(' OR ')}
-            )
-        )`;
+      )
+    )
+  `;
         }
+
+        if (excludeInvoices?.length > 0) {
+            excludeCondition = `
+    AND NOT EXISTS (
+      SELECT 1 FROM DUMMY
+      WHERE (
+        ${excludeInvoices.map(item =>
+                `(T0."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
+            ).join(' OR ')}
+      )
+    )
+  `;
+        }
+
 
         return `
         WITH base_data AS (
@@ -417,6 +429,7 @@ OFFSET ${Number(offset) || 0};
                 ${seriesCondition}
                 ${phoneCondition}
                 ${salesCondition}
+                ${excludeCondition}
                 ${searchCondition}
             GROUP BY T0."DocEntry", T0."InstlmntID" ,T1."DocTotal", 
             T1."PaidToDate" , T1."DocTotalFC", T1."PaidFC" , T1."DocCur"
@@ -878,65 +891,82 @@ ORDER BY
 `
     }
 
-    getAnalytics({ startDate, endDate, invoices = [], phoneConfiscated }) {
-        let salesCondition = '';
+    getAnalytics({ startDate, endDate, invoices = [], excludeInvoices = [], isUndistributed }) {
+        let includeCondition = '';
+        let excludeCondition = '';
 
-        if (invoices.length > 0) {
-            const condition = invoices.map(item =>
-                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
-            ).join(' OR ');
+        // normal case: invoices (include list) bo‘yicha cheklaymiz
+        if (!isUndistributed && invoices.length > 0) {
+            const condition = invoices
+                .map(item => `(T0."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`)
+                .join(' OR ');
 
-            salesCondition = `
-                ${phoneConfiscated === 'true' ? 'AND NOT EXISTS' : 'AND EXISTS'} (
-                    SELECT 1 FROM DUMMY
-                    WHERE ${condition}
-                )
-            `;
+            includeCondition = `
+      AND EXISTS (
+        SELECT 1 FROM DUMMY
+        WHERE (${condition})
+      )
+    `;
         }
 
-        const newEndDate = moment(endDate, 'YYYY.MM.DD')
-            .endOf('month')
-            .add(10, 'days')
-            .format('YYYY.MM.DD');
+        // 56 case: excludeInvoices bo‘yicha chiqarib tashlaymiz
+        if (isUndistributed && excludeInvoices.length > 0) {
+            const condition = excludeInvoices
+                .map(item => `(T0."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`)
+                .join(' OR ');
 
-        console.log(startDate , endDate , newEndDate , " get Analytics")
+            excludeCondition = `
+      AND NOT EXISTS (
+        SELECT 1 FROM DUMMY
+        WHERE (${condition})
+      )
+    `;
+        }
 
-        let sql = `SELECT 
-            SUM(T2."SumApplied") as "SumApplied",
-            (
-                SELECT SUM(T0."InsTotal")
-                FROM ${this.db}.INV6 T0
-                JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-                WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-                  AND T1."CANCELED" = 'N' and T1."CardCode" not in ('Naqd','Bonus')
-                  AND NOT EXISTS (
-                    SELECT 1
-                    FROM ${this.db}.RIN1 CM1
-                             INNER JOIN ${this.db}.ORIN CM0
-                                        ON CM0."DocEntry" = CM1."DocEntry"
-                    WHERE CM1."BaseType" = 13              -- A/R Invoice
-                      AND CM1."BaseEntry" = T1."DocEntry"
-                )
-           ) AS "InsTotal",
-            SUM(T0."PaidToDate") as "PaidToDate",
-            SUM(T0."InsTotal") as "InsTotal2"
-        FROM 
-        ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
-        LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry"  and T3."Canceled" = 'N' 
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N' and T1."CardCode" not in ('Naqd','Bonus')
-        AND NOT EXISTS (
-            SELECT 1
-            FROM ${this.db}.RIN1 CM1
-                     INNER JOIN ${this.db}.ORIN CM0
-                                ON CM0."DocEntry" = CM1."DocEntry"
-            WHERE CM1."BaseType" = 13              -- A/R Invoice
-              AND CM1."BaseEntry" = T1."DocEntry"  -- shu invoice
-        )
-        ${salesCondition}
-        `
-        return sql
+        // Sizda newEndDate bor edi, lekin ishlatilmayapti — olib tashladim.
+        // Agar kerak bo‘lsa qo‘shamiz.
+
+        return `
+SELECT 
+  SUM(T2."SumApplied") as "SumApplied",
+  (
+    SELECT SUM(T0a."InsTotal")
+    FROM ${this.db}.INV6 T0a
+    JOIN ${this.db}.OINV T1a ON T0a."DocEntry" = T1a."DocEntry"
+    WHERE T0a."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+      AND T1a."CANCELED" = 'N'
+      AND T1a."CardCode" NOT IN ('Naqd','Bonus')
+      AND NOT EXISTS (
+        SELECT 1
+        FROM ${this.db}.RIN1 CM1
+        INNER JOIN ${this.db}.ORIN CM0 ON CM0."DocEntry" = CM1."DocEntry"
+        WHERE CM1."BaseType" = 13
+          AND CM1."BaseEntry" = T1a."DocEntry"
+      )
+      ${includeCondition.replace(/T0\./g, 'T0a.')}
+      ${excludeCondition.replace(/T0\./g, 'T0a.')}
+  ) AS "InsTotal",
+  SUM(T0."PaidToDate") as "PaidToDate",
+  SUM(T0."InsTotal") as "InsTotal2"
+FROM ${this.db}.INV6 T0
+INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry" AND T0."InstlmntID" = T2."InstId"
+LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" AND T3."Canceled" = 'N'
+WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
+  AND T1."CANCELED" = 'N'
+  AND T1."CardCode" NOT IN ('Naqd','Bonus')
+  AND NOT EXISTS (
+    SELECT 1
+    FROM ${this.db}.RIN1 CM1
+    INNER JOIN ${this.db}.ORIN CM0 ON CM0."DocEntry" = CM1."DocEntry"
+    WHERE CM1."BaseType" = 13
+      AND CM1."BaseEntry" = T1."DocEntry"
+  )
+  ${includeCondition}
+  ${excludeCondition}
+`;
     }
+
 
     getAnalyticsByDay({ startDate, endDate, invoices = [], phoneConfiscated }) {
         let salesCondition = '';
