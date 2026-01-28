@@ -897,6 +897,7 @@ ORDER BY
 
         // normal case: invoices (include list) bo‘yicha cheklaymiz
         if (!isUndistributed && invoices.length > 0) {
+
             const condition = invoices
                 .map(item => `(T0."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`)
                 .join(' OR ');

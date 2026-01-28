@@ -2678,7 +2678,7 @@ class b1HANA {
 
 
             let confiscatedTotal = invoiceConfiscated.length ? invoiceConfiscated.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) : 0
-            const query = await DataRepositories.getAnalytics({ startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
+            const query = await DataRepositories.getAnalytics({isUndistributed:true, startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
 
             let data = await this.execute(query)
             let result = data.length
