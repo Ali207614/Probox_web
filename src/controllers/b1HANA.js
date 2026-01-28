@@ -2702,7 +2702,7 @@ class b1HANA {
             }
             else {
                 result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
-                result.InsTotal = Number(result.InsTotal) + confiscatedTotal;  // ✅
+                result.InsTotal = Number(result.InsTotal);  // ✅
                 result.PaidToDate = Number(result.PaidToDate);
             }
 
