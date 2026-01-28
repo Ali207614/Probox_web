@@ -212,7 +212,7 @@ OFFSET ${Number(offset) || 0};
                 STRING_AGG(TOSRI."IntrSerial", ', ') AS "IntrSerial",
                 Max(T2."Cellular") as "Cellular"
             FROM ${this.db}.INV6 T0
-            INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+            INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" and T1."CardCode" NOT IN ('Naqd','Bonus')
             INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
             INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
             LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
@@ -406,7 +406,7 @@ OFFSET ${Number(offset) || 0};
                 Max(T2."Cellular") as "Cellular"
 
             FROM ${this.db}.INV6 T0
-            INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
+            INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" and T1."CardCode" NOT IN ('Naqd','Bonus')
             INNER JOIN ${this.db}.OCRD T2 ON T1."CardCode" = T2."CardCode"
             INNER JOIN ${this.db}.INV1 T3 ON T1."DocEntry" = T3."DocEntry"
             LEFT JOIN ${this.db}.SRI1 TSRI1 ON T3."DocEntry" = TSRI1."BaseEntry"
@@ -808,7 +808,6 @@ LIMIT ${limit} OFFSET ${offset};
         `;
     }
 
-
     getPayList({ docEntry }) {
         return `SELECT
     T1."Canceled",
@@ -967,7 +966,6 @@ WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
   ${excludeCondition}
 `;
     }
-
 
     getAnalyticsByDay({ startDate, endDate, invoices = [], phoneConfiscated }) {
         let salesCondition = '';
@@ -1942,7 +1940,6 @@ ORDER BY
         return { dataSql, countSql };
     }
 
-
     getPurchaseDetail({ source, docEntry }) {
         const isDoc = String(source) === 'doc';
         const docEntryNum = this.sqlNum(docEntry, 0);
@@ -2026,9 +2023,6 @@ ORDER BY
 
         return { headerSql, dataSql };
     }
-
-
-
 }
 
 module.exports = new DataRepositories(db);
