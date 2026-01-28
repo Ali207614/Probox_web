@@ -2537,20 +2537,17 @@ class b1HANA {
                 const startDateMoment = moment(startDate, 'YYYY.MM.DD').startOf('day').toDate();
                 const endDateMoment = moment(endDate, 'YYYY.MM.DD').endOf('day').toDate();
 
-                // Mongo: bo‘linganlar modeli (InvoiceModel faqat bo‘linganlarni saqlaydi)
                 const baseMongoFilter = {
                     DueDate: { $gte: startDateMoment, $lte: endDateMoment },
                 };
 
-                let invoicesModel = [];    // normal case: include list
-                let excludeModel = [];     // slpCode=56: exclude list
+
+                let invoicesModel = [];
+                let excludeModel = [];
 
                 if (isUndistributed) {
-                    // 56 => bo‘linmaganlar: SAP’dan chiqadi
-                    // Mongo’dan shu range ichida bo‘linganlarni olamiz va SAP’da NOT EXISTS qilamiz
                     const excludeFilter = { ...baseMongoFilter };
 
-                    // agar sizda bo‘linganlik sharti aniq bo‘lsa qo‘shing (masalan SlpCode mavjud)
                     excludeFilter.SlpCode = { $exists: true };
 
                     excludeModel = await InvoiceModel.find(excludeFilter, {
@@ -2561,7 +2558,6 @@ class b1HANA {
                     })
                         .lean();
                 } else {
-                    // normal => faqat shu slpCodeArray bo‘yicha bo‘linganlar
                     const includeFilter = {
                         ...baseMongoFilter,
                         SlpCode: { $in: slpCodeArray },
@@ -2581,33 +2577,21 @@ class b1HANA {
                         .hint({ SlpCode: 1, DueDate: 1 })
                         .lean();
 
-                    // normal case’da include list bo‘sh bo‘lsa — 0 qaytarish mantiqiy
                     if (invoicesModel.length === 0) {
                         return res.status(200).json({ SumApplied: 0, InsTotal: 0, PaidToDate: 0 });
                     }
                 }
 
-                /**
-                 * Phone confiscated logikasi:
-                 * Siz bu yerda "Mongo’da phoneConfiscated true bo‘lganlarini SAP query’dan chetlatib,
-                 * confiscatedTotal ni qo‘shib qo‘yayapsiz."
-                 *
-                 * 56 holatda: invoicesModel yo‘q, excludeModel bor.
-                 * ConfiscatedTotal ni qayerdan olamiz?
-                 * - Siz istasangiz bo‘linmaganlar uchun confiscated umuman bo‘lmaydi (Mongo’da yo‘q), demak 0.
-                 * - Yoki: excludeModel ichidan phoneConfiscated true bo‘lganlarni ham hisoblash mumkin (bo‘linganlar orasidan).
-                 * Men pastda 56 holatda ham excludeModel dan confiscatedTotal hisoblayman (sizdagi semantikaga yaqin).
-                 */
-
                 const sourceForConfiscated = isUndistributed ? excludeModel : invoicesModel;
-
                 const phoneConfisList = (isUndistributed ? [] : invoicesModel).filter(item => !item?.phoneConfiscated);
                 const confiscatedTotal =
                     sourceForConfiscated
                         .filter(item => item?.phoneConfiscated)
                         .reduce((a, b) => a + Number(b?.InsTotal || 0), 0) || 0;
 
-                // Agar normal case’da hammasi confiscated bo‘lsa — sizdagi kabi to‘liq shu summani qaytaramiz
+                console.log(startDateMoment, endDateMoment, excludeModel.length , invoicesModel.length, phoneConfisList,confiscatedTotal ," buuuuuu")
+
+
                 if (!isUndistributed && phoneConfisList.length === 0) {
                     const obj = {
                         SumApplied: confiscatedTotal,
@@ -2617,13 +2601,12 @@ class b1HANA {
                     return res.status(200).json(obj);
                 }
 
-                // SAP analytics query:
                 const query = await DataRepositories.getAnalytics({
                     startDate,
                     endDate,
-                    invoices: phoneConfisList,        // normal case include (confiscatedlar olib tashlangan)
-                    excludeInvoices: excludeModel,    // 56 case exclude
-                    isUndistributed,                 // flag
+                    invoices: phoneConfisList,
+                    excludeInvoices: excludeModel,
+                    isUndistributed,
                 });
 
                 const data = await this.execute(query);
@@ -2639,7 +2622,6 @@ class b1HANA {
                     )
                     : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
-                // Sizdagi post-fix logika (saqlab qoldim)
                 if (result.PaidToDate > result.SumApplied) {
                     const n = result.PaidToDate - result.SumApplied;
                     result.InsTotal = result.InsTotal - n + confiscatedTotal;
