@@ -3743,7 +3743,7 @@ class b1HANA {
                         ...item,
                         Comments: item.message,
                         SlpCode: item.createdBy,
-
+                        Image:null,
                         ...(audioUrl
                             ? {
                                 Audio: {
