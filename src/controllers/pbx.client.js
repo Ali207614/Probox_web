@@ -3,7 +3,7 @@ const axios = require('axios');
 
 function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru' }) {
     const baseURL = `${apiHost}/${domain}`;
-    console.log(`OnlinePBX API baseURL: ${baseURL}`);
+
     const api = axios.create({
         baseURL,
         timeout: 30000,
