@@ -37,7 +37,7 @@ const pbxClient = createOnlinePbx({
     apiHost: process.env.PBX_API_HOST || 'https://api2.onlinepbx.ru',
 });
 
-cosnole.log({
+console.log({
     domain: process.env.PBX_DOMAIN,
     authKey: process.env.PBX_AUTH_KEY,
     apiHost: process.env.PBX_API_HOST || 'https://api2.onlinepbx.ru',
