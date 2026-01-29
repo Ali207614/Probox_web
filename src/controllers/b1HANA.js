@@ -3172,9 +3172,9 @@ class b1HANA {
             const filter = {};
             if (DocEntry) filter.DocEntry = DocEntry;
 
-            const comments = await CommentModel.find(filter).sort({ created_at: 1 });
+            const comments = await CommentModel.find(filter).sort({ created_at: 1 }).lean();
 
-            return res.status(200).json(comments);
+            return res.status(200).json(comments.map(el => ({ ...el, Audio:{...el.Audio, url: el.Audio?.url ? `images/${el.Audio?.url}` : null }})));
         } catch (e) {
             next(e);
         }
