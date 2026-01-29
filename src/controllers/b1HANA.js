@@ -38,12 +38,6 @@ const pbxClient = createOnlinePbx({
     apiHost: process.env.PBX_API_HOST || 'https://api2.onlinepbx.ru',
 });
 
-console.log({
-    domain: process.env.PBX_DOMAIN,
-    authKey: process.env.PBX_AUTH_KEY,
-    apiHost: process.env.PBX_API_HOST || 'https://api2.onlinepbx.ru',
-})
-
 
 class b1HANA {
     getPurchaseDetail = async (req, res, next) => {
@@ -3742,7 +3736,7 @@ class b1HANA {
                 totalPages: Math.ceil(total / limit),
                 data: items.map((item) => {
                     const audioUrl = item?.pbx?.uuid
-                        ? `/api/leads/${id}/chats/recordings/${item.pbx.uuid}.mp3`
+                        ? `/audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
                         : (item?.Audio?.url ?? null);
 
                     return {
