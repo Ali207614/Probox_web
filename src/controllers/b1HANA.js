@@ -55,7 +55,11 @@ class b1HANA {
 
             const items = await this.execute(dataSql);
 
-            res.json({ header, items });
+            res.json({
+                ...header,
+                whsCode: items?.[0]?.whsCode ?? null,
+                items,
+            });
         } catch (e) {
             next(e);
         }
@@ -3662,24 +3666,39 @@ class b1HANA {
     getChats = async (req, res, next) => {
         try {
             const { id } = req.params;
-            let { page = 1, limit = 20 } = req.query;
+            let { page = 1, limit = 20, includeDeleted = 'false' } = req.query;
 
             page = Number(page);
             limit = Number(limit);
 
-            const lead = await LeadModel.findById(id);
-            if (!lead) return res.status(404).json({ message: "Lead not found" });
+            if (!Number.isFinite(page) || page < 1) page = 1;
+            if (!Number.isFinite(limit) || limit < 1) limit = 20;
+            if (limit > 100) limit = 100;
+
+            const lead = await LeadModel.findById(id).select('_id').lean();
+            if (!lead) return res.status(404).json({ message: 'Lead not found' });
+
+            const userRole = req.user?.U_role;
+            const isAdmin = userRole === 'Admin';
+            const wantIncludeDeleted = String(includeDeleted).toLowerCase() === 'true';
+
+            const filter = { leadId: id };
+
+            // Admin bo‘lmasa — o‘chirilganlarni ko‘rsatmaymiz
+            // Admin bo‘lsa ham default: ko‘rsatmaymiz (faqat includeDeleted=true bo‘lsa)
+            if (!isAdmin || !wantIncludeDeleted) {
+                filter.isDeleted = { $ne: true };
+            }
 
             const skip = (page - 1) * limit;
 
             const [items, total] = await Promise.all([
-                LeadChat.find({ leadId: id })
+                LeadChat.find(filter)
                     .sort({ createdAt: 1 })
                     .skip(skip)
                     .limit(limit)
-                    .lean()
-                ,
-                LeadChat.countDocuments({ leadId: id })
+                    .lean(),
+                LeadChat.countDocuments(filter),
             ]);
 
             return res.json({
@@ -3687,9 +3706,16 @@ class b1HANA {
                 limit,
                 total,
                 totalPages: Math.ceil(total / limit),
-                data: items.map(item => ({ ...item,Comments: item.message, SlpCode: item.createdBy })),
+                data: items.map((item) => ({
+                    ...item,
+                    Comments: item.message, // sizda "Comments" kerak bo‘lsa
+                    SlpCode: item.createdBy,
+                    // xohlasangiz deleted fieldlarni ham qaytaring:
+                    // isDeleted: item.isDeleted,
+                    // deletedAt: item.deletedAt,
+                    // deletedBy: item.deletedBy,
+                })),
             });
-
         } catch (err) {
             next(err);
         }
@@ -3729,23 +3755,33 @@ class b1HANA {
     deleteChat = async (req, res, next) => {
         try {
             const { chatId } = req.params;
-            const userId = req.user.SlpCode;
-            const userRole = req.user.U_role;
 
-            const chat = await LeadChat.findById(chatId);
-            if (!chat) return res.status(404).json({ message: "Chat not found" });
+            const userId = Number(req.user.SlpCode);
+            const userRole = req.user.U_role; // "Admin" bo‘lsa bypass
 
-            if (String(chat.createdBy) !== String(userId) && userRole !== "Admin") {
-                return res.status(403).json({ message: "Access denied" });
+            const chat = await LeadChat.findOne({ _id: chatId, isDeleted: { $ne: true } });
+            if (!chat) return res.status(404).json({ message: 'Chat not found' });
+
+            const isOwner = Number(chat.createdBy) === userId;
+            const isAdmin = userRole === 'Admin';
+
+            if (!isOwner && !isAdmin) {
+                return res.status(403).json({ message: 'Access denied' });
             }
 
-            await chat.deleteOne();
+            chat.isDeleted = true;
+            chat.deletedAt = new Date();
+            chat.deletedBy = userId;
+            chat.deletedByRole = userRole;
 
-            return res.json({ message: "Chat deleted" });
+            await chat.save();
+
+            return res.json({ message: 'Chat deleted' });
         } catch (err) {
             next(err);
         }
     };
+
 }
 
 module.exports = new b1HANA();

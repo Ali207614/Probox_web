@@ -643,65 +643,6 @@ class b1SL {
         }
     };
 
-    findOrCreateBusinessPartner = async (phone, cardName) => {
-        if (!phone) return null;
-
-        function normalizePhone(input) {
-            if (!input) return null;
-            let digits = String(input).replace(/\D/g, '');
-
-            if (digits.startsWith('998') && digits.length > 9) {
-                digits = digits.slice(3);
-            }
-
-            if (digits.length === 10 && digits.startsWith('0')) {
-                digits = digits.slice(1);
-            }
-            return digits;
-        }
-
-        const digits = normalizePhone(phone);
-
-        const query = `
-        SELECT "CardCode", "CardName", "Phone1", "Phone2"
-        FROM ${db}.OCRD
-        WHERE "Phone1" LIKE '%${digits}' OR "Phone2" LIKE '%${digits}'
-    `;
-
-        console.log("SAP query:", query);
-
-        try {
-            const rows = await execute(query);
-
-            if (rows && rows.length > 0) {
-                return {
-                    cardCode: rows[0].CardCode,
-                    cardName: rows[0].CardName,
-                    created: false,
-                };
-            }
-        } catch (err) {
-            console.error("SAP search error:", err);
-        }
-
-        const bp = await this.createBusinessPartner({
-            Phone1: phone,
-            Phone2: '',
-            CardName: cardName || "No Name",
-        });
-
-        if (!bp?.CardCode) {
-            console.error("BP create error:", bp?.message);
-            return null;
-        }
-
-        return {
-            cardCode: bp.CardCode,
-            cardName: cardName || "No Name",
-            created: true,
-        };
-    }
-
     createPurchaseDraft = async (req, res, next) => {
         try {
             const { cardCode, docDate, whsCode, comments, rows } = req.body;

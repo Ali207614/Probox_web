@@ -17,7 +17,25 @@ const LeadChatSchema = new Schema(
             type: String,
             required: true,
             trim: true,
-        }
+        },
+        isDeleted: {
+            type: Boolean,
+            default: false,
+            index: true,
+        },
+        deletedAt: {
+            type: Date,
+            default: null,
+        },
+        deletedBy: {
+            type: Number, // kim o‘chirdi (SlpCode)
+            default: null,
+            index: true,
+        },
+        deletedByRole: {
+            type: String, // optional: "Admin" / "User" etc.
+            default: null,
+        },
     },
     { timestamps: true } // createdAt, updatedAt
 );
