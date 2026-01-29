@@ -3736,7 +3736,7 @@ class b1HANA {
                 totalPages: Math.ceil(total / limit),
                 data: items.map((item) => {
                     const audioUrl = item?.pbx?.uuid
-                        ? `/audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
+                        ? `audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
                         : (item?.Audio?.url ?? null);
 
                     return {
