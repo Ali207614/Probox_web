@@ -643,6 +643,7 @@ class b1SL {
         }
     };
 
+
     createPurchaseDraft = async (req, res, next) => {
         try {
             const { cardCode, docDate, whsCode, comments, rows } = req.body;

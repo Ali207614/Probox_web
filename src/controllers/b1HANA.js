@@ -28,6 +28,12 @@ const LeadLimitUsageModel = require('../models/lead-limit-usage');
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
+const { createOnlinePbx } = require('./pbx.client');
+
+const pbxClient = createOnlinePbx({
+    domain: process.env.PBX_DOMAIN,
+    authKey: process.env.PBX_AUTH_KEY,
+});
 
 class b1HANA {
     getPurchaseDetail = async (req, res, next) => {
@@ -3670,7 +3676,6 @@ class b1HANA {
 
             page = Number(page);
             limit = Number(limit);
-
             if (!Number.isFinite(page) || page < 1) page = 1;
             if (!Number.isFinite(limit) || limit < 1) limit = 20;
             if (limit > 100) limit = 100;
@@ -3678,48 +3683,125 @@ class b1HANA {
             const lead = await LeadModel.findById(id).select('_id').lean();
             if (!lead) return res.status(404).json({ message: 'Lead not found' });
 
+            // ✅ faqat 1-sahifada sync qiling (har page’da emas)
+            if (page === 1) {
+                await syncLeadPbxChats({ pbxClient, leadId: id });
+            }
+
             const userRole = req.user?.U_role;
             const isAdmin = userRole === 'Admin';
             const wantIncludeDeleted = String(includeDeleted).toLowerCase() === 'true';
 
             const filter = { leadId: id };
-
-            // Admin bo‘lmasa — o‘chirilganlarni ko‘rsatmaymiz
-            // Admin bo‘lsa ham default: ko‘rsatmaymiz (faqat includeDeleted=true bo‘lsa)
-            if (!isAdmin || !wantIncludeDeleted) {
-                filter.isDeleted = { $ne: true };
-            }
+            if (!isAdmin || !wantIncludeDeleted) filter.isDeleted = { $ne: true };
 
             const skip = (page - 1) * limit;
 
             const [items, total] = await Promise.all([
-                LeadChat.find(filter)
-                    .sort({ createdAt: 1 })
-                    .skip(skip)
-                    .limit(limit)
-                    .lean(),
+                LeadChat.find(filter).sort({ createdAt: 1 }).skip(skip).limit(limit).lean(),
                 LeadChat.countDocuments(filter),
             ]);
+
+            // ✅ pbx uuid bo'lsa recording linkni response’da fresh qiling
+            // (limit 20 bo'lsa 20ta request bo'lib ketmasin deb: faqat audio borlarini, parallel, lekin ehtiyot)
+            const enriched = await Promise.all(
+                items.map(async (item) => {
+                    if (item?.pbx?.uuid) {
+                        // download response formatini sizning real javobga qarab moslab olamiz
+                        // Ko‘pincha: {status:"1", data:"https://..."} yoki {url:"https://..."}
+                        const dl = await pbxClient.getDownloadUrl(item.pbx.uuid);
+
+                        const url =
+                            typeof dl === 'string'
+                                ? dl
+                                : (dl?.data && typeof dl.data === 'string' ? dl.data : dl?.url);
+
+                        return {
+                            ...item,
+                            Audio: {
+                                ...(item.Audio ?? {}),
+                                url: url || item?.Audio?.url || null,
+                            },
+                        };
+                    }
+
+                    return item;
+                })
+            );
 
             return res.json({
                 page,
                 limit,
                 total,
                 totalPages: Math.ceil(total / limit),
-                data: items.map((item) => ({
+                data: enriched.map((item) => ({
                     ...item,
-                    Comments: item.message, // sizda "Comments" kerak bo‘lsa
+                    Comments: item.message,
                     SlpCode: item.createdBy,
-                    // xohlasangiz deleted fieldlarni ham qaytaring:
-                    // isDeleted: item.isDeleted,
-                    // deletedAt: item.deletedAt,
-                    // deletedBy: item.deletedBy,
                 })),
             });
         } catch (err) {
             next(err);
         }
     };
+
+    // getChats = async (req, res, next) => {
+    //     try {
+    //         const { id } = req.params;
+    //         let { page = 1, limit = 20, includeDeleted = 'false' } = req.query;
+    //
+    //         page = Number(page);
+    //         limit = Number(limit);
+    //
+    //         if (!Number.isFinite(page) || page < 1) page = 1;
+    //         if (!Number.isFinite(limit) || limit < 1) limit = 20;
+    //         if (limit > 100) limit = 100;
+    //
+    //         const lead = await LeadModel.findById(id).select('_id').lean();
+    //         if (!lead) return res.status(404).json({ message: 'Lead not found' });
+    //
+    //         const userRole = req.user?.U_role;
+    //         const isAdmin = userRole === 'Admin';
+    //         const wantIncludeDeleted = String(includeDeleted).toLowerCase() === 'true';
+    //
+    //         const filter = { leadId: id };
+    //
+    //         // Admin bo‘lmasa — o‘chirilganlarni ko‘rsatmaymiz
+    //         // Admin bo‘lsa ham default: ko‘rsatmaymiz (faqat includeDeleted=true bo‘lsa)
+    //         if (!isAdmin || !wantIncludeDeleted) {
+    //             filter.isDeleted = { $ne: true };
+    //         }
+    //
+    //         const skip = (page - 1) * limit;
+    //
+    //         const [items, total] = await Promise.all([
+    //             LeadChat.find(filter)
+    //                 .sort({ createdAt: 1 })
+    //                 .skip(skip)
+    //                 .limit(limit)
+    //                 .lean(),
+    //             LeadChat.countDocuments(filter),
+    //         ]);
+    //
+    //         return res.json({
+    //             page,
+    //             limit,
+    //             total,
+    //             totalPages: Math.ceil(total / limit),
+    //             data: items.map((item) => ({
+    //                 ...item,
+    //                 Comments: item.message, // sizda "Comments" kerak bo‘lsa
+    //                 SlpCode: item.createdBy,
+    //                 // xohlasangiz deleted fieldlarni ham qaytaring:
+    //                 // isDeleted: item.isDeleted,
+    //                 // deletedAt: item.deletedAt,
+    //                 // deletedBy: item.deletedBy,
+    //             })),
+    //         });
+    //     } catch (err) {
+    //         next(err);
+    //     }
+    // };
 
     updateChat = async (req, res, next) => {
         try {
