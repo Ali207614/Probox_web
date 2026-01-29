@@ -24,7 +24,6 @@ router.post(
 
 router.get(
     "/audio/:id/chats/recordings/:uuid.mp3",
-    authMiddleware,
     b1HANA.getChatRecording
 );
 
