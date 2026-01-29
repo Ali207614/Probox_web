@@ -107,7 +107,7 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
         .filter((c) => String(c.gateway) === COMPANY_GATEWAY)
         .filter((c) => isLeadPhoneInCall(c, leadVariants));
 
-    console.log(calls)
+    console.log(calls , " bu calls")
     if (!calls.length) return;
 
     const ops = calls.map((c) => {
