@@ -3751,7 +3751,7 @@ class b1HANA {
                                     url: audioUrl,
                                 },
                             }
-                            : {}),
+                            : {Audio: null}),
                     };
                 }),
             });
