@@ -88,8 +88,8 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     // ✅ faqat gaplashilgan: user_talk_time_from=1
     const res = await pbxClient.searchCalls({
         phone_numbers, // "998...,901..."
-        start_stamp_from: from,
-        start_stamp_to: now,
+        //start_stamp_from: from,
+        //start_stamp_to: now,
         user_talk_time_from: 1,
     });
 
