@@ -31,6 +31,30 @@ function isLeadPhoneInCall(call, leadPhoneNorm) {
     return a === leadPhoneNorm || b === leadPhoneNorm;
 }
 
+function buildPbxPhoneNumbersNoPlus(raw) {
+    const s = String(raw ?? '').trim();
+    if (!s) return null;
+
+    // faqat raqam
+    const digits = s.replace(/\D/g, '');
+
+    // 998 bilan boshlasa
+    if (digits.startsWith('998') && digits.length >= 12) {
+        const full = digits;            // 998901234567
+        const local = digits.slice(3);  // 901234567
+        return `${full},${local}`;
+    }
+
+    // local 9 xonali bo'lsa
+    if (/^\d{9}$/.test(digits)) {
+        const full = `998${digits}`;    // 998901234567
+        return `${full},${digits}`;
+    }
+
+    // fallback: nima bo'lsa shuni yuboramiz (1 ta)
+    return digits;
+}
+
 async function syncLeadPbxChats({ pbxClient, leadId }) {
     const lead = await LeadModel.findById(leadId)
         .select('clientPhone createdAt')
@@ -48,8 +72,12 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
     // ✅ inbound+outbound ikkalasi ham keladi (accountcode bermaymiz)
     // ✅ faqat gaplashilgan: user_talk_time_from=1
+
+    const phone_numbers = buildPbxPhoneNumbersNoPlus(lead.clientPhone);
+    if (!phone_numbers) return;
+
     const res = await pbxClient.searchCalls({
-        phone_numbers: leadPhone,        // to'liq match
+        phone_numbers, // ✅ "998...,901..."
         start_stamp_from: from,
         start_stamp_to: now,
         user_talk_time_from: 1,
