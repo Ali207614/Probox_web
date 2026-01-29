@@ -92,6 +92,13 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
         user_talk_time_from: 1,
     });
 
+    console.log({
+        phone_numbers, // "998...,901..."
+        start_stamp_from: from,
+        start_stamp_to: now,
+        user_talk_time_from: 1,
+    })
+
     const rawCalls = res?.data ?? [];
 
     // ✅ gateway filter + lead raqami qatnashganini tekshirish
@@ -101,7 +108,7 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
     // Debug kerak bo'lsa:
     // console.log('[PBX]', { leadId, phone_numbers, raw: rawCalls.length, filtered: calls.length });
-
+    console.log(calls)
     if (!calls.length) return;
 
     const ops = calls.map((c) => {
