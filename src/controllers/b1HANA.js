@@ -3722,9 +3722,9 @@ class b1HANA {
             if (!lead) return res.status(404).json({ message: "Lead not found" });
 
             // ✅ faqat 1-sahifada sync qiling
-            if (page === 1) {
+            // if (page === 1) {
                 await syncLeadPbxChats({ pbxClient, leadId: id });
-            }
+           // }
 
             const userRole = req.user?.U_role;
             const isAdmin = userRole === "Admin";
