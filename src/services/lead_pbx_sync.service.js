@@ -105,7 +105,6 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     // ✅ gateway filter + lead raqami qatnashganini tekshirish
     const calls = rawCalls
         .filter((c) => String(c.gateway) === COMPANY_GATEWAY)
-        .filter((c) => isLeadPhoneInCall(c, leadVariants));
 
     console.log(calls , " bu calls")
     if (!calls.length) return;
