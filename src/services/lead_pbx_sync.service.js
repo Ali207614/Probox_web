@@ -51,6 +51,7 @@ function pickOperatorAndClient(call) {
 }
 
 function isLeadPhoneInCall(call, leadVariants) {
+    console.log(call , leadVariants ," bu leadvaritns")
     const a = digitsOnly(call?.caller_id_number ?? '');
     const b = digitsOnly(call?.destination_number ?? '');
     const { full, local } = leadVariants;
@@ -106,8 +107,6 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
         .filter((c) => String(c.gateway) === COMPANY_GATEWAY)
         .filter((c) => isLeadPhoneInCall(c, leadVariants));
 
-    // Debug kerak bo'lsa:
-    // console.log('[PBX]', { leadId, phone_numbers, raw: rawCalls.length, filtered: calls.length });
     console.log(calls)
     if (!calls.length) return;
 
