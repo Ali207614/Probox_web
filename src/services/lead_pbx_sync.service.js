@@ -83,6 +83,13 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
         user_talk_time_from: 1,
     });
 
+    console.log({
+        phone_numbers, // ✅ "998...,901..."
+        start_stamp_from: from,
+        start_stamp_to: now,
+        user_talk_time_from: 1,
+    })
+
     // ✅ gateway filter + lead raqami haqiqatan qatnashganini qayta tekshirish
     const calls = (res?.data ?? [])
         .filter((c) => String(c.gateway) === COMPANY_GATEWAY)
