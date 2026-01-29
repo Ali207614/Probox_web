@@ -29,6 +29,7 @@ ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
 const { createOnlinePbx } = require('./pbx.client');
+const {syncLeadPbxChats} = require("../services/lead_pbx_sync.service");
 
 const pbxClient = createOnlinePbx({
     domain: process.env.PBX_DOMAIN,
