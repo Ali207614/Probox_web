@@ -3176,7 +3176,7 @@ class b1HANA {
             return res.status(200).json(
                 comments.map((el) => {
                     const audioUrl = el?.Audio?.url ? `images/${el.Audio.url}` : null;
-                    const imageUrl = el?.image ? `images/${el.image}` : null; // image field nomi sizda qanday bo'lsa
+                    const imageUrl = el?.Image ? `images/${el.Image}` : null; // image field nomi sizda qanday bo'lsa
 
                     return {
                         ...el,
