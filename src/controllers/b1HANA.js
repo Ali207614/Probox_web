@@ -3743,10 +3743,15 @@ class b1HANA {
                         ...item,
                         Comments: item.message,
                         SlpCode: item.createdBy,
-                        Audio: {
-                            ...(item.Audio ?? {}),
-                            url: audioUrl,
-                        },
+
+                        ...(audioUrl
+                            ? {
+                                Audio: {
+                                    duration: item?.Audio?.duration ?? null,
+                                    url: audioUrl,
+                                },
+                            }
+                            : {}),
                     };
                 }),
             });
