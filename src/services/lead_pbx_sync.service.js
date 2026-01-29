@@ -4,19 +4,44 @@ const LeadModel = require('../models/lead-model');
 
 const COMPANY_GATEWAY = '781134774';
 
-function normalizePhone(p = '') {
-    // + qolsin (agar sizga + kerak bo'lmasa, faqat digit qiling)
-    return String(p).replace(/[^\d+]/g, '');
+function digitsOnly(v = '') {
+    return String(v ?? '').replace(/\D/g, '');
+}
+
+function buildLeadPhoneVariants(raw) {
+    const d = digitsOnly(raw);
+    if (!d) return { full: null, local: null };
+
+    // 998901234567
+    if (d.startsWith('998') && d.length >= 12) {
+        return { full: d, local: d.slice(3) }; // full=998..., local=9 digits
+    }
+
+    // 901234567 (local)
+    if (/^\d{9}$/.test(d)) {
+        return { full: `998${d}`, local: d };
+    }
+
+    // fallback (noyob formatlar)
+    return { full: d, local: d.length >= 9 ? d.slice(-9) : d };
+}
+
+function buildPbxPhoneNumbersNoPlus(raw) {
+    const { full, local } = buildLeadPhoneVariants(raw);
+    if (!full && !local) return null;
+
+    // "998...,901..."
+    if (full && local) return `${full},${local}`;
+    return full || local;
 }
 
 function pickOperatorAndClient(call) {
     const userEvent = call.events?.find((e) => e.type === 'user');
 
-    // operator ext: event user.number yoki fallback caller_id_number (ba'zan ext)
+    // operator ext: event user.number yoki fallback caller_id_number
     const operatorExt = userEvent?.number ?? call.caller_id_number ?? null;
 
-    // client phone: outbound => destination, inbound/missed/local => caller (odatda)
-    // (inbound/outbound ikkalasini olamiz, local bo'lsa ham lead raqami qatnashsa kiradi)
+    // client phone: outbound => destination, inbound => caller
     const clientPhone =
         call.accountcode === 'outbound'
             ? call.destination_number
@@ -25,34 +50,19 @@ function pickOperatorAndClient(call) {
     return { operatorExt, clientPhone };
 }
 
-function isLeadPhoneInCall(call, leadPhoneNorm) {
-    const a = normalizePhone(call?.caller_id_number ?? '');
-    const b = normalizePhone(call?.destination_number ?? '');
-    return a === leadPhoneNorm || b === leadPhoneNorm;
-}
+function isLeadPhoneInCall(call, leadVariants) {
+    const a = digitsOnly(call?.caller_id_number ?? '');
+    const b = digitsOnly(call?.destination_number ?? '');
+    const { full, local } = leadVariants;
 
-function buildPbxPhoneNumbersNoPlus(raw) {
-    const s = String(raw ?? '').trim();
-    if (!s) return null;
+    // exact match
+    if (full && (a === full || b === full)) return true;
+    if (local && (a === local || b === local)) return true;
 
-    // faqat raqam
-    const digits = s.replace(/\D/g, '');
+    // fallback: oxirgi 9 raqam match (format farq qilsa)
+    if (local && (a.endsWith(local) || b.endsWith(local))) return true;
 
-    // 998 bilan boshlasa
-    if (digits.startsWith('998') && digits.length >= 12) {
-        const full = digits;            // 998901234567
-        const local = digits.slice(3);  // 901234567
-        return `${full},${local}`;
-    }
-
-    // local 9 xonali bo'lsa
-    if (/^\d{9}$/.test(digits)) {
-        const full = `998${digits}`;    // 998901234567
-        return `${full},${digits}`;
-    }
-
-    // fallback: nima bo'lsa shuni yuboramiz (1 ta)
-    return digits;
+    return false;
 }
 
 async function syncLeadPbxChats({ pbxClient, leadId }) {
@@ -60,42 +70,37 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
         .select('clientPhone createdAt')
         .lean();
 
-    const leadPhone = normalizePhone(lead?.clientPhone ?? '');
-    if (!leadPhone) return;
+    if (!lead?.clientPhone) return;
+
+    const leadVariants = buildLeadPhoneVariants(lead.clientPhone);
+    const phone_numbers = buildPbxPhoneNumbersNoPlus(lead.clientPhone);
+    if (!phone_numbers) return;
 
     const now = Math.floor(Date.now() / 1000);
     const leadCreated = Math.floor(new Date(lead.createdAt).getTime() / 1000);
 
-    // ✅ 3 kun + lead yaratilgan sanadan keyin
+    // ✅ 3 kun oralig'i + lead yaratilgan sanadan keyin
     const from3Days = now - 3 * 24 * 3600;
     const from = Math.max(from3Days, leadCreated);
 
-    // ✅ inbound+outbound ikkalasi ham keladi (accountcode bermaymiz)
+    // ✅ inbound + outbound ikkalasi ham keladi (accountcode bermaymiz)
     // ✅ faqat gaplashilgan: user_talk_time_from=1
-
-    const phone_numbers = buildPbxPhoneNumbersNoPlus(lead.clientPhone);
-    if (!phone_numbers) return;
-
     const res = await pbxClient.searchCalls({
-        phone_numbers, // ✅ "998...,901..."
+        phone_numbers, // "998...,901..."
         start_stamp_from: from,
         start_stamp_to: now,
         user_talk_time_from: 1,
     });
 
-    console.log({
-        phone_numbers, // ✅ "998...,901..."
-        start_stamp_from: from,
-        start_stamp_to: now,
-        user_talk_time_from: 1,
-    })
+    const rawCalls = res?.data ?? [];
 
-    // ✅ gateway filter + lead raqami haqiqatan qatnashganini qayta tekshirish
-    const calls = (res?.data ?? [])
+    // ✅ gateway filter + lead raqami qatnashganini tekshirish
+    const calls = rawCalls
         .filter((c) => String(c.gateway) === COMPANY_GATEWAY)
-        .filter((c) => isLeadPhoneInCall(c, leadPhone));
+        .filter((c) => isLeadPhoneInCall(c, leadVariants));
 
-    console.log(calls.length, 'calls found');
+    // Debug kerak bo'lsa:
+    // console.log('[PBX]', { leadId, phone_numbers, raw: rawCalls.length, filtered: calls.length });
 
     if (!calls.length) return;
 
@@ -105,7 +110,6 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
         const createdAt = new Date((c.start_stamp ?? now) * 1000);
         const duration = Number(c.user_talk_time ?? c.duration ?? 0);
 
-        // operator ext raqam bo'lmasa 0 qilib yubormaymiz (null bo'lsin)
         const createdBy = Number.isFinite(Number(operatorExt)) ? Number(operatorExt) : 0;
 
         return {
@@ -117,16 +121,14 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
                         pbx: {
                             uuid: c.uuid,
                             gateway: String(c.gateway ?? ''),
-                            accountcode: c.accountcode, // inbound/outbound/local...
+                            accountcode: c.accountcode, // inbound/outbound
                             start_stamp: c.start_stamp,
                             end_stamp: c.end_stamp,
                             operator_ext: operatorExt ? String(operatorExt) : null,
                             client_phone: clientPhone ? String(clientPhone) : null,
                         },
-
-                        // DB'da url saqlamaymiz (CORS + expire muammosi)
+                        // url saqlamaymiz (proxy endpoint bilan berasiz)
                         Audio: { duration },
-
                         createdBy,
                         message: `📞 Call recording (${c.accountcode})`,
                         createdAt,
@@ -140,7 +142,8 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     try {
         await LeadChat.bulkWrite(ops, { ordered: false });
     } catch (e) {
-        // parallel sync bo'lsa duplicate key bo'lishi mumkin — requestni yiqitmang
+        // jim o'tirmang — hech bo'lmasa log qiling
+        // console.error('[PBX SYNC bulkWrite]', e?.message);
     }
 }
 
