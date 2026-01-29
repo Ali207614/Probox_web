@@ -3171,11 +3171,22 @@ class b1HANA {
 
             const filter = {};
             if (DocEntry) filter.DocEntry = DocEntry;
-
             const comments = await CommentModel.find(filter).sort({ created_at: 1 }).lean();
 
-            return res.status(200).json(comments.map(el => ({ ...el, Audio:{...el.Audio, url: el.Audio?.url ? `images/${el.Audio?.url}` : null }})));
-        } catch (e) {
+            return res.status(200).json(
+                comments.map((el) => {
+                    const audioUrl = el?.Audio?.url ? `images/${el.Audio.url}` : null;
+                    const imageUrl = el?.image ? `images/${el.image}` : null; // image field nomi sizda qanday bo'lsa
+
+                    return {
+                        ...el,
+
+                        ...(audioUrl ? { Audio: { ...(el.Audio ?? {}), url: audioUrl } } : {Audio: null}),
+                        ...(imageUrl ? { Image: imageUrl } : {Image:null}), // image bor bo'lsa qaytadi, bo'lmasa umuman yo'q
+                    };
+                })
+            );
+       } catch (e) {
             next(e);
         }
     };
