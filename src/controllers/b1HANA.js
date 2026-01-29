@@ -30,6 +30,7 @@ require('dotenv').config();
 
 const { createOnlinePbx } = require('./pbx.client');
 const {syncLeadPbxChats} = require("../services/lead_pbx_sync.service");
+const axios = require("axios");
 
 const pbxClient = createOnlinePbx({
     domain: process.env.PBX_DOMAIN,
@@ -3678,10 +3679,33 @@ class b1HANA {
         }
     };
 
+    getChatRecording = async (req, res, next) => {
+        try {
+            const { uuid } = req.params;
+
+            const dl = await pbxClient.getDownloadUrl(uuid);
+            const onlineUrl =
+                typeof dl === "string"
+                    ? dl
+                    : (typeof dl?.data === "string" ? dl.data : dl?.data?.url || dl?.url);
+
+            if (!onlineUrl) return res.status(404).json({ message: "Recording url not found" });
+
+            const r = await axios.get(onlineUrl, { responseType: "stream", timeout: 60000 });
+
+            res.setHeader("Content-Type", r.headers["content-type"] || "audio/mpeg");
+            res.setHeader("Cache-Control", "private, max-age=300");
+
+            r.data.pipe(res);
+        } catch (err) {
+            next(err);
+        }
+    };
+
     getChats = async (req, res, next) => {
         try {
             const { id } = req.params;
-            let { page = 1, limit = 20, includeDeleted = 'false' } = req.query;
+            let { page = 1, limit = 20, includeDeleted = "false" } = req.query;
 
             page = Number(page);
             limit = Number(limit);
@@ -3689,17 +3713,17 @@ class b1HANA {
             if (!Number.isFinite(limit) || limit < 1) limit = 20;
             if (limit > 100) limit = 100;
 
-            const lead = await LeadModel.findById(id).select('_id').lean();
-            if (!lead) return res.status(404).json({ message: 'Lead not found' });
+            const lead = await LeadModel.findById(id).select("_id").lean();
+            if (!lead) return res.status(404).json({ message: "Lead not found" });
 
-            // ✅ faqat 1-sahifada sync qiling (har page’da emas)
+            // ✅ faqat 1-sahifada sync qiling
             if (page === 1) {
                 await syncLeadPbxChats({ pbxClient, leadId: id });
             }
 
             const userRole = req.user?.U_role;
-            const isAdmin = userRole === 'Admin';
-            const wantIncludeDeleted = String(includeDeleted).toLowerCase() === 'true';
+            const isAdmin = userRole === "Admin";
+            const wantIncludeDeleted = String(includeDeleted).toLowerCase() === "true";
 
             const filter = { leadId: id };
             if (!isAdmin || !wantIncludeDeleted) filter.isDeleted = { $ne: true };
@@ -3711,48 +3735,32 @@ class b1HANA {
                 LeadChat.countDocuments(filter),
             ]);
 
-            // ✅ pbx uuid bo'lsa recording linkni response’da fresh qiling
-            // (limit 20 bo'lsa 20ta request bo'lib ketmasin deb: faqat audio borlarini, parallel, lekin ehtiyot)
-            const enriched = await Promise.all(
-                items.map(async (item) => {
-                    if (item?.pbx?.uuid) {
-                        // download response formatini sizning real javobga qarab moslab olamiz
-                        // Ko‘pincha: {status:"1", data:"https://..."} yoki {url:"https://..."}
-                        const dl = await pbxClient.getDownloadUrl(item.pbx.uuid);
-
-                        const url =
-                            typeof dl === 'string'
-                                ? dl
-                                : (dl?.data && typeof dl.data === 'string' ? dl.data : dl?.url);
-
-                        return {
-                            ...item,
-                            Audio: {
-                                ...(item.Audio ?? {}),
-                                url: url || item?.Audio?.url || null,
-                            },
-                        };
-                    }
-
-                    return item;
-                })
-            );
-
             return res.json({
                 page,
                 limit,
                 total,
                 totalPages: Math.ceil(total / limit),
-                data: enriched.map((item) => ({
-                    ...item,
-                    Comments: item.message,
-                    SlpCode: item.createdBy,
-                })),
+                data: items.map((item) => {
+                    const audioUrl = item?.pbx?.uuid
+                        ? `/api/leads/${id}/chats/recordings/${item.pbx.uuid}.mp3`
+                        : (item?.Audio?.url ?? null);
+
+                    return {
+                        ...item,
+                        Comments: item.message,
+                        SlpCode: item.createdBy,
+                        Audio: {
+                            ...(item.Audio ?? {}),
+                            url: audioUrl,
+                        },
+                    };
+                }),
             });
         } catch (err) {
             next(err);
         }
     };
+
 
     // getChats = async (req, res, next) => {
     //     try {

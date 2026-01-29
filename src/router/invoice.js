@@ -6,6 +6,15 @@ const upload = require('../middlewares/uploadMiddleware');
 const uploadComment = require('../middlewares/uploadMiddlewareComment');
 const router = new Router();
 
+const { createOnlinePbx } = require('../controllers/pbx.client');
+const pbxClient = createOnlinePbx({
+    domain: process.env.PBX_DOMAIN,
+    authKey: process.env.PBX_AUTH_KEY,
+    apiHost: 'https://api2.onlinepbx.ru',
+});
+
+const pbxAudioHandler = require('./pbx-audio');
+
 
 router.get('/', authMiddleware, b1HANA.invoice);
 router.get('/score', authMiddleware, b1HANA.getScore);

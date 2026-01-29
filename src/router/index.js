@@ -22,6 +22,12 @@ router.post(
     b1HANA.onlinePbxWebhook
 );
 
+router.get(
+    "/leads/:id/chats/recordings/:uuid.mp3",
+    authMiddleware,
+    b1HANA.getChatRecording
+);
+
 router.use('/google-sheet', googleSheetWebhook);
 
 router.get('/executors', authMiddleware, b1HANA.executors)
