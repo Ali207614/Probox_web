@@ -34,7 +34,10 @@ const {syncLeadPbxChats} = require("../services/lead_pbx_sync.service");
 const pbxClient = createOnlinePbx({
     domain: process.env.PBX_DOMAIN,
     authKey: process.env.PBX_AUTH_KEY,
+    apiHost: process.env.PBX_API_HOST || 'https://api2.onlinepbx.ru',
 });
+
+
 
 class b1HANA {
     getPurchaseDetail = async (req, res, next) => {

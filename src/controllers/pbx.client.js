@@ -1,22 +1,21 @@
 // pbx.client.js
 const axios = require('axios');
 
-function createOnlinePbx({ domain, authKey }) {
-    const baseURL = `https://api.onlinepbx.ru/${domain}`;
-
+function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru' }) {
+    const baseURL = `${apiHost}/${domain}`;
+    console.log(`OnlinePBX API baseURL: ${baseURL}`);
     const api = axios.create({
         baseURL,
         timeout: 30000,
         headers: { Accept: 'application/json' },
     });
 
-    // in-memory token cache (xohlasangiz keyin Redis qilasiz)
     let token = { keyId: null, key: null };
 
     async function login() {
         const body = new URLSearchParams({ auth_key: authKey });
 
-        const { data } = await axios.post(`${baseURL}/auth.json`, body, {
+        const resp = await axios.post(`${baseURL}/auth.json`, body, {
             headers: {
                 Accept: 'application/json',
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -24,13 +23,30 @@ function createOnlinePbx({ domain, authKey }) {
             timeout: 30000,
         });
 
-        // ✅ siz bergan response format:
-        // { status:"1", data:{ key, key_id, new:1 } }
-        const keyId = data?.data?.key_id;
-        const key = data?.data?.key;
+        let data = resp.data;
+
+        // ba'zan string kelishi mumkin
+        if (typeof data === 'string') {
+            try { data = JSON.parse(data); } catch { /* ignore */ }
+        }
+
+        const keyId =
+            data?.data?.key_id ||
+            data?.key_id ||
+            data?.data?.keyId ||
+            data?.keyId;
+
+        const key =
+            data?.data?.key ||
+            data?.key ||
+            data?.data?.token ||
+            data?.token;
 
         if (!keyId || !key) {
-            throw new Error('OnlinePBX auth failed: data.data.key_id/key not found');
+            // debug uchun response'ni ham ko'rsatamiz
+            throw new Error(
+                `OnlinePBX auth failed: key_id/key not found. Response: ${JSON.stringify(data)}`
+            );
         }
 
         token = { keyId, key };
@@ -42,7 +58,6 @@ function createOnlinePbx({ domain, authKey }) {
         return `${token.keyId}:${token.key}`;
     }
 
-    // Har request oldidan tokenni qo'yish
     api.interceptors.request.use(async (config) => {
         const hdr = await getAuthHeader();
         config.headers = config.headers || {};
@@ -50,7 +65,6 @@ function createOnlinePbx({ domain, authKey }) {
         return config;
     });
 
-    // Token yaroqsiz bo'lsa: re-login + retry (1 marta)
     api.interceptors.response.use(
         (res) => res,
         async (err) => {
@@ -58,10 +72,7 @@ function createOnlinePbx({ domain, authKey }) {
             const msg = String(err?.response?.data?.message || '').toLowerCase();
 
             const looksAuthIssue =
-                status === 401 ||
-                status === 403 ||
-                msg.includes('auth') ||
-                msg.includes('key');
+                status === 401 || status === 403 || msg.includes('auth') || msg.includes('key');
 
             const cfg = err.config || {};
             if (looksAuthIssue && !cfg.__pbxRetried) {
