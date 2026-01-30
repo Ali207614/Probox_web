@@ -105,6 +105,8 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
         const createdBy = Number.isFinite(Number(operatorExt)) ? Number(operatorExt) : 0;
         const operator = operatorData.find(el => el?.U_onlinepbx == createdBy);
+
+        console.log(operator , " bu operator");
         return {
             updateOne: {
                 filter: { leadId, 'pbx.uuid': c.uuid },
