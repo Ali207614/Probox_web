@@ -780,7 +780,8 @@ LIMIT ${limit} OFFSET ${offset};
                 T0."U_role",
                 T0."U_summa",
                 T0."U_workDay",
-                T0."U_branch"
+                T0."U_branch",
+                T0."U_onlinepbx"
             FROM ${this.db}.OSLP T0
                 ${whereClause}
         `;
