@@ -37,9 +37,27 @@ const pbxClient = createOnlinePbx({
     authKey: process.env.PBX_AUTH_KEY,
     apiHost: process.env.PBX_API_HOST || 'https://api2.onlinepbx.ru',
 });
+let lastScoringIndex = -1;
 
 
 class b1HANA {
+
+    async assignScoringOperator() {
+        const scoringQuery = DataRepositories.getSalesPersons({
+            include: ['Scoring'],
+        });
+        const scoringData = await this.execute(scoringQuery);
+
+        if (scoringData.length === 0) {
+            console.warn('No Scoring operator found');
+            return null;
+        }
+
+        lastScoringIndex = (lastScoringIndex + 1) % scoringData.length;
+
+        const selected = scoringData[lastScoringIndex];
+        return selected?.SlpCode || null;
+    }
     getPurchaseDetail = async (req, res, next) => {
         try {
             const { source, docEntry } = req.params;
@@ -1174,17 +1192,16 @@ class b1HANA {
 
             let scoring = null;
 
-            if(source === 'Organika') {
+            if (source === 'Organika') {
                 const scoringQuery = DataRepositories.getSalesPersons({
                     include: ['Scoring'],
                 });
                 const scoringData = await this.execute(scoringQuery);
 
                 if (scoringData.length > 0) {
-                    const randomIndex = Math.floor(Math.random() * scoringData.length);
-                    const selectedScoring = scoringData[randomIndex];
-                    scoring = selectedScoring?.SlpCode || null;
-
+                    lastScoringIndex = (lastScoringIndex + 1) % scoringData.length;
+                    const selected = scoringData[lastScoringIndex];
+                    scoring = selected?.SlpCode || null;
                 } else {
                     console.warn('No Scoring operator found');
                 }
@@ -1962,26 +1979,21 @@ class b1HANA {
                 if (
                     !existingLead.scoring && validData.passportVisit === 'Passport'
                 ) {
-                    const scoringQuery = DataRepositories.getSalesPersons({
-                        include: ['Scoring'],
-                    });
-                    const scoringData = await this.execute(scoringQuery);
+                    validData.scoring = await this.assignScoringOperator();
 
-                    if (scoringData.length > 0) {
-                        const randomIndex = Math.floor(Math.random() * scoringData.length);
-                        const selectedScoring = scoringData[randomIndex];
-                        validData.scoring = selectedScoring?.SlpCode || null;
+                    if (validData.scoring) {
                         const io = req.app.get('io');
-                        if (io) io.emit('scoring_lead', { n: existingLead.n,
-                            _id:existingLead._id,
-                            source:existingLead.source,
-                            clientName:existingLead.clientName ,
-                            time: existingLead.time,
-                            clientPhone :existingLead.clientPhone ,
-                            SlpCode: validData.scoring
-                        });
-                    } else {
-                        console.warn('No Scoring operator found');
+                        if (io) {
+                            io.emit('scoring_lead', {
+                                n: existingLead.n,
+                                _id: existingLead._id,
+                                source: existingLead.source,
+                                clientName: existingLead.clientName,
+                                time: existingLead.time,
+                                clientPhone: existingLead.clientPhone,
+                                SlpCode: validData.scoring
+                            });
+                        }
                     }
                 }
             }

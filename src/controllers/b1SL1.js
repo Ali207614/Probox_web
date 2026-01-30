@@ -648,9 +648,9 @@ class b1SL {
         try {
             const { cardCode, docDate, whsCode, comments, rows } = req.body;
 
-            if (!cardCode) return res.status(400).json({ message: 'cardCode is required' });
+            if (!cardCode) return res.status(400).json({ message: "Ta'minotchini belgilash majburiy !" });
             if (!Array.isArray(rows) || rows.length === 0) {
-                return res.status(400).json({ message: 'rows must be non-empty array' });
+                return res.status(400).json({ message: "Mahsulot kiritish majburiy !" });
             }
 
             const draftBody = {
@@ -691,8 +691,6 @@ class b1SL {
                 return res.status(401).json({ status: false, message: token.message });
             }
 
-            console.log("Draft create error:", err?.response?.data || err);
-
             return res.status(400).json({
                 status: false,
                 message: get(err, 'response.data.error.message.value', err.message || 'Error'),
@@ -700,47 +698,66 @@ class b1SL {
         }
     };
 
-    patchDraftLine = async (req, res, next) => {
+    patchDraft = async (req, res, next) => {
         try {
-            const { docEntry, lineNum } = req.params;
-            const { itemCode, price, batteryCapacity, prodCondition, imei } = req.body;
+            const { docEntry } = req.params;
+            const { rows, comments, docDate, docDueDate /* boshqa header maydonlari kerak bo'lsa */ } = req.body;
 
-            if (!docEntry) return res.status(400).json({ message: 'docEntry is required' });
-            if (lineNum == null) return res.status(400).json({ message: 'lineNum is required' });
-            if (!itemCode) return res.status(400).json({ message: 'itemCode is required' });
+            if (!docEntry) return res.status(400).json({ message: 'docEntry majburiy' });
+            if (!Array.isArray(rows) || rows.length === 0) {
+                return res.status(400).json({ message: 'Mahsulotlar (rows) majburiy' });
+            }
 
-            const linePatch = {
-                LineNum: Number(lineNum),
-                ItemCode: String(itemCode),
-                ...(price != null ? { UnitPrice: Number(price) } : {}),
-                ...(batteryCapacity != null ? { U_battery_capacity: Number(batteryCapacity) } : {}),
-                ...(prodCondition != null ? { U_PROD_CONDITION: prodCondition } : {}),
-                ...(imei ? { U_series: String(imei) } : {}),
+            const patchBody = {
+                ...(docDate && { DocDate: docDate }),
+                ...(docDueDate && { DocDueDate: docDueDate }),
+                ...(comments !== undefined && { Comments: comments || null }),
+
+                DocumentLines: rows.map((r, idx) => {
+                    if (!r.itemCode) throw new Error(`rows[${idx}].itemCode majburiy`);
+
+                    return {
+                        ItemCode: String(r.itemCode),
+                        Quantity: Number(r.quantity || 1),
+                        UnitPrice: Number(r.price || 0),
+                        WarehouseCode: r.whsCode || null,
+                        Currency: r.currency,
+                        U_battery_capacity: r.batteryCapacity ?? null,
+                        U_condition: r.prodCondition ?? null,          // E'tibor: maydon nomi U_condition bo'lishi mumkin (sizda U_PROD_CONDITION edi)
+                        U_series: r.imei ? String(r.imei) : null,
+                        ...(r.imei ? { SerialNumbers: [{ InternalSerialNumber: String(r.imei) }] } : {}),
+                    };
+                }),
             };
 
             const axios = this.getAxiosSL();
-            const { data } = await axios.patch(`/Drafts(${docEntry})`, {
-                DocumentLines: [linePatch],
-            });
+
+            // Muhim header qo'shish!
+            const config = {
+                headers: {
+                    'B1S-ReplaceCollectionsOnPatch': 'true'
+                }
+            };
+
+            const { data } = await axios.patch(`/Drafts(${docEntry})`, patchBody, config);
 
             return res.json({
                 status: true,
                 docEntry: Number(docEntry),
-                lineNum: Number(lineNum),
-                sap: data,
+                sap: data || 'Updated successfully (204 No Content)'
             });
         } catch (err) {
-            if (get(err, 'response.status') == 401) {
+            if (get(err, 'response.status') === 401) {
                 const token = await this.auth();
-                if (token.status) return this.patchDraftLine(req, res, next);
+                if (token.status) return this.patchDraft(req, res, next); // recursion
                 return res.status(401).json({ status: false, message: token.message });
             }
 
             const sapMsg = get(err, 'response.data.error.message.value');
             return res.status(400).json({
                 status: false,
-                message: sapMsg || err.message || 'Error',
-                raw: get(err, 'response.data'),
+                message: sapMsg || err.message || 'Xato yuz berdi',
+                raw: get(err, 'response.data')
             });
         }
     };
@@ -748,7 +765,7 @@ class b1SL {
     cancelPurchaseDraft = async (req, res, next) => {
         try {
             const { docEntry } = req.params;
-            if (!docEntry) return res.status(400).json({ status: false, message: 'docEntry is required' });
+            if (!docEntry) return res.status(400).json({ status: false, message: "ID majburiy !" });
 
             const axios = this.getAxiosSL();
 
