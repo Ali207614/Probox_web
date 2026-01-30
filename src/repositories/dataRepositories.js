@@ -1338,14 +1338,11 @@ ORDER BY
     SELECT
       ${imeiSelect}
       T0."ItemCode",
-      MAX(T0."WhsCode") AS "WhsCode",
-      CAST(T0."OnHand" AS INTEGER) AS "OnHand",
+      MAX(T0."WhsCode")          AS "WhsCode",          -- bitta ombor (masalan eng kattasi)
+      SUM(CAST(T0."OnHand" AS INTEGER)) AS "OnHand",    // jami qoldiq — eng to'g'ri
       T1."ItemName",
-
-      -- ✅ group info
-      T1."ItmsGrpCod" AS "ItemGroupCode",
-      G."ItmsGrpNam" AS "ItemGroupName",
-
+      T1."ItmsGrpCod"             AS "ItemGroupCode",
+      G."ItmsGrpNam"              AS "ItemGroupName",
       T1."U_Color",
       T1."U_Condition",
       T1."U_Model",
@@ -1353,19 +1350,33 @@ ORDER BY
       T1."U_Memory",
       T1."U_Sim_type",
       T1."U_PROD_CONDITION",
-      T2."WhsName",
-      PR."Price" AS "SalePrice",
-      ${isIMEI ? `R."CostTotal" AS "PurchasePrice"` : `NULL AS "PurchasePrice"`}
+      MAX(T2."WhsName")           AS "WhsName",         // agar bir nechta bo'lsa
+      MAX(PR."Price")             AS "SalePrice",
+      ${isIMEI ? `MAX(R."CostTotal") AS "PurchasePrice"` : `NULL AS "PurchasePrice"`}
     ${baseFrom}
+    GROUP BY
+      T0."ItemCode",
+      T1."ItemName",
+      T1."ItmsGrpCod",
+      G."ItmsGrpNam",
+      T1."U_Color",
+      T1."U_Condition",
+      T1."U_Model",
+      T1."U_DeviceType",
+      T1."U_Memory",
+      T1."U_Sim_type",
+      T1."U_PROD_CONDITION"
+      ${isIMEI ? `, R."DistNumber"` : ''}   // IMEI holatida qo'shimcha
     ORDER BY T1."U_Model" DESC
     LIMIT ${limit}
     OFFSET ${offset};
-  `;
+`;
 
         const countSql = `
-    SELECT COUNT(DISTINCT ${distinctExpr}) AS "total"
+    SELECT COUNT(DISTINCT ${isIMEI ? `R."DistNumber"` : `T0."ItemCode"`}) AS "total"
     ${baseFrom};
-  `;
+`
+  ;
 
         return { dataSql, countSql };
     }
