@@ -1338,36 +1338,27 @@ ORDER BY
     SELECT
       ${imeiSelect}
       T0."ItemCode",
-      MAX(T0."WhsCode")          AS "WhsCode",          -- bitta ombor (masalan eng kattasi)
-      SUM(CAST(T0."OnHand" AS INTEGER)) AS "OnHand",    // jami qoldiq — eng to'g'ri
-      T1."ItemName",
+      MAX(T0."WhsCode")          AS "WhsCode",                // bitta ombor tanlash
+      SUM(CAST(T0."OnHand" AS INTEGER)) AS "OnHand",          // jami qoldiq – eng mantiqiy
+      MAX(T1."ItemName")          AS "ItemName",
       T1."ItmsGrpCod"             AS "ItemGroupCode",
-      G."ItmsGrpNam"              AS "ItemGroupName",
-      T1."U_Color",
-      T1."U_Condition",
-      T1."U_Model",
-      T1."U_DeviceType",
-      T1."U_Memory",
-      T1."U_Sim_type",
-      T1."U_PROD_CONDITION",
-      MAX(T2."WhsName")           AS "WhsName",         // agar bir nechta bo'lsa
+      MAX(G."ItmsGrpNam")         AS "ItemGroupName",
+      MAX(T1."U_Color")           AS "U_Color",
+      MAX(T1."U_Condition")       AS "U_Condition",
+      MAX(T1."U_Model")           AS "U_Model",
+      MAX(T1."U_DeviceType")      AS "U_DeviceType",
+      MAX(T1."U_Memory")          AS "U_Memory",
+      MAX(T1."U_Sim_type")        AS "U_Sim_type",
+      MAX(T1."U_PROD_CONDITION")  AS "U_PROD_CONDITION",
+      MAX(T2."WhsName")           AS "WhsName",
       MAX(PR."Price")             AS "SalePrice",
       ${isIMEI ? `MAX(R."CostTotal") AS "PurchasePrice"` : `NULL AS "PurchasePrice"`}
     ${baseFrom}
     GROUP BY
       T0."ItemCode",
-      T1."ItemName",
-      T1."ItmsGrpCod",
-      G."ItmsGrpNam",
-      T1."U_Color",
-      T1."U_Condition",
-      T1."U_Model",
-      T1."U_DeviceType",
-      T1."U_Memory",
-      T1."U_Sim_type",
-      T1."U_PROD_CONDITION"
-      ${isIMEI ? `, R."DistNumber"` : ''}   // IMEI holatida qo'shimcha
-    ORDER BY T1."U_Model" DESC
+      T1."ItmsGrpCod"
+      ${isIMEI ? `, R."DistNumber"` : ''}
+    ORDER BY MAX(T1."U_Model") DESC
     LIMIT ${limit}
     OFFSET ${offset};
 `;
@@ -1375,8 +1366,7 @@ ORDER BY
         const countSql = `
     SELECT COUNT(DISTINCT ${isIMEI ? `R."DistNumber"` : `T0."ItemCode"`}) AS "total"
     ${baseFrom};
-`
-  ;
+`;
 
         return { dataSql, countSql };
     }
