@@ -53,16 +53,13 @@ function pickOperatorAndClient(call) {
 }
 
 function isLeadPhoneInCall(call, leadVariants) {
-    console.log(call , leadVariants ," bu leadvaritns")
     const a = digitsOnly(call?.caller_id_number ?? '');
     const b = digitsOnly(call?.destination_number ?? '');
     const { full, local } = leadVariants;
 
-    // exact match
     if (full && (a === full || b === full)) return true;
     if (local && (a === local || b === local)) return true;
 
-    // fallback: oxirgi 9 raqam match (format farq qilsa)
     if (local && (a.endsWith(local) || b.endsWith(local))) return true;
 
     return false;
@@ -106,6 +103,9 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
         const createdBy = Number.isFinite(Number(operatorExt)) ? Number(operatorExt) : 0;
         const operator = operatorData.filter(el => el?.U_onlinepbx == createdBy);
+        console.log(operatorData.length , " bu length")
+        console.log(operator ," bu operator")
+
 
         return {
             updateOne: {
