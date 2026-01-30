@@ -1338,8 +1338,8 @@ ORDER BY
     SELECT
       ${imeiSelect}
       T0."ItemCode",
-      T0."WhsCode",
-      CAST(T0."OnHand" AS INTEGER) AS "OnHand",
+ MAX(T0."WhsCode") AS "WhsCode",          
+  SUM(CAST(T0."OnHand" AS INTEGER)) AS "OnHand"
       T1."ItemName",
 
       -- ✅ group info
