@@ -1263,8 +1263,8 @@ class b1HANA {
             if (source === 'Organika') {
                 dataObj = {
                     ...dataObj,
-                    meetingConfirmed: true,
-                    meetingConfirmedDate: new Date(),
+                    // meetingConfirmed: true,
+                    // meetingConfirmedDate: new Date(),
                     branch2,
                     seller,
                 };
