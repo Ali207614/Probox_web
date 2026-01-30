@@ -42,7 +42,7 @@ router.get('/suppliers', authMiddleware, b1HANA.getSuppliers);
 
 router.post('/purchases/drafts', authMiddleware, b1SL1.createPurchaseDraft)
 
-router.post('/purchases/drafts/:docEntry', authMiddleware, b1SL1.patchDraft)
+router.patch('/purchases/drafts/:docEntry', authMiddleware, b1SL1.patchDraft)
 
 
 router.post('/purchases/drafts/:docEntry/cancel', authMiddleware, b1SL1.cancelPurchaseDraft);
