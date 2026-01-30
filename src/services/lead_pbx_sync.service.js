@@ -122,17 +122,10 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
                             operator_ext: operatorExt ? String(operatorExt) : null,
                             client_phone: clientPhone ? String(clientPhone) : null,
                         },
-                        // url saqlamaymiz (proxy endpoint bilan berasiz)
                         Audio: { duration },
                         createdBy:operator?.SlpCode || null,
                         message: `📞 Call recording (${c.accountcode})`,
                         createdAt,
-                    },
-                    $set: {
-                        createdBy: operator?.SlpCode || null,
-                        'Audio.duration': duration,
-                        'pbx.operator_ext': operatorExt ? String(operatorExt) : null,
-                        'pbx.client_phone': clientPhone ? String(clientPhone) : null,
                     },
                 },
                 upsert: true,
@@ -143,8 +136,9 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     try {
         await LeadChat.bulkWrite(ops, { ordered: false });
     } catch (e) {
+
         // jim o'tirmang — hech bo'lmasa log qiling
-        // console.error('[PBX SYNC bulkWrite]', e?.message);
+        console.error('[PBX SYNC bulkWrite]', e?.message);
     }
 }
 
