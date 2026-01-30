@@ -3748,7 +3748,7 @@ class b1HANA {
                 LeadChat.find(filter).sort({ createdAt: 1 }).skip(skip).limit(limit).lean(),
                 LeadChat.countDocuments(filter),
             ]);
-
+            console.log(items)
             return res.json({
                 page,
                 limit,

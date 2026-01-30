@@ -105,26 +105,6 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
         const createdBy = Number.isFinite(Number(operatorExt)) ? Number(operatorExt) : 0;
         const operator = operatorData.find(el => el?.U_onlinepbx == createdBy);
-
-        console.log(operator , " bu operator");
-
-        console.log({
-            leadId,
-            pbx: {
-                uuid: c.uuid,
-                gateway: String(c.gateway ?? ''),
-                accountcode: c.accountcode, // inbound/outbound
-                start_stamp: c.start_stamp,
-                end_stamp: c.end_stamp,
-                operator_ext: operatorExt ? String(operatorExt) : null,
-                client_phone: clientPhone ? String(clientPhone) : null,
-            },
-            // url saqlamaymiz (proxy endpoint bilan berasiz)
-            Audio: { duration },
-            createdBy:operator?.SlpCode || null,
-            message: `📞 Call recording (${c.accountcode})`,
-            createdAt,
-        })
         return {
             updateOne: {
                 filter: { leadId, 'pbx.uuid': c.uuid },
