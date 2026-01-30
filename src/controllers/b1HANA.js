@@ -1174,8 +1174,8 @@ class b1HANA {
 
             const query =
                 source === 'Organika'
-                    ? { clientPhone: cleanedPhone, createdAt }
-                    : { clientPhone: cleanedPhone, source, createdAt };
+                    ? { clientPhone: cleanedPhone, createdAt ,status:"Active"}
+                    : { clientPhone: cleanedPhone, source, createdAt ,status:"Active" };
 
             const exists = await LeadModel.exists(query);
 
