@@ -3731,13 +3731,9 @@ class b1HANA {
             if (limit > 100) limit = 100;
 
             const lead = await LeadModel.findById(id).select("_id").lean();
-            console.log(lead)
             if (!lead) return res.status(404).json({ message: "Lead not found" });
 
-            // ✅ faqat 1-sahifada sync qiling
-            // if (page === 1) {
-                await syncLeadPbxChats({ pbxClient, leadId: id });
-           // }
+            await syncLeadPbxChats({ pbxClient, leadId: id });
 
             const userRole = req.user?.U_role;
             const isAdmin = userRole === "Admin";
