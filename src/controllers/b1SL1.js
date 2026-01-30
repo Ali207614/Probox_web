@@ -701,7 +701,7 @@ class b1SL {
     patchDraft = async (req, res, next) => {
         try {
             const { docEntry } = req.params;
-            const { rows, comments, docDate, docDueDate /* boshqa header maydonlari kerak bo'lsa */ } = req.body;
+            const { rows, comments, docDate, docDueDate } = req.body;
 
             if (!docEntry) return res.status(400).json({ message: 'docEntry majburiy' });
             if (!Array.isArray(rows) || rows.length === 0) {
