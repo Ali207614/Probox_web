@@ -78,35 +78,21 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     if (!phone_numbers) return;
 
     const now = Math.floor(Date.now() / 1000);
-    const leadCreated = Math.floor(new Date(lead.createdAt).getTime() / 1000);
 
-    // ✅ 3 kun oralig'i + lead yaratilgan sanadan keyin
-    const from3Days = now - 3 * 24 * 3600;
-    const from = Math.max(from3Days, leadCreated);
-
-    // ✅ inbound + outbound ikkalasi ham keladi (accountcode bermaymiz)
-    // ✅ faqat gaplashilgan: user_talk_time_from=1
     const res = await pbxClient.searchCalls({
         phone_numbers, // "998...,901..."
-        //start_stamp_from: from,
-        //start_stamp_to: now,
         user_talk_time_from: 1,
+        sort_by: 'start_stamp',
+        sort_order: 'desc',
+        trunk_names: 'f6813980348e52891f64fa3ce451de69',
     });
 
-    console.log({
-        phone_numbers, // "998...,901..."
-        start_stamp_from: from,
-        start_stamp_to: now,
-        user_talk_time_from: 1,
-    })
 
     const rawCalls = res?.data ?? [];
 
-    // ✅ gateway filter + lead raqami qatnashganini tekshirish
     const calls = rawCalls
         .filter((c) => String(c.gateway) === COMPANY_GATEWAY)
 
-    console.log(calls , " bu calls")
     if (!calls.length) return;
 
     const ops = calls.map((c) => {
