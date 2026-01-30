@@ -126,6 +126,12 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
                         message: `📞 Call recording (${c.accountcode})`,
                         createdAt,
                     },
+                    $set: {
+                        createdBy: operator?.SlpCode || null,
+                        'Audio.duration': duration,
+                        'pbx.operator_ext': operatorExt ? String(operatorExt) : null,
+                        'pbx.client_phone': clientPhone ? String(clientPhone) : null,
+                    },
                 },
                 upsert: true,
             },
