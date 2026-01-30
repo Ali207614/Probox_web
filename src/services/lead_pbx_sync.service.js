@@ -83,7 +83,7 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
         phone_numbers, // "998...,901..."
         user_talk_time_from: 1,
         sort_by: 'start_stamp',
-        sort_order: 'desc',
+        sort_order: 'asc',
         trunk_names: 'f6813980348e52891f64fa3ce451de69',
     });
 
