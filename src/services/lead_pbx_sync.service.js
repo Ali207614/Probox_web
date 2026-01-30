@@ -72,7 +72,9 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
     if (!lead?.clientPhone) return;
 
-   const query = DataRepositories.getSalesPersons();
+   const query = DataRepositories.getSalesPersons({
+       include: ['Operator1']
+   });
     const operatorData = await dbService.execute(query);
     const phone_numbers = buildPbxPhoneNumbersNoPlus(lead.clientPhone);
     if (!phone_numbers) return;
@@ -106,7 +108,7 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
         const operator = operatorData.filter(el => el?.U_onlinepbx == createdBy);
         console.log(operatorData.length , " bu length")
-        console.log(operatorData[0] , " bu length")
+        console.log(operatorData , " bu length")
         console.log(operator ," bu operator")
 
 
