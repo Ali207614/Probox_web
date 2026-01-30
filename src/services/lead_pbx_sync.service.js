@@ -92,6 +92,8 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
     const rawCalls = res?.data ?? [];
 
+    console.log(`[PBX SYNC] ${rawCalls.length} calls found for lead ${leadId}`);
+
     const calls = rawCalls
         .filter((c) => String(c.gateway) === COMPANY_GATEWAY)
 
