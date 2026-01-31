@@ -1,5 +1,4 @@
 function normalizeSpaces(s) {
-    // NBSP (\u00A0) va boshqa whitespace'larni oddiy spacega aylantiramiz
     return String(s).replace(/\u00A0/g, ' ').trim();
 }
 
@@ -9,23 +8,27 @@ function parseUzDateTime(v) {
 
     const s = normalizeSpaces(v);
 
-    // 1) "17.06.2026 00:00" (HH:mm majburiy)
-    let m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})$/);
-    let hasTime = true;
+    // 1) DD.MM.YYYY [HH:mm]
+    let m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+    let dd, MM, yyyy, hh, mm;
 
-    // 2) "17.06.2026" (time yo'q bo'lsa 00:00 qilamiz)
-    if (!m) {
-        m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
-        hasTime = false;
+    if (m) {
+        dd = Number(m[1]);
+        MM = Number(m[2]);
+        yyyy = Number(m[3]);
+        hh = m[4] != null ? Number(m[4]) : 0;
+        mm = m[5] != null ? Number(m[5]) : 0;
+    } else {
+        // 2) YYYY.MM.DD [HH:mm]
+        m = s.match(/^(\d{4})\.(\d{2})\.(\d{2})(?:\s+(\d{2}):(\d{2}))?$/);
+        if (!m) return null;
+
+        yyyy = Number(m[1]);
+        MM = Number(m[2]);
+        dd = Number(m[3]);
+        hh = m[4] != null ? Number(m[4]) : 0;
+        mm = m[5] != null ? Number(m[5]) : 0;
     }
-
-    if (!m) return null;
-
-    const dd = Number(m[1]);
-    const MM = Number(m[2]);
-    const yyyy = Number(m[3]);
-    const hh = hasTime ? Number(m[4]) : 0;
-    const mm = hasTime ? Number(m[5]) : 0;
 
     // Range checks
     if (MM < 1 || MM > 12) return null;
@@ -33,10 +36,9 @@ function parseUzDateTime(v) {
     if (hh < 0 || hh > 23) return null;
     if (mm < 0 || mm > 59) return null;
 
-    // Local time Date
     const d = new Date(yyyy, MM - 1, dd, hh, mm, 0, 0);
 
-    // Rollover check (31.02 -> 03.03 kabi xatolarni ushlash)
+    // rollover check
     if (
         d.getFullYear() !== yyyy ||
         d.getMonth() !== MM - 1 ||
@@ -47,6 +49,7 @@ function parseUzDateTime(v) {
 
     return d;
 }
+
 
 function isValidType(value, expectedType) {
     if (value === null || value === undefined) return true;
