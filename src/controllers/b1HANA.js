@@ -1075,7 +1075,7 @@ class b1HANA {
                 seller: item.seller || null,
                 passportId: item.passportId || '',
                 meetingDate: item.meetingDate
-                    ? moment(item.meetingDate).format('YYYY.MM.DD')
+                    ? moment(item.meetingDate).format('YYYY.MM.DD HH:mm')
                     : null,
                 score: item.score ?? null,
                 mib: item.mib ?? null,
