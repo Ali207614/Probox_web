@@ -959,10 +959,7 @@ class b1HANA {
             if (req.user?.U_role === 'Scoring') {
                 addAndCondition(filter, {
                     $or: [
-                        // 1) Qayta sotuv - hammasi
                         { source: 'Qayta sotuv' },
-
-                        // 2) boshqa source - faqat passport/jshshir bor bo'lsa
                         {
                             $and: [
                                 { source: { $ne: 'Qayta sotuv' } },
@@ -993,9 +990,6 @@ class b1HANA {
                 });
             }
 
-
-
-
             const addRangeFilter = (field, min, max) => {
                 if (min || max) {
                     filter[field] = {};
@@ -1012,21 +1006,14 @@ class b1HANA {
 
             const rawData = await LeadModel.aggregate([
                 { $match: filter },
-
-                // Returned bo'lsa sort uchun 0, bo'lmasa 1
                 {
                     $addFields: {
                         _statusOrder: { $cond: [{ $eq: ['$status', 'Returned'] }, 0, 1] },
                     },
                 },
-
-                // 1) Returned birinchi, 2) time yangi -> eski
                 { $sort: { _statusOrder: 1, time: -1 } },
-
                 { $skip: skip },
                 { $limit: limit },
-
-                // _statusOrder clientga chiqmasin
                 { $project: { _statusOrder: 0 } },
             ]);
 
