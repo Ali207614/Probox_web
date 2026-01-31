@@ -50,6 +50,10 @@ function isValidType(value, expectedType) {
     }
 }
 
+
+
+
+
 exports.validateFields = (updateData, schema, allowedFields) => {
     const errors = [];
     const validData = {};
