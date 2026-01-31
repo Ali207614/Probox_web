@@ -643,7 +643,6 @@ class b1SL {
         }
     };
 
-
     createPurchaseDraft = async (req, res, next) => {
         try {
             const { cardCode, docDate, whsCode, comments, rows } = req.body;
@@ -678,6 +677,17 @@ class b1SL {
 
             const axios = this.getAxiosSL();
             const { data } = await axios.post(`/Drafts`, draftBody);
+
+
+            const io = req.app.get('io');
+            if (io){
+                io.emit('new_purchase_draft', {
+                    cardCode,
+                    draftDocEntry: data?.DocEntry,
+                    SlpCode: req.user.SlpCode,
+                });
+            }
+
 
             return res.status(201).json({
                 status: true,

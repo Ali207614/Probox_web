@@ -58,6 +58,7 @@ class b1HANA {
         const selected = scoringData[lastScoringIndex];
         return selected?.SlpCode || null;
     }
+
     getPurchaseDetail = async (req, res, next) => {
         try {
             const { source, docEntry } = req.params;
@@ -1221,7 +1222,7 @@ class b1HANA {
                 source,
                 clientName:sapRecord?.cardName || clientName,
                 clientPhone: cleanedPhone,
-                branch2: branch2 || null,
+                //branch2: branch2 || null,
                 seller: seller || null,
                 source2: source2 || null,
                 comment: comment || null,
