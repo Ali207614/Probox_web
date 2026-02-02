@@ -26,102 +26,72 @@ function isCallStartEvent(event) {
 }
 
 async function handleOnlinePbxPayload(payload) {
-    const clientPhone = pickClientPhoneFromWebhook(payload);
-    if (!clientPhone) {
-        return { ok: true, skipped: 'no_client_phone' };
-    }
+  try {
+      const clientPhone = pickClientPhoneFromWebhook(payload);
+      if (!clientPhone) {
+          return { ok: true, skipped: 'no_client_phone' };
+      }
 
-    const operatorExt = pickOperatorExtFromPayload(payload);
-    console.log(`[handleOnlinePbxPayload] ${clientPhone} => ${operatorExt}`);
-    const opsMap = await getOperatorsMapCached();
-    const slpCode = operatorExt != null ? (opsMap.get(operatorExt) ?? null) : null;
 
-    const { source, status } = deriveLeadFields(payload);
+      const operatorExt = pickOperatorExtFromPayload(payload);
+      const opsMap = await getOperatorsMapCached();
+      const slpCode = operatorExt != null ? (opsMap.get(operatorExt) ?? null) : null;
 
-    const now = payload.date_iso ? new Date(payload.date_iso) : new Date();
-    const event = String(payload.event || '').toLowerCase();
+      const { source, status } = deriveLeadFields(payload);
 
-    /**
-     * callCount dedup:
-     * - agar call_start/call_user_start kelgan bo'lsa va uuid yangi bo'lsa callCount++
-     * - uuid yo'q bo'lsa callCount++ qilmaymiz (aks holda spam bo'ladi)
-     */
-    let leadBefore = null;
-    if (payload.uuid) {
-        leadBefore = await LeadModel.findOne({ clientPhone })
-            .select('pbx callCount')
-            .lean();
-    }
+      const now = payload.date_iso ? new Date(payload.date_iso) : new Date();
+      const event = String(payload.event || '').toLowerCase();
 
-    const prevUuid = leadBefore?.pbx?.last_uuid ?? null;
-    const isNewUuid = payload.uuid && payload.uuid !== prevUuid;
-    const shouldIncCallCount = isCallStartEvent(event) && isNewUuid;
+      let leadBefore = null;
+      console.log(clientPhone ," bu ga tushdi ")
 
-    const update = {
-        $setOnInsert: {
-            clientPhone,
-            createdAt: now,
-            callCount: 0,
-        },
-        $set: {
-            source,
-            status,
-            operator: slpCode,
-            called: true,
-            callTime: now,
-            updatedAt: now,
+      if (payload.uuid) {
+          leadBefore = await LeadModel.findOne({ clientPhone })
+              .select('pbx callCount')
+              .lean();
+      }
 
-            'pbx.last_uuid': payload.uuid ?? null,
-            'pbx.last_event': payload.event ?? null,
-            'pbx.last_direction': payload.direction ?? null,
-            'pbx.last_date': payload.date_iso ?? null,
-        },
-    };
+      const prevUuid = leadBefore?.pbx?.last_uuid ?? null;
+      const isNewUuid = payload.uuid && payload.uuid !== prevUuid;
+      const shouldIncCallCount = isCallStartEvent(event) && isNewUuid;
 
-    if (shouldIncCallCount) {
-        update.$inc = { callCount: 1 };
-    }
+      const update = {
+          $setOnInsert: {
+              clientPhone,
+              createdAt: now,
+              callCount: 0,
+          },
+          $set: {
+              source,
+              status,
+              operator: slpCode,
+              called: true,
+              callTime: now,
+              updatedAt: now,
 
-    const lead = await LeadModel.findOneAndUpdate(
-        { clientPhone },
-        update,
-        { upsert: true, new: true }
-    ).lean();
+              'pbx.last_uuid': payload.uuid ?? null,
+              'pbx.last_event': payload.event ?? null,
+              'pbx.last_direction': payload.direction ?? null,
+              'pbx.last_date': payload.date_iso ?? null,
+          },
+      };
 
-    /**
-     * call_end bo'lsa recording url bo'yicha LeadChat yozish (ixtiyoriy)
-     */
-    if (event === 'call_end' && payload.uuid) {
-        const duration = Number(payload.dialog_duration ?? payload.call_duration ?? 0);
+      if (shouldIncCallCount) {
+          update.$inc = { callCount: 1 };
+      }
 
-        await LeadChat.updateOne(
-            { leadId: lead._id, 'pbx.uuid': payload.uuid },
-            {
-                $setOnInsert: {
-                    leadId: lead._id,
-                    pbx: {
-                        uuid: payload.uuid,
-                        gateway: payload.gateway ?? null,
-                        accountcode: payload.direction ?? null,
-                        start_stamp: null,
-                        end_stamp: null,
-                        operator_ext: operatorExt != null ? String(operatorExt) : null,
-                        client_phone: clientPhone,
-                    },
-                    Audio: {
-                        url: payload.download_url ?? null,
-                        duration: Number.isFinite(duration) ? duration : 0,
-                    },
-                    operatorSlpCode: slpCode, // createdBy o'rniga alohida
-                    message: `📞 Call (${payload.direction})`,
-                    createdAt: now,
-                },
-            },
-            { upsert: true }
-        );
-    }
+      const lead = await LeadModel.findOneAndUpdate(
+          { clientPhone },
+          update,
+          { upsert: true, new: true }
+      ).lean();
 
-    return { ok: true, leadId: String(lead._id) };
+      return { ok: true, leadId: String(lead._id) };
+  }
+  catch (err) {
+      console.error('[handleOnlinePbxPayload] Error:', err);
+      return { ok: false, error: err.message };
+  }
 }
 
 module.exports = {
