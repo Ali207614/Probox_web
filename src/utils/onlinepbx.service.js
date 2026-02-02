@@ -71,7 +71,7 @@ async function handleOnlinePbxPayload(payload) {
               source,
               status,
               operator: slpCode,
-              called: true,x
+              called: true,
               callTime: now,
               updatedAt: now,
               'pbx.last_uuid': payload.uuid ?? null,
