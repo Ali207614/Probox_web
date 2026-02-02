@@ -70,7 +70,7 @@ async function handleOnlinePbxPayload(payload) {
           $set: {
               source,
               status,
-              SlpCode: slpCode,
+              operator: slpCode,
               called: true,
               callTime: now,
               updatedAt: now,
