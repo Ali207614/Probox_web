@@ -43,11 +43,15 @@ async function handleOnlinePbxPayload(payload) {
       const event = String(payload.event || '').toLowerCase();
 
       let leadBefore = null;
-      console.log(clientPhone ," bu ga tushdi ")
 
       if (payload.uuid) {
-          leadBefore = await LeadModel.findOne({ clientPhone })
-              .select('pbx callCount')
+          const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+          leadBefore = await LeadModel.findOne({
+              clientPhone,
+              updatedAt: { $gte: since }, // yoki createdAt
+          })
+              .select('pbx callCount updatedAt')
               .lean();
       }
 
@@ -59,16 +63,15 @@ async function handleOnlinePbxPayload(payload) {
           $setOnInsert: {
               clientPhone,
               createdAt: now,
-              callCount: 0,
+              // callCount: 0  // ❌ olib tashlang
           },
           $set: {
               source,
               status,
-              operator: slpCode,
+              SlpCode: slpCode,
               called: true,
               callTime: now,
               updatedAt: now,
-
               'pbx.last_uuid': payload.uuid ?? null,
               'pbx.last_event': payload.event ?? null,
               'pbx.last_direction': payload.direction ?? null,
@@ -79,6 +82,7 @@ async function handleOnlinePbxPayload(payload) {
       if (shouldIncCallCount) {
           update.$inc = { callCount: 1 };
       }
+
 
       const lead = await LeadModel.findOneAndUpdate(
           { clientPhone },
