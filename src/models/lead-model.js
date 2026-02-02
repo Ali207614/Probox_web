@@ -10,6 +10,14 @@ const LeadSchema = new Schema(
             sparse: true,
             description: 'Unique ID'
         },
+        pbx: {
+            last_uuid: String,
+            last_event: String,
+            last_direction: String,   // inbound/outbound
+            last_date: Date,
+            last_operator_ext: String,
+            last_download_url: String
+        },
         limit: { type: Number, description: 'Ajratilgan limit yoki kredit miqdori' },
         paymentScore: { type: String, description: 'Payment Score' },
         totalContracts: { type: String, description: 'Payment Score' },

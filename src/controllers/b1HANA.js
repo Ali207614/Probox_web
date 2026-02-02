@@ -11,6 +11,7 @@ const CommentModel = require("../models/comment-model")
 const UserModel = require("../models/user-model")
 const b1Sl = require('./b1SL')
 const { shuffleArray, parseLocalDateString, addAndCondition } = require("../helpers");
+const {handleOnlinePbxPayload} = require("../utils/onlinepbx.service");
 const moment = require('moment-timezone')
 const fsPromises = require('fs/promises');
 const {notIncExecutorRole} = require("../config");
@@ -167,25 +168,26 @@ class b1HANA {
 
         return out;
     };
-
     onlinePbxWebhook = async (req, res, next) => {
         try {
+            // req.body form-urlencoded bo'lgani uchun express.urlencoded() middleware kerak
             const payload = this.normalizeOnlinePbxPayload(req.body);
 
             console.log('--- ONLINEPBX ---');
             console.log('event:', payload.event);
+            console.log('direction:', payload.direction);
             console.log('uuid:', payload.uuid);
             console.log('caller:', payload.caller);
             console.log('callee:', payload.callee);
-            console.log('direction:', payload.direction);
-            console.log('date:', payload.date_iso || payload.date);
-            console.log('full:', payload);
+            console.log('date:', payload.date_iso || payload.date || payload.data);
+            // console.log('full:', payload);
 
-            return res.status(200).json({ ok: true });
+            const result = await handleOnlinePbxPayload(payload);
+            return res.status(200).json(result);
         } catch (e) {
             next(e);
         }
-    };
+    }
 
     execute = async (sql) => {
         try {
@@ -1851,7 +1853,7 @@ class b1HANA {
 
             if (
                 (validData.answered === false || existingLead.answered === false) &&
-                (Number(validData.callCount) >= 3)
+                (Number(validData.callCount) >= 5)
             ) {
                 validData.status = 'Closed';
             }
