@@ -55,7 +55,7 @@ async function handleOnlinePbxPayload(payload) {
               .lean();
       }
 
-      const prevUuid = leadBefore?.pbx?.last_uuid ?? null;
+      const prevUuid = leadBefore?.pbx?.lxast_uuid ?? null;
       const isNewUuid = payload.uuid && payload.uuid !== prevUuid;
       const shouldIncCallCount = isCallStartEvent(event) && isNewUuid;
       const n = await generateShortId('PRO');
@@ -71,7 +71,7 @@ async function handleOnlinePbxPayload(payload) {
               source,
               status,
               operator: slpCode,
-              called: true,
+              called: true,x
               callTime: now,
               updatedAt: now,
               'pbx.last_uuid': payload.uuid ?? null,

@@ -80,7 +80,7 @@ function deriveLeadFields(payload) {
 
     // explicit missed events
     const isMissedByEvent =
-        event.includes('miss') || event.includes('no_answer') || event.includes('noanswer');
+        event.includes('call_missed');
 
     if (isMissedByEvent) return { source, status: 'Missed' };
 
