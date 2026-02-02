@@ -7,7 +7,7 @@ const {
     deriveLeadFields,
     loadOperatorsMap,
 } = require('./onlinepbx.utils');
-
+const { generateShortId } = require("../utils/createLead");
 // simple in-memory cache
 let OPS_CACHE = { at: 0, map: null };
 const OPS_TTL_MS = 60 * 1000;
@@ -58,11 +58,13 @@ async function handleOnlinePbxPayload(payload) {
       const prevUuid = leadBefore?.pbx?.last_uuid ?? null;
       const isNewUuid = payload.uuid && payload.uuid !== prevUuid;
       const shouldIncCallCount = isCallStartEvent(event) && isNewUuid;
-
+      const n = await generateShortId('PRO');
       const update = {
           $setOnInsert: {
               clientPhone,
               createdAt: now,
+              time:now,
+              n
               // callCount: 0  // ❌ olib tashlang
           },
           $set: {

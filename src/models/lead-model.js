@@ -104,7 +104,7 @@ const LeadSchema = new Schema(
         status: {
             type: String,
             description: "Status",
-            enum: ['Archived', 'Closed', 'Active', 'Blocked','Processing','Purchased','Returned'],
+            enum: ['Archived', 'Closed', 'Active', 'Blocked','Processing','Purchased','Returned',"Missed"],
             default: 'Active',
         },
         invoiceCreated: {

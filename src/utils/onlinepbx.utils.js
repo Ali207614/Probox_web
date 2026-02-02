@@ -82,15 +82,15 @@ function deriveLeadFields(payload) {
     const isMissedByEvent =
         event.includes('miss') || event.includes('no_answer') || event.includes('noanswer');
 
-    if (isMissedByEvent) return { source, status: 'missed' };
+    if (isMissedByEvent) return { source, status: 'Missed' };
 
     // call_end inbound + dialog_duration=0 => missed
     if (event === 'call_end' && dir === 'inbound') {
         const dialog = Number(payload.dialog_duration ?? 0);
-        if (!Number.isNaN(dialog) && dialog <= 0) return { source, status: 'missed' };
+        if (!Number.isNaN(dialog) && dialog <= 0) return { source, status: 'Missed' };
     }
 
-    return { source, status: 'active' };
+    return { source, status: 'Active' };
 }
 
 function normalizeOnlinePbxPayload(body) {
