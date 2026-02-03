@@ -9,6 +9,7 @@ const {
 } = require('./onlinepbx.utils');
 
 const { generateShortId } = require('../utils/createLead');
+const b1Sl = require("../controllers/b1SL");
 
 const COMPANY_GATEWAY = '781134774';
 
@@ -38,6 +39,10 @@ async function handleOnlinePbxPayload(payload) {
 
         const clientPhone = pickClientPhoneFromWebhook(payload);
         if (!clientPhone) return { ok: true, skipped: 'no_client_phone' };
+        const sapRecord = await b1Sl.findOrCreateBusinessPartner(clientPhone);
+
+        const cardCode = sapRecord?.cardCode || null;
+        const cardName = sapRecord?.cardName || null;
 
         const operatorExt = pickOperatorExtFromPayload(payload);
         const opsMap = await getOperatorsMapCached();
@@ -48,10 +53,8 @@ async function handleOnlinePbxPayload(payload) {
         const now = payload.date_iso ? new Date(payload.date_iso) : new Date();
         const event = String(payload.event || '').toLowerCase();
 
-        // ✅ 2) 1 oy ichida bo'lsa update, bo'lmasa insert
         const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-        // Dedup uchun oldingi leadni faqat 1 oy ichidan qidiramiz
         let leadBefore = null;
         if (payload.uuid) {
             leadBefore = await LeadModel.findOne({
@@ -62,7 +65,6 @@ async function handleOnlinePbxPayload(payload) {
                 .lean();
         }
 
-        // ✅ typo fix
         const prevUuid = leadBefore?.pbx?.last_uuid ?? null;
 
         const isNewUuid = payload.uuid && payload.uuid !== prevUuid;
@@ -70,8 +72,6 @@ async function handleOnlinePbxPayload(payload) {
 
         const n = await generateShortId('PRO');
 
-        // ✅ Filter: faqat 1 oy ichidagi lead update bo'ladi.
-        // Topilmasa upsert => yangi lead ochiladi.
         const filter = {
             clientPhone,
             time: { $gte: since },
@@ -83,6 +83,13 @@ async function handleOnlinePbxPayload(payload) {
                 createdAt: now,
                 time: now, // yangi lead ochilganda time qo'yiladi
                 n,
+                cardCode,
+                cardName,
+                clientName: sapRecord?.cardName || null,
+                jshshir:sapRecord?.U_jshshir || null,
+                idX: sapRecord?.Cellular || null,
+                passportId: sapRecord?.Cellular || null,
+                jshshir2: sapRecord?.U_jshshir || null,
             },
             $set: {
                 source,
