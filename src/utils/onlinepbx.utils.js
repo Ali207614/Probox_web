@@ -26,6 +26,8 @@ function pickOperatorExtFromPayload(payload) {
         .map(digitsOnly)
         .filter((x) => x && x.length <= 5);
 
+    console.log(payload , candidates)
+
     const n = Number(String(candidates[0] ?? '').trim());
     return Number.isFinite(n) ? n : null;
 }
