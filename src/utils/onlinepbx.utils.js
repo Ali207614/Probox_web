@@ -26,6 +26,7 @@ function normalizePhoneToFull998(raw) {
  * Ba'zi eventlarda boshqa field ham bo'lishi mumkin, shuning uchun fallback qildik.
  */
 function pickOperatorExtFromPayload(payload) {
+    console.log(payload);
     const candidates = [
         payload.calle,
     ].filter((x) => x != null && x !== '');

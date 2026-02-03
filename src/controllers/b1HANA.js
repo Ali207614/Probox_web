@@ -1934,28 +1934,6 @@ class b1HANA {
                 validData.passportVisit &&
                 ['Passport', 'Visit'].includes(validData.passportVisit)
             ) {
-                const weekday = moment().isoWeekday().toString();
-
-                if (!existingLead.operator2) {
-                    const operator2Query = DataRepositories.getSalesPersons({
-                        include: ['Operator2'],
-                    });
-                    const operator2Data = await this.execute(operator2Query);
-
-                    const availableOperator2s = operator2Data.filter((item) =>
-                        (item?.U_workDay || '').split(',').includes(weekday)
-                    );
-
-                    if (availableOperator2s.length > 0) {
-                        const randomIndex = Math.floor(
-                            Math.random() * availableOperator2s.length
-                        );
-                        const selectedOperator2 = availableOperator2s[randomIndex];
-                        validData.operator2 = selectedOperator2?.SlpCode || null;
-                    } else {
-                        console.warn('No available Operator2 found for today');
-                    }
-                }
 
                 if (
                     !existingLead.scoring && validData.passportVisit === 'Passport'
