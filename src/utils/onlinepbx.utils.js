@@ -28,7 +28,8 @@ function normalizePhoneToFull998(raw) {
 function pickOperatorExtFromPayload(payload) {
     console.log(payload);
     const candidates = [
-        payload.calle,
+        payload.callee,
+        payload.caller,
     ].filter((x) => x != null && x !== '');
 
     const n = Number(String(candidates[0] ?? '').trim());
