@@ -848,7 +848,7 @@ class b1HANA {
             if (operators2?.length) filter.operator2 = { $in: operators2 };
             if (scorings?.length) filter.scoring = { $in: scorings };
             if (sellers?.length) filter.seller = { $in: sellers };
-            if (rejectionReason?.length) filter.seller = { $in: rejectionReason };
+            if (rejectionReason?.length) filter.rejectionReason = { $in: rejectionReason };
 
             function parseYesNoUnmarked(value, field, isNumeric = false) {
                 if (value === undefined) return;
