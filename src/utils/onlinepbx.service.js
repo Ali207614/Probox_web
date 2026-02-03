@@ -122,8 +122,6 @@ async function handleOnlinePbxPayload(payload) {
         // ✅ 6) operator mapping
         const operatorExt = pickOperatorExtFromPayload(payload);
         const opsMap = await getOperatorsMapCached();
-        console.log(opsMap);
-        console.log(operatorExt);
         const slpCode =
             operatorExt != null ? (opsMap.get(operatorExt) ?? null) : null;
 
@@ -143,29 +141,11 @@ async function handleOnlinePbxPayload(payload) {
             status: { $in: ALLOWED_STATUSES },
         };
 
-        console.log({
-            clientPhone: canonicalPhone,
-            createdAt: now,
-            time: now, // insertda ham tepaga chiqishi uchun
-            n: n || undefined,
-            source,
-            cardCode,
-            cardName,
-            clientName: sapRecord?.cardName || null,
-            jshshir: sapRecord?.U_jshshir || null,
-            idX: sapRecord?.Cellular || null,
-            passportId: sapRecord?.Cellular || null,
-            jshshir2: sapRecord?.U_jshshir || null,
-            operator:slpCode
-        })
-        // ✅ 11) Update document
         const update = {
             $setOnInsert: {
                 clientPhone: canonicalPhone,
                 createdAt: now,
                 n: n || undefined,
-
-                // ✅ faqat yangi lead
                 source,
                 operator: slpCode,
             },
