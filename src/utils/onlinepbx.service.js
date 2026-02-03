@@ -96,9 +96,11 @@ async function handleOnlinePbxPayload(payload) {
         const leadBefore = await LeadModel.findOne({
             clientPhone: { $in: phoneCandidates },
             status: { $in: ALLOWED_STATUSES },
+            purchase: { $ne: true },
         })
-            .select('pbx source time status clientPhone')
+            .select('pbx source time status clientPhone purchase')
             .lean();
+
 
         const isExistingLead = !!leadBefore;
 
