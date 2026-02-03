@@ -500,6 +500,7 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
     findOrCreateBusinessPartner = async (phone, cardName) => {
         if (!phone) return null;
         const digits = this.normalizePhone(phone);
+        console.log("digits:", digits);
 
         if (!digits) {
             return res.status(400).json({
