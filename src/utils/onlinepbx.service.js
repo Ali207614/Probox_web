@@ -13,7 +13,7 @@ const b1Sl = require('../controllers/b1SL');
 
 const COMPANY_GATEWAY = '781134774';
 
-const ALLOWED_STATUSES = ['Active', 'Processing', 'Returned'];
+const ALLOWED_STATUSES = ['Active', 'Processing', 'Returned','Missed'];
 
 const RECENT_WINDOW_DAYS = 30;
 const RECENT_WINDOW_MS = RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -73,15 +73,6 @@ async function getOperatorsMapCached() {
     return map;
 }
 
-/**
- * Main handler
- * - gateway tekshiradi
- * - clientPhone normalizatsiya qiladi (full/local variants)
- * - 30 kun ichida, status ALLOWED_STATUSES bo‘yicha existing lead topadi
- * - existing bo‘lsa: source tegmaydi, time doim yangilanadi (tepaga chiqsin)
- * - new lead bo‘lsa: source biriktiradi, n yaratadi
- * - callCount faqat call_start + uuid yangi bo‘lsa ++
- */
 async function handleOnlinePbxPayload(payload) {
     try {
         // ✅ 1) gateway check
@@ -89,7 +80,6 @@ async function handleOnlinePbxPayload(payload) {
             return { ok: true, skipped: 'wrong_gateway' };
         }
 
-        // ✅ 2) client phone & variants
         const rawClientPhone = pickClientPhoneFromWebhook(payload);
         if (!rawClientPhone) return { ok: true, skipped: 'no_client_phone' };
 
