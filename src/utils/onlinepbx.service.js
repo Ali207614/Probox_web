@@ -169,7 +169,6 @@ async function handleOnlinePbxPayload(payload) {
             $setOnInsert: {
                 clientPhone: canonicalPhone,
                 createdAt: now,
-                time: now, // insertda ham tepaga chiqishi uchun
                 n: n || undefined,
                 source,
                 cardCode,
