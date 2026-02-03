@@ -203,13 +203,6 @@ async function handleOnlinePbxPayload(payload) {
             },
         };
 
-
-        // ✅ existing bo‘lsa source’ga tegmaymiz (DB dagisi qoladi)
-        // ✅ new lead bo‘lsa: setOnInsert already sets it; optionally set on update too
-        if (!isExistingLead) {
-            update.$set.source = source;
-        }
-
         if (shouldIncCallCount) {
             update.$inc = { callCount: 1 };
         }
