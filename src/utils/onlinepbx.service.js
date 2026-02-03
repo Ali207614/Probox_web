@@ -13,14 +13,11 @@ const b1Sl = require('../controllers/b1SL');
 
 const COMPANY_GATEWAY = '781134774';
 
-// ✅ leadni “existing” deb hisoblash uchun qidiriladigan statuslar
 const ALLOWED_STATUSES = ['Active', 'Processing', 'Returned'];
 
-// ✅ 30 kunlik “recent lead” oynasi
 const RECENT_WINDOW_DAYS = 30;
 const RECENT_WINDOW_MS = RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
-// ✅ operator map cache (in-memory)
 let OPS_CACHE = { at: 0, map: null };
 const OPS_TTL_MS = 60 * 1000;
 
@@ -28,12 +25,7 @@ function digitsOnly(v = '') {
     return String(v ?? '').replace(/\D/g, '');
 }
 
-/**
- * Telefon variantlari:
- * - full: 998XXXXXXXXX (12 digit)
- * - local: XXXXXXXXX (9 digit)
- * Qidiruvda ikkalasi bilan topamiz (DB’da qaysi format bo‘lsa ham).
- */
+
 function buildPhoneVariants(raw) {
     const d = digitsOnly(raw);
     if (!d) return { full: null, local: null, candidates: [] };
@@ -130,6 +122,8 @@ async function handleOnlinePbxPayload(payload) {
         // ✅ 6) operator mapping
         const operatorExt = pickOperatorExtFromPayload(payload);
         const opsMap = await getOperatorsMapCached();
+        console.log(opsMap);
+        console.log(operatorExt);
         const slpCode =
             operatorExt != null ? (opsMap.get(operatorExt) ?? null) : null;
 
