@@ -93,10 +93,8 @@ async function handleOnlinePbxPayload(payload) {
         const now = payload?.date_iso ? new Date(payload.date_iso) : new Date();
         const since = getSinceDate();
 
-        // ✅ 4) find existing lead (only allowed statuses)
         const leadBefore = await LeadModel.findOne({
             clientPhone: { $in: phoneCandidates },
-            time: { $gte: since },
             status: { $in: ALLOWED_STATUSES },
         })
             .select('pbx source time status clientPhone')
