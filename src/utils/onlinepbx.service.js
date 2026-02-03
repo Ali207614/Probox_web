@@ -152,7 +152,6 @@ async function handleOnlinePbxPayload(payload) {
                 // ✅ SAP ma’lumotlari doim refresh (xohlasangiz keyin conditional qilamiz)
                 cardCode,
                 cardName,
-                clientName: sapRecord?.cardName || null,
                 jshshir: sapRecord?.U_jshshir || null,
                 idX: sapRecord?.Cellular || null,
                 passportId: sapRecord?.Cellular || null,
