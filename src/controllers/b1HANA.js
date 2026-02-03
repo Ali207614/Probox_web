@@ -2606,8 +2606,6 @@ class b1HANA {
                         .filter(item => item?.phoneConfiscated)
                         .reduce((a, b) => a + Number(b?.InsTotal || 0), 0) || 0;
 
-                console.log(startDateMoment, endDateMoment, excludeModel.length , invoicesModel.length, phoneConfisList.length,confiscatedTotal ," buuuuuu")
-
 
                 if (!isUndistributed && phoneConfisList.length === 0) {
                     const obj = {

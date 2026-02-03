@@ -18,23 +18,26 @@ class b1SL {
     normalizePhone = (phone = '') => {
         let p = String(phone).trim();
 
-        // bo'sh joylarni olib tashla
-        p = p.replace(/\s+/g, '');
-
-        // faqat raqam qoldir
+        // faqat raqam
         p = p.replace(/\D/g, '');
 
-        // agar 998 bilan boshlanmasa → qo‘sh
-        if (p.length === 9) {
-            p = '998' + p;
+        if (!p) return null;
+
+        // 9 xonali: local
+        if (/^\d{9}$/.test(p)) {
+            return p
         }
 
-        if (p.length === 12 && p.startsWith('998')) {
-            return p;
+        // 12 xonali va 998 bilan: full -> local kesib olish
+        if (/^998\d{9}$/.test(p)) {
+            return p.slice(3)
         }
 
-        return null; // yaroqsiz
+        // ba’zan +998... keladi, yuqorida \D olib tashlangani uchun bu ham shu yerga tushadi
+
+        return null;
     };
+
 
     findBpByPhoneSql = (phone) => `
     SELECT

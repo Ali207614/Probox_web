@@ -57,8 +57,6 @@ class LeadController {
                 qrValue,
             });
         } catch (err) {
-
-            console.log(err ,' buuu errrrrrrrrr')
             next(err);
         }
     };
