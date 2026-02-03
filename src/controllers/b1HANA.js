@@ -171,17 +171,7 @@ class b1HANA {
 
     onlinePbxWebhook = async (req, res, next) => {
         try {
-            // req.body form-urlencoded bo'lgani uchun express.urlencoded() middleware kerak
             const payload = this.normalizeOnlinePbxPayload(req.body);
-
-            console.log('--- ONLINEPBX ---');
-            console.log('event:', payload.event);
-            console.log('direction:', payload.direction);
-            console.log('uuid:', payload.uuid);
-            console.log('caller:', payload.caller);
-            console.log('callee:', payload.callee);
-            console.log('date:', payload.date_iso || payload.date || payload.data);
-            // console.log('full:', payload);
 
             const result = await handleOnlinePbxPayload(payload);
             return res.status(200).json(result);
