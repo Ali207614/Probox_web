@@ -24,7 +24,7 @@ function pickOperatorExtFromPayload(payload) {
 
     const candidates = [payload.caller, payload.callee]
         .map(digitsOnly)
-        .filter((x) => x && x.length <= 5);
+        .filter((x) => x && x.length <= 3);
 
     console.log(payload , candidates)
 

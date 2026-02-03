@@ -112,7 +112,7 @@ async function handleOnlinePbxPayload(payload) {
         const opsMap = await getOperatorsMapCached();
         console.log(operatorExt, opsMap)
         const slpCode =
-            operatorExt != null ? (opsMap.get(operatorExt) ?? null) : null;
+            (operatorExt != null && operatorExt !== 0) ? (opsMap.get(operatorExt) ?? null) : null;
 
         const { source, status } = deriveLeadFields(payload);
 
@@ -136,13 +136,12 @@ async function handleOnlinePbxPayload(payload) {
                 createdAt: now,
                 n: n || undefined,
                 source,
-                operator: slpCode,
             },
 
             $set: {
                 // ✅ doim tepaga chiqsin
                 time: now,
-
+                operator: slpCode,
                 status,
                 called: true,
                 callTime: now,
