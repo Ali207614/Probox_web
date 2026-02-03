@@ -829,6 +829,7 @@ class b1HANA {
             }
             const sources = parseArray(source);
             const branches = parseArray(branch);
+            const rejectionReasons = parseArray(rejectionReason);
             const operators = parseArray(operator);
             const operators2 = parseArray(operator2);
             const scorings = parseArray(scoring);
@@ -848,7 +849,7 @@ class b1HANA {
             if (operators2?.length) filter.operator2 = { $in: operators2 };
             if (scorings?.length) filter.scoring = { $in: scorings };
             if (sellers?.length) filter.seller = { $in: sellers };
-            if (rejectionReason?.length) filter.rejectionReason = { $in: rejectionReason };
+            if (rejectionReasons?.length) filter.rejectionReason = { $in: rejectionReasons };
 
             function parseYesNoUnmarked(value, field, isNumeric = false) {
                 if (value === undefined) return;
