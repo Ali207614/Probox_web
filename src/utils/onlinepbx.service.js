@@ -40,7 +40,6 @@ async function handleOnlinePbxPayload(payload) {
         const clientPhone = pickClientPhoneFromWebhook(payload);
         if (!clientPhone) return { ok: true, skipped: 'no_client_phone' };
 
-        console.log(`[handleOnlinePbxPayload] ${clientPhone} ${payload.event}`);
         const sapRecord = await b1Sl.findOrCreateBusinessPartner(clientPhone);
 
         const cardCode = sapRecord?.cardCode || null;

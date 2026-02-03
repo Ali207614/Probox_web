@@ -27,11 +27,7 @@ function normalizePhoneToFull998(raw) {
  */
 function pickOperatorExtFromPayload(payload) {
     const candidates = [
-        payload.calle,          // ✅ sizda shu
-        payload.operator_ext,
-        payload.user,
-        payload.extension,
-        payload.ext,
+        payload.calle,
     ].filter((x) => x != null && x !== '');
 
     const n = Number(String(candidates[0] ?? '').trim());
