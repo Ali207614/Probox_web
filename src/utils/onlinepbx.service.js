@@ -170,19 +170,14 @@ async function handleOnlinePbxPayload(payload) {
                 clientPhone: canonicalPhone,
                 createdAt: now,
                 n: n || undefined,
+
+                // ✅ faqat yangi lead
                 source,
-                cardCode,
-                cardName,
-                clientName: sapRecord?.cardName || null,
-                jshshir: sapRecord?.U_jshshir || null,
-                idX: sapRecord?.Cellular || null,
-                passportId: sapRecord?.Cellular || null,
-                jshshir2: sapRecord?.U_jshshir || null,
-                operator:slpCode
+                operator: slpCode,
             },
 
             $set: {
-                // ✅ MUHIM: existing bo‘lsa ham time doim yangilanadi (sort bo‘yicha tepaga chiqadi)
+                // ✅ doim tepaga chiqsin
                 time: now,
 
                 status,
@@ -190,16 +185,16 @@ async function handleOnlinePbxPayload(payload) {
                 callTime: now,
                 updatedAt: now,
 
-                // SAP meta refresh (cardCode o‘zgarib qolsa ham yangilanadi)
+                // ✅ SAP ma’lumotlari doim refresh (xohlasangiz keyin conditional qilamiz)
                 cardCode,
                 cardName,
-
+                clientName: sapRecord?.cardName || null,
                 jshshir: sapRecord?.U_jshshir || null,
                 idX: sapRecord?.Cellular || null,
                 passportId: sapRecord?.Cellular || null,
                 jshshir2: sapRecord?.U_jshshir || null,
 
-                // pbx meta
+                // ✅ PBX meta
                 'pbx.last_uuid': incomingUuid,
                 'pbx.last_event': payload?.event ?? null,
                 'pbx.last_direction': payload?.direction ?? null,
@@ -207,6 +202,7 @@ async function handleOnlinePbxPayload(payload) {
                 'pbx.last_gateway': payload?.gateway ?? null,
             },
         };
+
 
         // ✅ existing bo‘lsa source’ga tegmaymiz (DB dagisi qoladi)
         // ✅ new lead bo‘lsa: setOnInsert already sets it; optionally set on update too
