@@ -6,11 +6,13 @@ const leadController = require('../controllers/leadController');
 const analyticsController = require('../controllers/analyticsController');
 const authMiddleware = require('../middlewares/auth-middleware');
 const googleSheetWebhook = require('./googleSheetWebhook');
+const purchasePdfControllerFactory = require('../controllers/purchasePdfController');
+const uploadService = require('../minio');
 
 const multer = require('multer');
 
 const upload = multer({ storage: multer.memoryStorage() });
-
+const purchasePdfController = purchasePdfControllerFactory({ uploadService });
 const router = new Router();
 
 const invoiceRouter = require("./invoice")
@@ -71,14 +73,37 @@ router.post(
     leadController.uploadLeadImage
 );
 
-// Leadga tegishli rasmlarni olish (3-size signed URL bilan)
+router.post(
+    '/purchases/pdfs',
+    authMiddleware,
+    upload.single('file'),
+    purchasePdfController.uploadPurchasePdf
+);
+
+router.get(
+    '/purchases/:docEntry/pdfs',
+    purchasePdfController.getPurchasePdfsByDocEntry
+);
+
+router.get(
+    '/public/purchases/pdfs/:docEntry',
+    purchasePdfController.downloadPurchasePdfByDocEntry
+);
+
+router.delete(
+    '/purchases/pdfs/:id',
+    authMiddleware,
+    purchasePdfController.deletePurchasePdf
+);
+
+
 router.get(
     '/lead-images/:leadId',
     authMiddleware,
     leadController.getLeadImages
 );
 
-// LeadImage o‘chirish (3-size rasm o‘chadi)
+
 router.delete(
     '/lead-images/:id',
     authMiddleware,
