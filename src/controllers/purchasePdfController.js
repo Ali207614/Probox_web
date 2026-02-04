@@ -1,4 +1,4 @@
-const PurchasePdf = require('../models/purchase-pdf.model');
+const PurchasePdf = require('../models/purchase-image-model');
 const { GetObjectCommand } = require('@aws-sdk/client-s3');
 
 function assertPdf(file) {
