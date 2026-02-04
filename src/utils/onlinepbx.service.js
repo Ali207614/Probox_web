@@ -138,10 +138,15 @@ async function handleOnlinePbxPayload(payload) {
                 createdAt: now,
                 n: n || undefined,
                 source,
+                jshshir: sapRecord?.U_jshshir || null,
+                idX: sapRecord?.Cellular || null,
+                passportId: sapRecord?.Cellular || null,
+                jshshir2: sapRecord?.U_jshshir || null,
+                cardCode,
+                cardName,
             },
 
             $set: {
-                // ✅ doim tepaga chiqsin
                 time: now,
                 operator: slpCode,
                 status,
@@ -149,15 +154,6 @@ async function handleOnlinePbxPayload(payload) {
                 callTime: now,
                 updatedAt: now,
 
-                // ✅ SAP ma’lumotlari doim refresh (xohlasangiz keyin conditional qilamiz)
-                cardCode,
-                cardName,
-                jshshir: sapRecord?.U_jshshir || null,
-                idX: sapRecord?.Cellular || null,
-                passportId: sapRecord?.Cellular || null,
-                jshshir2: sapRecord?.U_jshshir || null,
-
-                // ✅ PBX meta
                 'pbx.last_uuid': incomingUuid,
                 'pbx.last_event': payload?.event ?? null,
                 'pbx.last_direction': payload?.direction ?? null,
