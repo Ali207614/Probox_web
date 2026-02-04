@@ -84,7 +84,7 @@ module.exports = ({ uploadService }) => ({
 
             const out = items.map((pdf) => ({
                 ...pdf,
-                pdfUrl: `public/purchases/pdfs/${pdf._id}.pdf`,
+                pdfUrl: `/public/purchases/pdfs/${pdf._id}.pdf`,
             }));
 
             return res.json({
