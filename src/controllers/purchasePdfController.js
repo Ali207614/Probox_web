@@ -58,7 +58,7 @@ module.exports = ({ uploadService }) => ({
                 size: uploaded.size,
             });
 
-            const pdfUrl = `${process.env.PUBLIC_BASE_URL}/public/purchases/pdfs/${saved._id}.pdf`;
+            const pdfUrl = `public/purchases/pdfs/${saved._id}.pdf`;
 
             return res.json({
                 status: true,
