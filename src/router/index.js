@@ -7,11 +7,13 @@ const analyticsController = require('../controllers/analyticsController');
 const authMiddleware = require('../middlewares/auth-middleware');
 const googleSheetWebhook = require('./googleSheetWebhook');
 const purchasePdfControllerFactory = require('../controllers/purchasePdfController');
-const uploadService = require('../minio');
+const UploadService = require('../minio');
 
 const multer = require('multer');
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+const uploadService = new UploadService();
 const purchasePdfController = purchasePdfControllerFactory({ uploadService });
 const router = new Router();
 
