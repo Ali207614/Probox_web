@@ -82,10 +82,9 @@ module.exports = ({ uploadService }) => ({
                 .sort({ createdAt: -1 })
                 .lean();
 
-            // ✅ signed emas: oddiy public url qaytaramiz
             const out = items.map((pdf) => ({
                 ...pdf,
-                pdfUrl: `${process.env.PUBLIC_BASE_URL}/public/purchases/pdfs/${pdf._id}.pdf`,
+                pdfUrl: `public/purchases/pdfs/${pdf._id}.pdf`,
             }));
 
             return res.json({
