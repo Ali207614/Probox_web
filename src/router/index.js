@@ -83,7 +83,7 @@ router.post(
 );
 
 router.get(
-    '/purchases/pdf/:docEntry/docs',
+    '/purchase/pdf/:docEntry',
     authMiddleware,
     purchasePdfController.getPurchasePdfsByDocEntry
 );
