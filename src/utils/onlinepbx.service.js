@@ -93,13 +93,17 @@ async function handleOnlinePbxPayload(payload) {
         const now = payload?.date_iso ? new Date(payload.date_iso) : new Date();
         const since = getSinceDate();
 
+        const raw = pickClientPhoneFromWebhook(payload);
+        const d = digitsOnly(raw);
+
+        const local9 = d.length >= 9 ? d.slice(-9) : d;
+        const regex = new RegExp(`${local9}$`);
+
         const leadBefore = await LeadModel.findOne({
-            clientPhone: { $in: phoneCandidates },
+            clientPhone: { $regex: regex },
             status: { $in: ALLOWED_STATUSES },
             purchase: { $ne: true },
-        })
-            .select('pbx source time status clientPhone purchase')
-            .lean();
+        }).lean();
 
 
         const isExistingLead = !!leadBefore;
