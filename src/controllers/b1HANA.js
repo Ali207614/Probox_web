@@ -3769,6 +3769,7 @@ class b1HANA {
         }
     };
 
+
     getChats = async (req, res, next) => {
         try {
             const { id } = req.params;
@@ -3889,6 +3890,7 @@ class b1HANA {
             next(err);
         }
     };
+
 }
 
 module.exports = new b1HANA();
