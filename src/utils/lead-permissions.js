@@ -5,6 +5,7 @@ const DataRepositories = require("../repositories/dataRepositories");
 
 const permissions = {
     Operator1: [
+        'clientName',
         'called',
         'callTime',
         'answered',
