@@ -3658,25 +3658,114 @@ class b1HANA {
     };
 
     getChatRecording = async (req, res, next) => {
-        try {
-            const { uuid } = req.params;
+        const { uuid } = req.params;
 
+        // HTML5 audio uchun Range muhim
+        const range = req.headers.range;
+
+        // Client uzib qo‘ysa axios’ni ham abort qilamiz
+        const controller = new AbortController();
+        const { signal } = controller;
+
+        const onClose = () => controller.abort();
+        req.on("close", onClose);
+
+        try {
+            // 1) Download URL olish tezligi
+            const t0 = Date.now();
             const dl = await pbxClient.getDownloadUrl(uuid);
+            const dlMs = Date.now() - t0;
+
             const onlineUrl =
                 typeof dl === "string"
                     ? dl
-                    : (typeof dl?.data === "string" ? dl.data : dl?.data?.url || dl?.url);
+                    : typeof dl?.data === "string"
+                        ? dl.data
+                        : dl?.data?.url || dl?.url;
 
             if (!onlineUrl) return res.status(404).json({ message: "Recording url not found" });
 
-            const r = await axios.get(onlineUrl, { responseType: "stream", timeout: 60000 });
+            console.log(
+                `getDownloadUrl took ${dlMs} ms (${(dlMs / 1000).toFixed(2)} s) uuid=${uuid}`
+            );
 
-            res.setHeader("Content-Type", r.headers["content-type"] || "audio/mpeg");
+            // 2) PBX stream TTFB (headers kelishi) o‘lchaymiz
+            const t1 = Date.now();
+            const r = await axios.get(onlineUrl, {
+                responseType: "stream",
+                timeout: 60000,
+                signal,
+                headers: range ? { Range: range } : undefined,
+                validateStatus: (s) => s >= 200 && s < 500,
+            });
+            const ttfbMs = Date.now() - t1;
+
+            console.log(
+                `TTFB/headers: ${ttfbMs} ms, status=${r.status}, len=${r.headers["content-length"] || "n/a"} uuid=${uuid}`
+            );
+
+            // 3) Client’ga status + headerlarni forward qilamiz (206 ham bo‘lishi mumkin)
+            res.status(r.status);
+
+            const passHeaders = [
+                "content-type",
+                "content-length",
+                "accept-ranges",
+                "content-range",
+                "etag",
+                "last-modified",
+            ];
+            for (const h of passHeaders) {
+                if (r.headers[h]) res.setHeader(h, r.headers[h]);
+            }
+
             res.setHeader("Cache-Control", "private, max-age=300");
 
+            // Headerlarni tezroq jo‘natib yuborish (ba’zi proksilarda foydali)
+            res.flushHeaders?.();
+
+            // 4) Download speed / total time o‘lchaymiz
+            let bytes = 0;
+            const startedAt = Date.now();
+
+            r.data.on("data", (chunk) => {
+                bytes += chunk.length;
+            });
+
+            const done = (label, err) => {
+                const sec = (Date.now() - startedAt) / 1000;
+                const mb = bytes / (1024 * 1024);
+                const speed = sec > 0 ? (mb / sec) : 0;
+
+                if (label === "end") {
+                    console.log(
+                        `downloaded ${mb.toFixed(2)} MB in ${sec.toFixed(2)} s (${speed.toFixed(2)} MB/s) uuid=${uuid}`
+                    );
+                } else {
+                    console.log(
+                        `stream ${label}: after ${sec.toFixed(2)} s, got ${mb.toFixed(2)} MB (${speed.toFixed(2)} MB/s) uuid=${uuid} err=${err?.code || ""} ${err?.message || ""}`
+                    );
+                }
+            };
+
+            r.data.on("end", () => done("end"));
+            r.data.on("close", () => done("close"));
+            r.data.on("error", (e) => {
+                done("error", e);
+                next(e);
+            });
+
+            // 5) Stream’ni client’ga uzatamiz
             r.data.pipe(res);
         } catch (err) {
+            // Client abort qilsa bu normal
+            if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
+
+            console.log("getChatRecording error:", err?.code, err?.message);
             next(err);
+        } finally {
+            // listener tozalab qo‘yamiz
+            req.off("close", onClose);
         }
     };
 
@@ -3800,7 +3889,6 @@ class b1HANA {
             next(err);
         }
     };
-
 }
 
 module.exports = new b1HANA();

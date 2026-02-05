@@ -89,18 +89,16 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
         trunk_names: 'f6813980348e52891f64fa3ce451de69',
     });
 
-
     const rawCalls = res?.data ?? [];
-
     const calls = rawCalls
 
-    console.log(`[PBX SYNC] ${calls.length} calls found for lead ${leadId}`,{
-        phone_numbers,
-        user_talk_time_from: 1,
-        sort_by: 'start_stamp',
-        sort_order: 'asc',
-        trunk_names: 'f6813980348e52891f64fa3ce451de69',
-    });
+    // console.log(`[PBX SYNC] ${calls.length} calls found for lead ${leadId}`,{
+    //     phone_numbers,
+    //     user_talk_time_from: 1,
+    //     sort_by: 'start_stamp',
+    //     sort_order: 'asc',
+    //     trunk_names: 'f6813980348e52891f64fa3ce451de69',
+    // });
     if (!calls.length) return;
 
     const ops = calls.map((c) => {
