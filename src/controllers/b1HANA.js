@@ -3740,65 +3740,6 @@ class b1HANA {
         }
     };
 
-
-    // getChats = async (req, res, next) => {
-    //     try {
-    //         const { id } = req.params;
-    //         let { page = 1, limit = 20, includeDeleted = 'false' } = req.query;
-    //
-    //         page = Number(page);
-    //         limit = Number(limit);
-    //
-    //         if (!Number.isFinite(page) || page < 1) page = 1;
-    //         if (!Number.isFinite(limit) || limit < 1) limit = 20;
-    //         if (limit > 100) limit = 100;
-    //
-    //         const lead = await LeadModel.findById(id).select('_id').lean();
-    //         if (!lead) return res.status(404).json({ message: 'Lead not found' });
-    //
-    //         const userRole = req.user?.U_role;
-    //         const isAdmin = userRole === 'Admin';
-    //         const wantIncludeDeleted = String(includeDeleted).toLowerCase() === 'true';
-    //
-    //         const filter = { leadId: id };
-    //
-    //         // Admin bo‘lmasa — o‘chirilganlarni ko‘rsatmaymiz
-    //         // Admin bo‘lsa ham default: ko‘rsatmaymiz (faqat includeDeleted=true bo‘lsa)
-    //         if (!isAdmin || !wantIncludeDeleted) {
-    //             filter.isDeleted = { $ne: true };
-    //         }
-    //
-    //         const skip = (page - 1) * limit;
-    //
-    //         const [items, total] = await Promise.all([
-    //             LeadChat.find(filter)
-    //                 .sort({ createdAt: 1 })
-    //                 .skip(skip)
-    //                 .limit(limit)
-    //                 .lean(),
-    //             LeadChat.countDocuments(filter),
-    //         ]);
-    //
-    //         return res.json({
-    //             page,
-    //             limit,
-    //             total,
-    //             totalPages: Math.ceil(total / limit),
-    //             data: items.map((item) => ({
-    //                 ...item,
-    //                 Comments: item.message, // sizda "Comments" kerak bo‘lsa
-    //                 SlpCode: item.createdBy,
-    //                 // xohlasangiz deleted fieldlarni ham qaytaring:
-    //                 // isDeleted: item.isDeleted,
-    //                 // deletedAt: item.deletedAt,
-    //                 // deletedBy: item.deletedBy,
-    //             })),
-    //         });
-    //     } catch (err) {
-    //         next(err);
-    //     }
-    // };
-
     updateChat = async (req, res, next) => {
         try {
             const { chatId } = req.params;

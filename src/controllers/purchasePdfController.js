@@ -84,7 +84,7 @@ module.exports = ({ uploadService }) => ({
 
             const out = items.map((pdf) => ({
                 ...pdf,
-                pdfUrl: `/public/purchases/pdfs/${pdf._id}.pdf`,
+                pdfUrl: `/public/purchases/pdfs/${docEntryNum}.pdf`,
             }));
 
             return res.json({
@@ -96,8 +96,6 @@ module.exports = ({ uploadService }) => ({
             next(err);
         }
     },
-
-
 
     downloadPurchasePdfByDocEntry: async (req, res, next) => {
         try {
