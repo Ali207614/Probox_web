@@ -15,7 +15,6 @@ async function assignBalancedOperator() {
 
     const now = moment();
     let weekday;
-    console.log(now.hour())
     if (now.hour() >= 19) {
         weekday = moment().add(1, 'day').isoWeekday().toString();
     } else {

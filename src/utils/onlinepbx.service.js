@@ -116,7 +116,6 @@ async function handleOnlinePbxPayload(payload) {
         // ✅ 6) operator mapping
         const operatorExt = pickOperatorExtFromPayload(payload);
         const opsMap = await getOperatorsMapCached();
-        console.log(operatorExt, opsMap)
         const slpCode =
             (operatorExt != null && operatorExt !== 0) ? (opsMap.get(operatorExt) ?? null) : null;
 
