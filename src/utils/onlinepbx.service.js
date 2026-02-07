@@ -13,7 +13,13 @@ const b1Sl = require('../controllers/b1SL');
 
 const COMPANY_GATEWAY = '781134774';
 
-const ALLOWED_STATUSES = ['Active', 'Processing', 'Returned','Missed'];
+
+const ALLOWED_STATUSES = ['Active', 'Processing', 'Returned', 'Missed', 'Closed'];
+
+
+const DEDUP_WINDOW_DAYS = 2;
+const DEDUP_WINDOW_MS = DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
 
 const RECENT_WINDOW_DAYS = 30;
 const RECENT_WINDOW_MS = RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -25,38 +31,40 @@ function digitsOnly(v = '') {
     return String(v ?? '').replace(/\D/g, '');
 }
 
-
-function buildPhoneVariants(raw) {
+function canonicalizePhone(raw) {
     const d = digitsOnly(raw);
-    if (!d) return { full: null, local: null, candidates: [] };
+    if (!d) return null;
 
-    // 998901234567
-    if (d.startsWith('998') && d.length >= 12) {
-        const full = d.slice(0, 12);
-        const local = d.slice(3, 12);
-        return { full, local, candidates: [full, local] };
-    }
+    // local 9 -> full 998 + 9
+    if (/^\d{9}$/.test(d)) return `998${d}`;
 
-    // 901234567 (local)
-    if (/^\d{9}$/.test(d)) {
-        const full = `998${d}`;
-        const local = d;
-        return { full, local, candidates: [full, local] };
-    }
+    // already full 998XXXXXXXXX (12 digits)
+    if (d.startsWith('998') && d.length >= 12) return d.slice(0, 12);
 
-    // fallback (noyob formatlar)
-    const full = d.length === 12 ? d : null;
-    const local = d.length >= 9 ? d.slice(-9) : null;
+    // fallback: digits
+    return d;
+}
+
+function buildPhoneCandidates(raw) {
+    const d = digitsOnly(raw);
+    const canonical = canonicalizePhone(raw);
+    const local9 = d.length >= 9 ? d.slice(-9) : null;
 
     const candidates = [];
-    if (full) candidates.push(full);
-    if (local && local !== full) candidates.push(local);
+    if (canonical) candidates.push(canonical);
+    if (local9 && local9 !== canonical) candidates.push(local9);
 
-    return { full, local, candidates };
+    const legacyRegex = local9 ? new RegExp(`${local9}$`) : null;
+
+    return { canonical, local9, candidates, legacyRegex };
 }
 
 function getSinceDate() {
     return new Date(Date.now() - RECENT_WINDOW_MS);
+}
+
+function getSinceDedup(now = new Date()) {
+    return new Date(now.getTime() - DEDUP_WINDOW_MS);
 }
 
 function isCallStartEvent(event) {
@@ -73,6 +81,25 @@ async function getOperatorsMapCached() {
     return map;
 }
 
+/**
+ * ✅ Dedup filter:
+ * - oxirgi 2 kun ichida (time >= sinceDedup)
+ * - status ALLOWED_STATUSES ichida
+ * - purchase != true
+ * - clientPhone match: candidates OR legacyRegex (local9 endsWith)
+ */
+function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex }) {
+    return {
+        status: { $in: ALLOWED_STATUSES },
+        purchase: { $ne: true },
+        time: { $gte: sinceDedup },
+        $or: [
+            { clientPhone: { $in: phoneCandidates } },
+            ...(legacyRegex ? [{ clientPhone: { $regex: legacyRegex } }] : []),
+        ],
+    };
+}
+
 async function handleOnlinePbxPayload(payload) {
     try {
         // ✅ 1) gateway check
@@ -80,34 +107,35 @@ async function handleOnlinePbxPayload(payload) {
             return { ok: true, skipped: 'wrong_gateway' };
         }
 
+        // ✅ 2) phone
         const rawClientPhone = pickClientPhoneFromWebhook(payload);
         if (!rawClientPhone) return { ok: true, skipped: 'no_client_phone' };
 
-        const { full: phoneFull, candidates: phoneCandidates } =
-            buildPhoneVariants(rawClientPhone);
+        const { canonical: canonicalPhone, candidates: phoneCandidates, legacyRegex } =
+            buildPhoneCandidates(rawClientPhone);
 
-        if (!phoneCandidates.length) return { ok: true, skipped: 'bad_phone' };
+        if (!canonicalPhone || !phoneCandidates.length) {
+            return { ok: true, skipped: 'bad_phone' };
+        }
 
-        const canonicalPhone = phoneFull ?? digitsOnly(rawClientPhone);
-
+        // ✅ 3) time window (dedup)
         const now = payload?.date_iso ? new Date(payload.date_iso) : new Date();
-        const since = getSinceDate();
+        const sinceDedup = getSinceDedup(now);
 
-        const raw = pickClientPhoneFromWebhook(payload);
-        const d = digitsOnly(raw);
+        // (Agar sizda boshqa joylarda 30 kunlik since ishlatilsa, qoldirdik)
+        // const since30d = getSinceDate();
 
-        const local9 = d.length >= 9 ? d.slice(-9) : d;
-        const regex = new RegExp(`${local9}$`);
+        // ✅ 4) Dedup: oxirgi 2 kun ichida shu statuslarda bo'lgan lead bormi?
+        // MUHIM: leadBefore qidiruvi va upsert filteri BIR XIL bo'lishi shart.
+        const dedupFilter = buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex });
 
-        const leadBefore = await LeadModel.findOne({
-            clientPhone: { $regex: regex },
-            status: { $in: ALLOWED_STATUSES },
-            purchase: { $ne: true },
-        }).lean();
-
+        const leadBefore = await LeadModel.findOne(dedupFilter)
+            .select('pbx.last_uuid clientPhone time status purchase')
+            .lean();
 
         const isExistingLead = !!leadBefore;
 
+        // ✅ 5) SAP (find or create)
         const sapRecord = await b1Sl.findOrCreateBusinessPartner(canonicalPhone);
 
         const cardCode = sapRecord?.cardCode || null;
@@ -117,46 +145,53 @@ async function handleOnlinePbxPayload(payload) {
         const operatorExt = pickOperatorExtFromPayload(payload);
         const opsMap = await getOperatorsMapCached();
         const slpCode =
-            (operatorExt != null && operatorExt !== 0) ? (opsMap.get(operatorExt) ?? null) : null;
+            operatorExt != null && operatorExt !== 0 ? opsMap.get(operatorExt) ?? null : null;
 
+        // ✅ 7) lead fields
         const { source, status } = deriveLeadFields(payload);
 
+        // ✅ 8) callCount increment logic
         const prevUuid = leadBefore?.pbx?.last_uuid ?? null;
         const incomingUuid = payload?.uuid ?? null;
 
         const isNewUuid = incomingUuid && incomingUuid !== prevUuid;
         const shouldIncCallCount = isCallStartEvent(payload?.event) && isNewUuid;
 
+        // ✅ 9) n: faqat yangi lead yaratilsa
         const n = isExistingLead ? null : await generateShortId('PRO');
 
-        const filter = {
-            clientPhone: { $in: phoneCandidates },
-            time: { $gte: since },
-            status: { $in: ALLOWED_STATUSES },
-        };
+        // ✅ 10) Upsert filter (dedupFilter bilan aynan bir xil)
+        const filter = dedupFilter;
 
+        // ✅ 11) Update
         const update = {
             $setOnInsert: {
-                clientPhone: canonicalPhone,
+                clientPhone: canonicalPhone, // doim canonical saqlaymiz
                 createdAt: now,
                 n: n || undefined,
+
                 source,
+
                 jshshir: sapRecord?.U_jshshir || null,
                 idX: sapRecord?.Cellular || null,
                 passportId: sapRecord?.Cellular || null,
                 jshshir2: sapRecord?.U_jshshir || null,
+
                 cardCode,
                 cardName,
+
+                operator: slpCode,
             },
 
             $set: {
+                // har safar kelganda yangilanadi
                 time: now,
-                operator: slpCode,
                 status,
                 called: true,
                 callTime: now,
                 updatedAt: now,
 
+                // pbx meta
                 'pbx.last_uuid': incomingUuid,
                 'pbx.last_event': payload?.event ?? null,
                 'pbx.last_direction': payload?.direction ?? null,
@@ -180,6 +215,7 @@ async function handleOnlinePbxPayload(payload) {
             leadId: String(lead._id),
             isExistingLead,
             matchedPhone: lead?.clientPhone ?? null,
+            dedupSince: sinceDedup,
         };
     } catch (err) {
         console.error('[handleOnlinePbxPayload] Error:', err);

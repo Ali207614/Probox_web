@@ -1446,7 +1446,6 @@ class b1HANA {
         return Math.floor(baseFinal - penalty - sumPen);
     }
 
-
     calcTrustLabel({ totalAmount, overdueDebt, maxDelay }) {
         const B = Number(totalAmount) || 0;
         const D = Number(overdueDebt) || 0;
