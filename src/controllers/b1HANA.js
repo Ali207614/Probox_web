@@ -1626,7 +1626,8 @@ class b1HANA {
         else sumPen = 0;
 
         // Excel: baseFinal - penalty - sumPen
-        console.log(`Calculating score with: baseFinal=${baseFinal}, penalty=${penalty}, sumPen=${sumPen}`);
+
+        console.log(`Calculating score with: baseFinal=${baseFinal}, penalty=${penalty}, sumPen=${sumPen} , Total: ${B}`);
         return Math.floor(baseFinal - penalty);
     }
 
