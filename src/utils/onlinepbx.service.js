@@ -92,7 +92,6 @@ function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex }) {
     return {
         status: { $in: ALLOWED_STATUSES },
         purchase: { $ne: true },
-        time: { $gte: sinceDedup },
         $or: [
             { clientPhone: { $in: phoneCandidates } },
             ...(legacyRegex ? [{ clientPhone: { $regex: legacyRegex } }] : []),
@@ -135,35 +134,28 @@ async function handleOnlinePbxPayload(payload) {
 
         const isExistingLead = !!leadBefore;
 
-        // ✅ 5) SAP (find or create)
         const sapRecord = await b1Sl.findOrCreateBusinessPartner(canonicalPhone);
 
         const cardCode = sapRecord?.cardCode || null;
         const cardName = sapRecord?.cardName || null;
 
-        // ✅ 6) operator mapping
         const operatorExt = pickOperatorExtFromPayload(payload);
         const opsMap = await getOperatorsMapCached();
         const slpCode =
             operatorExt != null && operatorExt !== 0 ? opsMap.get(operatorExt) ?? null : null;
 
-        // ✅ 7) lead fields
         const { source, status } = deriveLeadFields(payload);
 
-        // ✅ 8) callCount increment logic
         const prevUuid = leadBefore?.pbx?.last_uuid ?? null;
         const incomingUuid = payload?.uuid ?? null;
 
         const isNewUuid = incomingUuid && incomingUuid !== prevUuid;
         const shouldIncCallCount = isCallStartEvent(payload?.event) && isNewUuid;
 
-        // ✅ 9) n: faqat yangi lead yaratilsa
         const n = isExistingLead ? null : await generateShortId('PRO');
 
-        // ✅ 10) Upsert filter (dedupFilter bilan aynan bir xil)
         const filter = dedupFilter;
 
-        // ✅ 11) Update
         const update = {
             $setOnInsert: {
                 clientPhone: canonicalPhone, // doim canonical saqlaymiz
