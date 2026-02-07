@@ -1626,7 +1626,8 @@ class b1HANA {
         else sumPen = 0;
 
         // Excel: baseFinal - penalty - sumPen
-        return Math.floor(baseFinal - penalty - sumPen);
+        console.log(`Calculating score with: baseFinal=${baseFinal}, penalty=${penalty}, sumPen=${sumPen}`);
+        return Math.floor(baseFinal - penalty);
     }
 
     calcTrustLabel({ totalAmount, overdueDebt, maxDelay }) {
