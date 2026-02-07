@@ -19,6 +19,8 @@ cron.schedule(
             const sql = DataRepositories.getAllHighLimitCandidatesByCardCode();
             const rows = await dbService.execute(sql);
 
+            console.log(rows.length)
+
             const total = Array.isArray(rows) ? rows.length : 0;
             console.log(total, '[CRON] Candidates found');
 
@@ -26,6 +28,8 @@ cron.schedule(
                 console.log('[CRON] No candidates');
                 return;
             }
+
+            return
 
             // 2) Shu oy uchun dedupe
             const currentYm = moment().format('YYYY_MM');
