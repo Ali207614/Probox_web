@@ -1093,13 +1093,16 @@ class b1HANA {
                 seller,
                 source2,
                 comment,
-                operator1
+                operator1,
             } = req.body;
 
             function validatePhone(phone) {
                 if (!phone) return false;
                 let digits = String(phone).replace(/\D/g, '');
+
+                // 901234567 -> 998901234567
                 if (digits.length === 9 && digits.startsWith('9')) digits = '998' + digits;
+
                 const isValid = /^998\d{9}$/.test(digits);
                 return isValid ? digits : false;
             }
@@ -1109,7 +1112,21 @@ class b1HANA {
                 return res.status(400).json({ message: 'source is required' });
             }
 
-            const allowedSources = ['Manychat', 'Meta', 'Organika', 'Kiruvchi qongiroq', 'Community'];
+            // ✅ Faqat 3 ta call source (siz aytgandek)
+            const CALL_GROUP = ['Kiruvchi qongiroq', 'Kiruvchi', 'Chiquvchi'];
+
+            const allowedSources = [
+                'Manychat',
+                'Meta',
+                'Organika',
+                'Community',
+
+                // ✅ call sources
+                'Kiruvchi qongiroq',
+                'Kiruvchi',
+                'Chiquvchi',
+            ];
+
             if (!allowedSources.includes(source)) {
                 return res.status(400).json({
                     message: `Invalid source. Allowed values: ${allowedSources.join(', ')}`,
@@ -1125,12 +1142,14 @@ class b1HANA {
             }
 
             // 📌 REQUIRED FIELDS per source
+            // Sizning eski logikangiz bo'yicha: operator1 faqat "Kiruvchi qongiroq" uchun majburiy
             const requiredFieldsBySource = {
                 Organika: ['clientName', 'clientPhone', 'branch2', 'seller'],
                 Community: ['clientName', 'clientPhone'],
                 'Kiruvchi qongiroq': ['clientName', 'clientPhone', 'operator1'],
                 Manychat: ['clientName', 'clientPhone'],
                 Meta: ['clientName', 'clientPhone'],
+                // Kiruvchi / Chiquvchi uchun operator1 shart emas (sizning hozirgi kod bo'yicha)
             };
 
             const requiredFields = requiredFieldsBySource[source] || [];
@@ -1157,10 +1176,35 @@ class b1HANA {
                         $lte: now.clone().endOf('day').toDate(),
                     };
 
-            const query =
-                source === 'Organika'
-                    ? { clientPhone: cleanedPhone, createdAt ,status:"Active"}
-                    : { clientPhone: cleanedPhone, source, createdAt ,status:"Active" };
+            /**
+             * ✅ Duplicate tekshirish:
+             * - Organika: eski logika (source'ga bog'lamaymiz)
+             * - Kiruvchi qongiroq: Kiruvchi/Chiquvchi bilan ham tekshiradi (CALL_GROUP)
+             * - Kiruvchi yoki Chiquvchi: faqat o'z source'i
+             */
+            let query;
+
+            if (source === 'Organika') {
+                query = {
+                    clientPhone: cleanedPhone,
+                    createdAt,
+                    status: 'Active',
+                };
+            } else if (source === 'Kiruvchi qongiroq') {
+                query = {
+                    clientPhone: cleanedPhone,
+                    source: { $in: CALL_GROUP },
+                    createdAt,
+                    status: 'Active',
+                };
+            } else {
+                query = {
+                    clientPhone: cleanedPhone,
+                    source,
+                    createdAt,
+                    status: 'Active',
+                };
+            }
 
             const exists = await LeadModel.exists(query);
 
@@ -1195,7 +1239,6 @@ class b1HANA {
             const n = await generateShortId('PRO');
             const time = new Date();
 
-
             const sapRecord = await b1Sl.findOrCreateBusinessPartner(cleanedPhone, clientName);
 
             const cardCode = sapRecord?.cardCode || null;
@@ -1204,9 +1247,9 @@ class b1HANA {
             let dataObj = {
                 n,
                 source,
-                clientName:sapRecord?.cardName || clientName,
+                clientName: sapRecord?.cardName || clientName,
                 clientPhone: cleanedPhone,
-                //branch2: branch2 || null,
+                // branch2: branch2 || null,
                 seller: seller || null,
                 source2: source2 || null,
                 comment: comment || null,
@@ -1215,12 +1258,13 @@ class b1HANA {
                 time,
                 cardCode,
                 cardName,
-                jshshir:sapRecord?.U_jshshir || null,
+                jshshir: sapRecord?.U_jshshir || null,
                 idX: sapRecord?.Cellular || null,
                 passportId: sapRecord?.Cellular || null,
                 jshshir2: sapRecord?.U_jshshir || null,
             };
-            if(cardCode){
+
+            if (cardCode) {
                 const {
                     score,
                     totalContracts,
@@ -1229,7 +1273,7 @@ class b1HANA {
                     totalPaid,
                     overdueDebt,
                     maxDelay,
-                    avgPaymentDelay
+                    avgPaymentDelay,
                 } = await this.calculateLeadPaymentScore(cardCode);
 
                 if (score !== null) {
@@ -1244,7 +1288,6 @@ class b1HANA {
                 }
             }
 
-
             if (source === 'Organika') {
                 dataObj = {
                     ...dataObj,
@@ -1256,8 +1299,9 @@ class b1HANA {
             }
 
             const io = req.app.get('io');
-            if (io)
+            if (io) {
                 io.emit('new_leads', { ...dataObj, SlpCode: dataObj.seller || dataObj.operator });
+            }
 
             const lead = await LeadModel.create(dataObj);
 
@@ -1265,12 +1309,12 @@ class b1HANA {
                 message: 'Lead created successfully',
                 data: lead,
             });
-
         } catch (e) {
             console.error('Error creating lead:', e);
             next(e);
         }
     };
+
 
     calculateScoreByDelay(delay) {
         if (delay <= 0) return 10;

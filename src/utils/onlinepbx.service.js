@@ -179,14 +179,13 @@ async function handleOnlinePbxPayload(payload) {
 
                 cardCode,
                 cardName,
-
+                status,
                 operator: slpCode,
             },
 
             $set: {
                 // har safar kelganda yangilanadi
                 time: now,
-                status,
                 called: true,
                 callTime: now,
                 updatedAt: now,
