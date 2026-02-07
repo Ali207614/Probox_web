@@ -1322,7 +1322,7 @@ class b1HANA {
                                    avgPaymentDelay // H2
                                }) {
         // Excel: IF(A2="";""; ...)
-        if (score == null) return null;
+        if (score == null || score === '') return null;
 
         const B = Number(totalAmount) || 0;
         const C = Number(totalPaid) || 0;
@@ -1332,13 +1332,12 @@ class b1HANA {
         const G = Number(maxDelay) || 0;
         const H = Number(avgPaymentDelay) || 0;
 
-        const paid = B > 0 ? C / B : 0;        // paid = IFERROR(C2/B2;0)
-        const overRate = B > 0 ? D / B : 0;    // IFERROR(D2/B2;0)
+        const paid = B > 0 ? C / B : 0;       // paid = IFERROR(C2/B2;0)
+        const overRate = B > 0 ? D / B : 0;   // IFERROR(D2/B2;0)
 
         // --- H2 blok (avgPaymentDelay) ---
-        // Excel IFS(H2<=0;10; H2<=2;9; ... H2<=30;-15; TRUE;-20)
         let hScore = 0;
-        if (avgPaymentDelay !== "" && avgPaymentDelay != null) {
+        if (!(avgPaymentDelay === '' || avgPaymentDelay == null)) {
             if (H <= 0) hScore = 10;
             else if (H <= 2) hScore = 9;
             else if (H <= 4) hScore = 8;
@@ -1359,9 +1358,8 @@ class b1HANA {
         }
 
         // --- G2 blok (maxDelay) ---
-        // Excel IFS(G2<=2;15; ... G2<=30;1; TRUE;-5)
         let gScore = 0;
-        if (maxDelay !== "" && maxDelay != null) {
+        if (!(maxDelay === '' || maxDelay == null)) {
             if (G <= 2) gScore = 15;
             else if (G <= 4) gScore = 14;
             else if (G <= 6) gScore = 13;
@@ -1381,7 +1379,6 @@ class b1HANA {
         }
 
         // --- overdue rate blok (D2/B2) ---
-        // Excel: 0 -> 15; <=0.01 -> 12; <=0.03 -> 6; <=0.05 -> 2; else 0
         let overScore = 0;
         if (overRate === 0) overScore = 15;
         else if (overRate <= 0.01) overScore = 12;
@@ -1390,7 +1387,6 @@ class b1HANA {
         else overScore = 0;
 
         // --- paid ratio blok (C2/B2) ---
-        // Excel: paid>=0.95 -> 15; ... paid>=0.4 -> 4; else 0
         let paidScore = 0;
         if (paid >= 0.95) paidScore = 15;
         else if (paid >= 0.9) paidScore = 14;
@@ -1407,7 +1403,6 @@ class b1HANA {
         else paidScore = 0;
 
         // --- openContracts / totalContracts blok ---
-        // Excel: IFERROR(F2/MAX(E2;1);0) <=0.34 -> 5; <=0.6 -> 3; <=0.8 -> 1; else 0
         const openRate = E > 0 ? F / Math.max(E, 1) : 0;
         let openScore = 0;
         if (openRate <= 0.34) openScore = 5;
@@ -1424,6 +1419,7 @@ class b1HANA {
             paidScore +
             openScore;
 
+        // baseFinal:
         // IF(AND(C2=0;D2=0);30; IF(F2>=3; MIN(30;Score); IF(F2=2; MIN(50;Score); Score)))
         let baseFinal;
         if (C === 0 && D === 0) baseFinal = 30;
@@ -1431,6 +1427,7 @@ class b1HANA {
         else if (F === 2) baseFinal = Math.min(50, rawScore);
         else baseFinal = rawScore;
 
+        // penalty:
         // paid>=0.9 ->0; >=0.8 ->5; >=0.7 ->10; >=0.6 ->15; else 20
         let penalty = 20;
         if (paid >= 0.9) penalty = 0;
@@ -1438,9 +1435,17 @@ class b1HANA {
         else if (paid >= 0.7) penalty = 10;
         else if (paid >= 0.6) penalty = 15;
 
-        // Excel: baseFinal - penalty
-        return Math.floor(baseFinal - penalty);
+        let sumPen = 0;
+        if (B <= 5_000_000) sumPen = 30;
+        else if (B <= 10_000_000) sumPen = 25;
+        else if (B <= 15_000_000) sumPen = 20;
+        else if (B <= 20_000_000) sumPen = 10;
+        else sumPen = 0;
+
+        // Excel: baseFinal - penalty - sumPen
+        return Math.floor(baseFinal - penalty - sumPen);
     }
+
 
     calcTrustLabel({ totalAmount, overdueDebt, maxDelay }) {
         const B = Number(totalAmount) || 0;
@@ -3660,10 +3665,8 @@ class b1HANA {
     getChatRecording = async (req, res, next) => {
         const { uuid } = req.params;
 
-        // HTML5 audio uchun Range muhim
         const range = req.headers.range;
 
-        // Client uzib qo‘ysa axios’ni ham abort qilamiz
         const controller = new AbortController();
         const { signal } = controller;
 
@@ -3671,7 +3674,6 @@ class b1HANA {
         req.on("close", onClose);
 
         try {
-            // 1) Download URL olish tezligi
             const t0 = Date.now();
             const dl = await pbxClient.getDownloadUrl(uuid);
             const dlMs = Date.now() - t0;
@@ -3689,7 +3691,6 @@ class b1HANA {
                 `getDownloadUrl took ${dlMs} ms (${(dlMs / 1000).toFixed(2)} s) uuid=${uuid}`
             );
 
-            // 2) PBX stream TTFB (headers kelishi) o‘lchaymiz
             const t1 = Date.now();
             const r = await axios.get(onlineUrl, {
                 responseType: "stream",
@@ -3704,7 +3705,6 @@ class b1HANA {
                 `TTFB/headers: ${ttfbMs} ms, status=${r.status}, len=${r.headers["content-length"] || "n/a"} uuid=${uuid}`
             );
 
-            // 3) Client’ga status + headerlarni forward qilamiz (206 ham bo‘lishi mumkin)
             res.status(r.status);
 
             const passHeaders = [
@@ -3721,10 +3721,8 @@ class b1HANA {
 
             res.setHeader("Cache-Control", "private, max-age=300");
 
-            // Headerlarni tezroq jo‘natib yuborish (ba’zi proksilarda foydali)
             res.flushHeaders?.();
 
-            // 4) Download speed / total time o‘lchaymiz
             let bytes = 0;
             const startedAt = Date.now();
 
@@ -3755,16 +3753,13 @@ class b1HANA {
                 next(e);
             });
 
-            // 5) Stream’ni client’ga uzatamiz
             r.data.pipe(res);
         } catch (err) {
-            // Client abort qilsa bu normal
             if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
 
             console.log("getChatRecording error:", err?.code, err?.message);
             next(err);
         } finally {
-            // listener tozalab qo‘yamiz
             req.off("close", onClose);
         }
     };

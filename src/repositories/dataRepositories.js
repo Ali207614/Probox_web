@@ -1374,383 +1374,405 @@ ORDER BY
 
     getAllHighLimitCandidatesByCardCode() {
         return `
-            WITH bp AS (
-                SELECT
-                    BP."CardCode",
-                    BP."CardName",
+    WITH bp AS (
+      SELECT
+        BP."CardCode",
+        BP."CardName",
 
-                    -- OCRD contact fields
-                    NULLIF(TRIM(BP."Phone1"), '')    AS "Phone1",
-                    NULLIF(TRIM(BP."Phone2"), '')    AS "Phone2",
-                    NULLIF(TRIM(BP."Cellular"), '')  AS "Cellular",
-                    NULLIF(TRIM(BP."U_jshshir"), '') AS "jshshir",
+        -- OCRD contact fields
+        NULLIF(TRIM(BP."Phone1"), '')    AS "Phone1",
+        NULLIF(TRIM(BP."Phone2"), '')    AS "Phone2",
+        NULLIF(TRIM(BP."Cellular"), '')  AS "Cellular",
+        NULLIF(TRIM(BP."U_jshshir"), '') AS "jshshir",
 
-                    -- ✅ Notes -> address2 (siz Lead’da address2 ga qo‘ymoqchisiz)
-                    NULLIF(TRIM(BP."Notes"), '')     AS "address2",
+        -- Notes -> address2
+        NULLIF(TRIM(BP."Notes"), '')     AS "address2",
 
-                    -- normalized phones (digits only)
-                    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Cellular"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '') AS "cellular_norm",
-                    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Phone1"),   '+', ''), ' ', ''), '-', ''), '(', ''), ')', '') AS "phone1_norm",
-                    REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Phone2"),   '+', ''), ' ', ''), '-', ''), '(', ''), ')', '') AS "phone2_norm",
+        -- normalized phones (digits only)
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Cellular"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '') AS "cellular_norm",
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Phone1"),   '+', ''), ' ', ''), '-', ''), '(', ''), ')', '') AS "phone1_norm",
+        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Phone2"),   '+', ''), ' ', ''), '-', ''), '(', ''), ')', '') AS "phone2_norm",
 
-                    -- person_key: prefer JSHSHIR, else normalized phone (Cellular -> Phone1 -> Phone2)
-                    CASE
-                        WHEN NULLIF(TRIM(BP."U_jshshir"), '') IS NOT NULL THEN TRIM(BP."U_jshshir")
-                        WHEN NULLIF(TRIM(BP."Cellular"), '')  IS NOT NULL THEN
-                            REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Cellular"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')
-                        WHEN NULLIF(TRIM(BP."Phone1"), '')    IS NOT NULL THEN
-                            REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Phone1"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')
-                        WHEN NULLIF(TRIM(BP."Phone2"), '')    IS NOT NULL THEN
-                            REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Phone2"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')
-                        ELSE NULL
-                        END AS "person_key"
+        -- person_key: prefer JSHSHIR, else normalized phone (Cellular -> Phone1 -> Phone2)
+        CASE
+          WHEN NULLIF(TRIM(BP."U_jshshir"), '') IS NOT NULL THEN TRIM(BP."U_jshshir")
+          WHEN NULLIF(TRIM(BP."Cellular"), '')  IS NOT NULL THEN
+            REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Cellular"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')
+          WHEN NULLIF(TRIM(BP."Phone1"), '')    IS NOT NULL THEN
+            REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Phone1"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')
+          WHEN NULLIF(TRIM(BP."Phone2"), '')    IS NOT NULL THEN
+            REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(BP."Phone2"), '+', ''), ' ', ''), '-', ''), '(', ''), ')', '')
+          ELSE NULL
+        END AS "person_key"
 
-                FROM ${this.db}."OCRD" BP
-                WHERE BP."CardType" = 'C'
-                  AND BP."U_blocked" = 'no'
-            ),
-                 bp_person AS (
-                     SELECT *
-                     FROM bp
-                     WHERE "person_key" IS NOT NULL
-                 ),
+      FROM ${this.db}."OCRD" BP
+      WHERE BP."CardType" = 'C'
+        AND BP."U_blocked" = 'no'
+    ),
 
--- main profile per person_key (contacts aggregated)
-                 person_main AS (
-                     SELECT
-                         "person_key",
-                         MIN("CardCode") AS "CardCode",
-                         MAX("CardName") AS "CardName",
+    bp_person AS (
+      SELECT *
+      FROM bp
+      WHERE "person_key" IS NOT NULL
+    ),
 
-                         MAX("jshshir")        AS "jshshir",
-                         MAX("Cellular")       AS "Cellular",
-                         MAX("cellular_norm")  AS "CellularNorm",
-                         MAX("Phone1")         AS "Phone1",
-                         MAX("Phone2")         AS "Phone2",
+    -- main profile per person_key (contacts aggregated)
+    person_main AS (
+      SELECT
+        "person_key",
+        MIN("CardCode") AS "CardCode",
+        MAX("CardName") AS "CardName",
 
-                         -- ✅ address2 (Notes)
-                         MAX("address2")       AS "address2"
-                     FROM bp_person
-                     GROUP BY "person_key"
-                 ),
+        MAX("jshshir")        AS "jshshir",
+        MAX("Cellular")       AS "Cellular",
+        MAX("cellular_norm")  AS "CellularNorm",
+        MAX("Phone1")         AS "Phone1",
+        MAX("Phone2")         AS "Phone2",
 
-/* ✅ 1) hamma invoice (ochiq+yopiq), keyin person bo‘yicha “ochiq bormi?” aniqlaymiz */
-                 inv_all AS (
-                     SELECT
-                         I."DocEntry",
-                         I."CardCode",
-                         I."DocTotal",
-                         I."PaidToDate",
-                         I."DocStatus",
-                         I."DocDate"
-                     FROM ${this.db}."OINV" I
-                     WHERE I."CANCELED" = 'N'
-                       AND I."DocDate" >= DATE'2024-01-01'
-                       -- CreditMemo bilan yopilgan invoice'larni chiqarib tashlash
-                       AND NOT EXISTS (
-                         SELECT 1
-                         FROM ${this.db}."RIN1" CM1
-                                  INNER JOIN ${this.db}."ORIN" CM0 ON CM0."DocEntry" = CM1."DocEntry"
-                         WHERE CM1."BaseType"  = 13
-                           AND CM1."BaseEntry" = I."DocEntry"
-                     )
-                 ),
+        -- address2 (Notes)
+        MAX("address2")       AS "address2"
+      FROM bp_person
+      GROUP BY "person_key"
+    ),
 
-/* ✅ 2) person_key bo‘yicha: bitta bo‘lsa ham ochiq invoice bo‘lsa -> hasOpenInvoice=1 */
-                 person_invoice_state AS (
-                     SELECT
-                         P."person_key",
-                         COUNT(DISTINCT I."DocEntry") AS "invoiceCount",
-                         MAX(
-                                 CASE
-                                     WHEN I."DocStatus" = 'O' THEN 1
-                                     WHEN I."PaidToDate" < I."DocTotal" - 5 THEN 1
-                                     ELSE 0
-                                     END
-                         ) AS "hasOpenInvoice"
-                     FROM bp_person P
-                              INNER JOIN inv_all I ON I."CardCode" = P."CardCode"
-                     GROUP BY P."person_key"
-                 ),
+    /* 1) hamma invoice (ochiq+yopiq), keyin person bo‘yicha “ochiq bormi?” aniqlaymiz */
+    inv_all AS (
+      SELECT
+        I."DocEntry",
+        I."CardCode",
+        I."DocTotal",
+        I."PaidToDate",
+        I."DocStatus",
+        I."DocDate"
+      FROM ${this.db}."OINV" I
+      WHERE I."CANCELED" = 'N'
+        AND I."DocDate" >= DATE'2024-01-01'
+        -- CreditMemo bilan yopilgan invoice'larni chiqarib tashlash
+        AND NOT EXISTS (
+          SELECT 1
+          FROM ${this.db}."RIN1" CM1
+          INNER JOIN ${this.db}."ORIN" CM0 ON CM0."DocEntry" = CM1."DocEntry"
+          WHERE CM1."BaseType"  = 13
+            AND CM1."BaseEntry" = I."DocEntry"
+        )
+    ),
 
-/* 🔥 scoring ham inv_all bilan ishlaydi (ochiq invoice ham hisobga kiradi) */
-                 inst_payments AS (
-                     SELECT
-                         P."person_key",
-                         I."CardCode",
-                         I."DocEntry",
-                         S."InstlmntID",
-                         S."DueDate",
-                         S."InsTotal",
-                         I."DocTotal"   AS "InvoiceTotal",
-                         I."PaidToDate" AS "InvoicePaidToDate",
+    /* 2) person_key bo‘yicha: bitta bo‘lsa ham ochiq invoice bo‘lsa -> hasOpenInvoice=1 */
+    person_invoice_state AS (
+      SELECT
+        P."person_key",
+        COUNT(DISTINCT I."DocEntry") AS "invoiceCount",
+        MAX(
+          CASE
+            WHEN I."DocStatus" = 'O' THEN 1
+            WHEN I."PaidToDate" < I."DocTotal" - 5 THEN 1
+            ELSE 0
+          END
+        ) AS "hasOpenInvoice"
+      FROM bp_person P
+      INNER JOIN inv_all I ON I."CardCode" = P."CardCode"
+      GROUP BY P."person_key"
+    ),
 
-                         COALESCE(SUM(R2."SumApplied"), 0) AS "SumApplied",
-                         MAX(R0."DocDate") AS "LastPayDate"
-                     FROM bp_person P
-                              INNER JOIN inv_all I ON I."CardCode" = P."CardCode"
-                              INNER JOIN ${this.db}."INV6" S ON S."DocEntry" = I."DocEntry"
+    /* scoring ham inv_all bilan ishlaydi (ochiq invoice ham hisobga kiradi) */
+    inst_payments AS (
+      SELECT
+        P."person_key",
+        I."CardCode",
+        I."DocEntry",
+        S."InstlmntID",
+        S."DueDate",
+        S."InsTotal",
+        I."DocTotal"   AS "InvoiceTotal",
+        I."PaidToDate" AS "InvoicePaidToDate",
 
-                              LEFT JOIN ${this.db}."RCT2" R2
-                                        ON R2."DocEntry" = I."DocEntry"
-                                            AND R2."InstId"   = S."InstlmntID"
+        COALESCE(SUM(R2."SumApplied"), 0) AS "SumApplied",
+        MAX(R0."DocDate") AS "LastPayDate"
+      FROM bp_person P
+      INNER JOIN inv_all I ON I."CardCode" = P."CardCode"
+      INNER JOIN ${this.db}."INV6" S ON S."DocEntry" = I."DocEntry"
 
-                              LEFT JOIN ${this.db}."ORCT" R0
-                                        ON R0."DocEntry" = R2."DocNum"
-                                            AND R0."Canceled" = 'N'
+      LEFT JOIN ${this.db}."RCT2" R2
+        ON R2."DocEntry" = I."DocEntry"
+       AND R2."InstId"   = S."InstlmntID"
 
-                     GROUP BY
-                         P."person_key",
-                         I."CardCode",
-                         I."DocEntry",
-                         S."InstlmntID",
-                         S."DueDate",
-                         S."InsTotal",
-                         I."DocTotal",
-                         I."PaidToDate"
-                 ),
+      LEFT JOIN ${this.db}."ORCT" R0
+        ON R0."DocEntry" = R2."DocNum"
+       AND R0."Canceled" = 'N'
 
-                 inst_calc AS (
-                     SELECT
-                         A.*,
-                         CURRENT_DATE AS "Today",
-                         CASE WHEN A."SumApplied" >= A."InsTotal" THEN 1 ELSE 0 END AS "IsFullyPaid",
-                         DAYS_BETWEEN(
-                                 A."DueDate",
-                                 CASE
-                                     WHEN A."SumApplied" >= A."InsTotal" AND A."LastPayDate" IS NOT NULL THEN A."LastPayDate"
-                                     ELSE CURRENT_DATE
-                                     END
-                         ) AS "DelayDays",
-                         CASE
-                             WHEN (A."InsTotal" - A."SumApplied") > 0 THEN (A."InsTotal" - A."SumApplied")
-                             ELSE 0
-                             END AS "Unpaid"
-                     FROM inst_payments A
-                 ),
+      GROUP BY
+        P."person_key",
+        I."CardCode",
+        I."DocEntry",
+        S."InstlmntID",
+        S."DueDate",
+        S."InsTotal",
+        I."DocTotal",
+        I."PaidToDate"
+    ),
 
-                 inst_scored AS (
-                     SELECT
-                         C.*,
-                         CASE
-                             WHEN C."DelayDays" <= 0  THEN 10
-                             WHEN C."DelayDays" <= 6  THEN 9
-                             WHEN C."DelayDays" <= 12 THEN 8
-                             WHEN C."DelayDays" <= 18 THEN 7
-                             WHEN C."DelayDays" <= 24 THEN 6
-                             WHEN C."DelayDays" <= 30 THEN 5
-                             WHEN C."DelayDays" <= 36 THEN 4
-                             WHEN C."DelayDays" <= 42 THEN 3
-                             WHEN C."DelayDays" <= 48 THEN 2
-                             WHEN C."DelayDays" <= 54 THEN 1
-                             ELSE 0
-                             END AS "DelayScore"
-                     FROM inst_calc C
-                 ),
+    inst_calc AS (
+      SELECT
+        A.*,
+        CURRENT_DATE AS "Today",
+        CASE WHEN A."SumApplied" >= A."InsTotal" THEN 1 ELSE 0 END AS "IsFullyPaid",
+        DAYS_BETWEEN(
+          A."DueDate",
+          CASE
+            WHEN A."SumApplied" >= A."InsTotal" AND A."LastPayDate" IS NOT NULL THEN A."LastPayDate"
+            ELSE CURRENT_DATE
+          END
+        ) AS "DelayDays",
+        CASE
+          WHEN (A."InsTotal" - A."SumApplied") > 0 THEN (A."InsTotal" - A."SumApplied")
+          ELSE 0
+        END AS "Unpaid"
+      FROM inst_payments A
+    ),
 
-                 person_agg AS (
-                     SELECT
-                         X."person_key",
-                         COUNT(DISTINCT X."DocEntry") AS "totalContracts",
-                         COUNT(DISTINCT CASE WHEN X."InvoiceTotal" > X."InvoicePaidToDate" + 5 THEN X."DocEntry" ELSE NULL END) AS "openContracts",
-                         SUM(DISTINCT X."InvoiceTotal")      AS "totalAmount",
-                         SUM(DISTINCT X."InvoicePaidToDate") AS "totalPaid",
-                         SUM(CASE WHEN X."DueDate" < X."Today" AND X."Unpaid" > 0 THEN X."Unpaid" ELSE 0 END) AS "overdueDebt",
-                         MAX(X."DelayDays") AS "maxDelay",
-                         AVG(CASE WHEN X."DueDate" <= X."Today" THEN X."DelayDays" ELSE NULL END) AS "avgPaymentDelay",
-                         AVG(X."DelayScore") AS "score"
-                     FROM inst_scored X
-                     GROUP BY X."person_key"
-                 ),
+    inst_scored AS (
+      SELECT
+        C.*,
+        CASE
+          WHEN C."DelayDays" <= 0  THEN 10
+          WHEN C."DelayDays" <= 6  THEN 9
+          WHEN C."DelayDays" <= 12 THEN 8
+          WHEN C."DelayDays" <= 18 THEN 7
+          WHEN C."DelayDays" <= 24 THEN 6
+          WHEN C."DelayDays" <= 30 THEN 5
+          WHEN C."DelayDays" <= 36 THEN 4
+          WHEN C."DelayDays" <= 42 THEN 3
+          WHEN C."DelayDays" <= 48 THEN 2
+          WHEN C."DelayDays" <= 54 THEN 1
+          ELSE 0
+        END AS "DelayScore"
+      FROM inst_calc C
+    ),
 
-                 scoring AS (
-                     SELECT
-                         P.*,
-                         CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END AS "paidRatio",
-                         CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END AS "overRate",
-                         CASE
-                             WHEN P."avgPaymentDelay" <= 0  THEN 10
-                             WHEN P."avgPaymentDelay" <= 2  THEN 9
-                             WHEN P."avgPaymentDelay" <= 4  THEN 8
-                             WHEN P."avgPaymentDelay" <= 6  THEN 7
-                             WHEN P."avgPaymentDelay" <= 8  THEN 6
-                             WHEN P."avgPaymentDelay" <= 10 THEN 5
-                             WHEN P."avgPaymentDelay" <= 12 THEN 4
-                             WHEN P."avgPaymentDelay" <= 14 THEN 3
-                             WHEN P."avgPaymentDelay" <= 16 THEN 2
-                             WHEN P."avgPaymentDelay" <= 18 THEN 1
-                             WHEN P."avgPaymentDelay" <= 20 THEN 0
-                             WHEN P."avgPaymentDelay" <= 22 THEN -3
-                             WHEN P."avgPaymentDelay" <= 24 THEN -6
-                             WHEN P."avgPaymentDelay" <= 26 THEN -9
-                             WHEN P."avgPaymentDelay" <= 28 THEN -12
-                             WHEN P."avgPaymentDelay" <= 30 THEN -15
-                             ELSE -20
-                             END AS "hScore",
-                         CASE
-                             WHEN P."maxDelay" <= 2  THEN 15
-                             WHEN P."maxDelay" <= 4  THEN 14
-                             WHEN P."maxDelay" <= 6  THEN 13
-                             WHEN P."maxDelay" <= 8  THEN 12
-                             WHEN P."maxDelay" <= 10 THEN 11
-                             WHEN P."maxDelay" <= 12 THEN 10
-                             WHEN P."maxDelay" <= 14 THEN 9
-                             WHEN P."maxDelay" <= 16 THEN 8
-                             WHEN P."maxDelay" <= 18 THEN 7
-                             WHEN P."maxDelay" <= 20 THEN 6
-                             WHEN P."maxDelay" <= 22 THEN 5
-                             WHEN P."maxDelay" <= 24 THEN 4
-                             WHEN P."maxDelay" <= 26 THEN 3
-                             WHEN P."maxDelay" <= 28 THEN 2
-                             WHEN P."maxDelay" <= 30 THEN 1
-                             ELSE -5
-                             END AS "gScore",
-                         CASE
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END) = 0 THEN 15
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END) <= 0.01 THEN 12
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END) <= 0.03 THEN 6
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END) <= 0.05 THEN 2
-                             ELSE 0
-                             END AS "overScore",
-                         CASE
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.95 THEN 15
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.9  THEN 14
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.85 THEN 13
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.8  THEN 12
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.75 THEN 11
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.7  THEN 10
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.65 THEN 9
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.6  THEN 8
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.55 THEN 7
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.5  THEN 6
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.45 THEN 5
-                             WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.4  THEN 4
-                             ELSE 0
-                             END AS "paidScore",
-                         CASE
-                             WHEN (CASE WHEN P."totalContracts" > 0 THEN P."openContracts" / P."totalContracts" ELSE 0 END) <= 0.34 THEN 5
-                             WHEN (CASE WHEN P."totalContracts" > 0 THEN P."openContracts" / P."totalContracts" ELSE 0 END) <= 0.6  THEN 3
-                             WHEN (CASE WHEN P."totalContracts" > 0 THEN P."openContracts" / P."totalContracts" ELSE 0 END) <= 0.8  THEN 1
-                             ELSE 0
-                             END AS "openScore"
-                     FROM person_agg P
-                 ),
+    person_agg AS (
+      SELECT
+        X."person_key",
+        COUNT(DISTINCT X."DocEntry") AS "totalContracts",
+        COUNT(DISTINCT CASE WHEN X."InvoiceTotal" > X."InvoicePaidToDate" + 5 THEN X."DocEntry" ELSE NULL END) AS "openContracts",
+        SUM(DISTINCT X."InvoiceTotal")      AS "totalAmount",
+        SUM(DISTINCT X."InvoicePaidToDate") AS "totalPaid",
+        SUM(CASE WHEN X."DueDate" < X."Today" AND X."Unpaid" > 0 THEN X."Unpaid" ELSE 0 END) AS "overdueDebt",
+        MAX(X."DelayDays") AS "maxDelay",
+        AVG(CASE WHEN X."DueDate" <= X."Today" THEN X."DelayDays" ELSE NULL END) AS "avgPaymentDelay",
+        AVG(X."DelayScore") AS "score"
+      FROM inst_scored X
+      GROUP BY X."person_key"
+    ),
 
-                 final_calc AS (
-                     SELECT
-                         S.*,
-                         (40 * (S."score" / 10)) + S."hScore" + S."gScore" + S."overScore" + S."paidScore" + S."openScore" AS "rawScore",
-                         CASE
-                             WHEN S."totalPaid" = 0 AND S."overdueDebt" = 0 THEN 30
-                             WHEN S."openContracts" >= 3 THEN LEAST(30, (40 * (S."score" / 10)) + S."hScore" + S."gScore" + S."overScore" + S."paidScore" + S."openScore")
-                             WHEN S."openContracts" = 2 THEN LEAST(50, (40 * (S."score" / 10)) + S."hScore" + S."gScore" + S."overScore" + S."paidScore" + S."openScore")
-                             ELSE (40 * (S."score" / 10)) + S."hScore" + S."gScore" + S."overScore" + S."paidScore" + S."openScore"
-                             END AS "baseFinal",
-                         CASE
-                             WHEN S."paidRatio" >= 0.9 THEN 0
-                             WHEN S."paidRatio" >= 0.8 THEN 5
-                             WHEN S."paidRatio" >= 0.7 THEN 10
-                             WHEN S."paidRatio" >= 0.6 THEN 15
-                             ELSE 20
-                             END AS "penalty"
-                     FROM scoring S
-                 ),
+    scoring AS (
+      SELECT
+        P.*,
+        CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END AS "paidRatio",
+        CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END AS "overRate",
 
-                 limits AS (
-                     SELECT
-                         F.*,
-                         FLOOR(F."baseFinal" - F."penalty") AS "internalScore",
-                         CASE
-                             WHEN F."overRate" >= 0.03 OR F."overdueDebt" >= 3000000 OR F."maxDelay" >= 51 THEN 'Xavfli'
-                             ELSE 'Xavfsiz'
-                             END AS "trustLabel",
-                         CASE
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 85 THEN 30000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 84 THEN 29000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 83 THEN 28000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 82 THEN 27000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 81 THEN 26000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 80 THEN 25000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 79 THEN 24000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 78 THEN 23000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 77 THEN 22000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 76 THEN 21000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 75 THEN 20000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 74 THEN 19000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 73 THEN 18000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 72 THEN 17000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 71 THEN 16000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 70 THEN 15000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 69 THEN 14000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 68 THEN 13000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 67 THEN 12000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 66 THEN 11000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 65 THEN 10000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 64 THEN 9000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 63 THEN 8000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 62 THEN 7000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 61 THEN 6000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 60 THEN 5000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 55 THEN 4000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 50 THEN 3000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 45 THEN 2000000
-                             WHEN FLOOR(F."baseFinal" - F."penalty") >= 40 THEN 1000000
-                             ELSE 0
-                             END AS "limitRaw"
-                     FROM final_calc F
-                 )
+        CASE
+          WHEN P."avgPaymentDelay" <= 0  THEN 10
+          WHEN P."avgPaymentDelay" <= 2  THEN 9
+          WHEN P."avgPaymentDelay" <= 4  THEN 8
+          WHEN P."avgPaymentDelay" <= 6  THEN 7
+          WHEN P."avgPaymentDelay" <= 8  THEN 6
+          WHEN P."avgPaymentDelay" <= 10 THEN 5
+          WHEN P."avgPaymentDelay" <= 12 THEN 4
+          WHEN P."avgPaymentDelay" <= 14 THEN 3
+          WHEN P."avgPaymentDelay" <= 16 THEN 2
+          WHEN P."avgPaymentDelay" <= 18 THEN 1
+          WHEN P."avgPaymentDelay" <= 20 THEN 0
+          WHEN P."avgPaymentDelay" <= 22 THEN -3
+          WHEN P."avgPaymentDelay" <= 24 THEN -6
+          WHEN P."avgPaymentDelay" <= 26 THEN -9
+          WHEN P."avgPaymentDelay" <= 28 THEN -12
+          WHEN P."avgPaymentDelay" <= 30 THEN -15
+          ELSE -20
+        END AS "hScore",
 
-            SELECT
-                PM."CardCode"     AS "CardCode",
-                PM."CardName"     AS "CardName",
-                PM."Phone1"       AS "Phone1",
-                PM."Phone2"       AS "Phone2",
-                PM."Cellular"     AS "Cellular",
-                PM."CellularNorm" AS "CellularNorm",
-                PM."jshshir"      AS "jshshir",
-                PM."address2"     AS "address2",
+        CASE
+          WHEN P."maxDelay" <= 2  THEN 15
+          WHEN P."maxDelay" <= 4  THEN 14
+          WHEN P."maxDelay" <= 6  THEN 13
+          WHEN P."maxDelay" <= 8  THEN 12
+          WHEN P."maxDelay" <= 10 THEN 11
+          WHEN P."maxDelay" <= 12 THEN 10
+          WHEN P."maxDelay" <= 14 THEN 9
+          WHEN P."maxDelay" <= 16 THEN 8
+          WHEN P."maxDelay" <= 18 THEN 7
+          WHEN P."maxDelay" <= 20 THEN 6
+          WHEN P."maxDelay" <= 22 THEN 5
+          WHEN P."maxDelay" <= 24 THEN 4
+          WHEN P."maxDelay" <= 26 THEN 3
+          WHEN P."maxDelay" <= 28 THEN 2
+          WHEN P."maxDelay" <= 30 THEN 1
+          ELSE -5
+        END AS "gScore",
 
-                L."score",
-                L."totalContracts",
-                L."openContracts",
-                L."totalAmount",
-                L."totalPaid",
-                L."overdueDebt",
-                L."maxDelay",
-                FLOOR(L."avgPaymentDelay") AS "avgPaymentDelay",
+        CASE
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END) = 0 THEN 15
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END) <= 0.01 THEN 12
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END) <= 0.03 THEN 6
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."overdueDebt" / P."totalAmount" ELSE 0 END) <= 0.05 THEN 2
+          ELSE 0
+        END AS "overScore",
 
-                L."internalScore",
-                L."trustLabel",
+        CASE
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.95 THEN 15
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.9  THEN 14
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.85 THEN 13
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.8  THEN 12
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.75 THEN 11
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.7  THEN 10
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.65 THEN 9
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.6  THEN 8
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.55 THEN 7
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.5  THEN 6
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.45 THEN 5
+          WHEN (CASE WHEN P."totalAmount" > 0 THEN P."totalPaid" / P."totalAmount" ELSE 0 END) >= 0.4  THEN 4
+          ELSE 0
+        END AS "paidScore",
 
-                CASE
-                    WHEN LOWER(L."trustLabel") = 'xavfli' THEN LEAST(L."limitRaw", 5000000)
-                    ELSE L."limitRaw"
-                    END AS "limit",
+        CASE
+          WHEN (CASE WHEN P."totalContracts" > 0 THEN P."openContracts" / P."totalContracts" ELSE 0 END) <= 0.34 THEN 5
+          WHEN (CASE WHEN P."totalContracts" > 0 THEN P."openContracts" / P."totalContracts" ELSE 0 END) <= 0.6  THEN 3
+          WHEN (CASE WHEN P."totalContracts" > 0 THEN P."openContracts" / P."totalContracts" ELSE 0 END) <= 0.8  THEN 1
+          ELSE 0
+        END AS "openScore"
+      FROM person_agg P
+    ),
 
-                FLOOR(
-                        (CASE
-                             WHEN LOWER(L."trustLabel") = 'xavfli' THEN LEAST(L."limitRaw", 5000000)
-                             ELSE L."limitRaw"
-                            END) / 12
-                ) AS "monthlyLimit"
+    final_calc AS (
+      SELECT
+        S.*,
+        (40 * (S."score" / 10)) + S."hScore" + S."gScore" + S."overScore" + S."paidScore" + S."openScore" AS "rawScore",
+        CASE
+          WHEN S."totalPaid" = 0 AND S."overdueDebt" = 0 THEN 30
+          WHEN S."openContracts" >= 3 THEN LEAST(30, (40 * (S."score" / 10)) + S."hScore" + S."gScore" + S."overScore" + S."paidScore" + S."openScore")
+          WHEN S."openContracts" = 2 THEN LEAST(50, (40 * (S."score" / 10)) + S."hScore" + S."gScore" + S."overScore" + S."paidScore" + S."openScore")
+          ELSE (40 * (S."score" / 10)) + S."hScore" + S."gScore" + S."overScore" + S."paidScore" + S."openScore"
+        END AS "baseFinal",
 
-            FROM limits L
-                     JOIN person_main PM ON PM."person_key" = L."person_key"
-                     JOIN person_invoice_state PS ON PS."person_key" = L."person_key"
+        CASE
+          WHEN S."paidRatio" >= 0.9 THEN 0
+          WHEN S."paidRatio" >= 0.8 THEN 5
+          WHEN S."paidRatio" >= 0.7 THEN 10
+          WHEN S."paidRatio" >= 0.6 THEN 15
+          ELSE 20
+        END AS "penalty",
 
-            WHERE
-              -- ✅ faqat shunday odamlar: hamma invoice'lari yopilgan (bitta ochiq bo‘lsa ham drop)
-                PS."invoiceCount" > 0
-              AND PS."hasOpenInvoice" = 0
+        -- ✅ NEW: sumPen (totalAmount=B2 bo'yicha)
+        CASE
+          WHEN S."totalAmount" <= 5000000  THEN 30
+          WHEN S."totalAmount" <= 10000000 THEN 25
+          WHEN S."totalAmount" <= 15000000 THEN 20
+          WHEN S."totalAmount" <= 20000000 THEN 10
+          ELSE 0
+        END AS "sumPen"
+      FROM scoring S
+    ),
 
-              AND (CASE
-                       WHEN LOWER(L."trustLabel") = 'xavfli' THEN LEAST(L."limitRaw", 5000000)
-                       ELSE L."limitRaw"
-                END) = 30000000
+    limits AS (
+      SELECT
+        F.*,
 
-            ORDER BY "limit" DESC
-        `;
+        -- ✅ internalScore endi penalty + sumPen bilan
+        FLOOR(F."baseFinal" - F."penalty" - F."sumPen") AS "internalScore",
+
+        CASE
+          WHEN F."overRate" >= 0.03 OR F."overdueDebt" >= 3000000 OR F."maxDelay" >= 51 THEN 'Xavfli'
+          ELSE 'Xavfsiz'
+        END AS "trustLabel",
+
+        -- ✅ limitRaw endi internalScore bilan ishlaydi (takror FLOOR(...) yo'q)
+        CASE
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 85 THEN 30000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 84 THEN 29000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 83 THEN 28000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 82 THEN 27000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 81 THEN 26000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 80 THEN 25000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 79 THEN 24000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 78 THEN 23000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 77 THEN 22000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 76 THEN 21000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 75 THEN 20000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 74 THEN 19000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 73 THEN 18000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 72 THEN 17000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 71 THEN 16000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 70 THEN 15000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 69 THEN 14000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 68 THEN 13000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 67 THEN 12000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 66 THEN 11000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 65 THEN 10000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 64 THEN 9000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 63 THEN 8000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 62 THEN 7000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 61 THEN 6000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 60 THEN 5000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 55 THEN 4000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 50 THEN 3000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 45 THEN 2000000
+          WHEN FLOOR(F."baseFinal" - F."penalty" - F."sumPen") >= 40 THEN 1000000
+          ELSE 0
+        END AS "limitRaw"
+      FROM final_calc F
+    )
+
+    SELECT
+      PM."CardCode"     AS "CardCode",
+      PM."CardName"     AS "CardName",
+      PM."Phone1"       AS "Phone1",
+      PM."Phone2"       AS "Phone2",
+      PM."Cellular"     AS "Cellular",
+      PM."CellularNorm" AS "CellularNorm",
+      PM."jshshir"      AS "jshshir",
+      PM."address2"     AS "address2",
+
+      L."score",
+      L."totalContracts",
+      L."openContracts",
+      L."totalAmount",
+      L."totalPaid",
+      L."overdueDebt",
+      L."maxDelay",
+      FLOOR(L."avgPaymentDelay") AS "avgPaymentDelay",
+
+      L."internalScore",
+      L."trustLabel",
+
+      CASE
+        WHEN LOWER(L."trustLabel") = 'xavfli' THEN LEAST(L."limitRaw", 5000000)
+        ELSE L."limitRaw"
+      END AS "limit",
+
+      FLOOR(
+        (CASE
+          WHEN LOWER(L."trustLabel") = 'xavfli' THEN LEAST(L."limitRaw", 5000000)
+          ELSE L."limitRaw"
+        END) / 12
+      ) AS "monthlyLimit"
+
+    FROM limits L
+    JOIN person_main PM ON PM."person_key" = L."person_key"
+    JOIN person_invoice_state PS ON PS."person_key" = L."person_key"
+
+    WHERE
+      -- faqat shunday odamlar: hamma invoice'lari yopilgan (bitta ochiq bo‘lsa ham drop)
+      PS."invoiceCount" > 0
+      AND PS."hasOpenInvoice" = 0
+
+      AND (CASE
+        WHEN LOWER(L."trustLabel") = 'xavfli' THEN LEAST(L."limitRaw", 5000000)
+        ELSE L."limitRaw"
+      END) = 30000000
+
+    ORDER BY "limit" DESC
+  `;
     }
+
 
     escapeLike = (v = '') => String(v).replace(/[%_\\]/g, (m) => '\\' + m);
 
