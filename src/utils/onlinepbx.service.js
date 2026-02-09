@@ -91,6 +91,7 @@ async function getOperatorsMapCached() {
 function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex }) {
     return {
         status: { $in: ALLOWED_STATUSES },
+        time: { $gte: sinceDedup },
         purchase: { $ne: true },
         $or: [
             { clientPhone: { $in: phoneCandidates } },
@@ -141,7 +142,6 @@ async function handleOnlinePbxPayload(payload) {
         const slpCode =
             operatorExt != null && operatorExt !== 0 ? opsMap.get(operatorExt) ?? null : null;
 
-        console.log(slpCode , operatorExt , opsMap.get(operatorExt) , canonicalPhone , " buuuuuuu")
 
         const { source, status } = deriveLeadFields(payload);
 
@@ -194,13 +194,13 @@ async function handleOnlinePbxPayload(payload) {
             update.$inc = { callCount: 1 };
         }
 
-        console.log(JSON.stringify({ filter, update }, null, 2), " dedup filter va update")
-
         // ✅ 12) Execute upsert
         const lead = await LeadModel.findOneAndUpdate(filter, update, {
             upsert: true,
             new: true,
         }).lean();
+
+        console.log(slpCode , operatorExt , opsMap.get(operatorExt) , canonicalPhone , " buuuuuuu")
 
         return {
             ok: true,
