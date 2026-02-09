@@ -121,11 +121,7 @@ async function handleOnlinePbxPayload(payload) {
         const now = payload?.date_iso ? new Date(payload.date_iso) : new Date();
         const sinceDedup = getSinceDedup(now);
 
-        // (Agar sizda boshqa joylarda 30 kunlik since ishlatilsa, qoldirdik)
-        // const since30d = getSinceDate();
 
-        // ✅ 4) Dedup: oxirgi 2 kun ichida shu statuslarda bo'lgan lead bormi?
-        // MUHIM: leadBefore qidiruvi va upsert filteri BIR XIL bo'lishi shart.
         const dedupFilter = buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex });
 
         const leadBefore = await LeadModel.findOne(dedupFilter)
@@ -140,9 +136,12 @@ async function handleOnlinePbxPayload(payload) {
         const cardName = sapRecord?.cardName || null;
 
         const operatorExt = pickOperatorExtFromPayload(payload);
+
         const opsMap = await getOperatorsMapCached();
         const slpCode =
             operatorExt != null && operatorExt !== 0 ? opsMap.get(operatorExt) ?? null : null;
+
+        console.log(slpCode , operatorExt , opsMap.get(operatorExt))
 
         const { source, status } = deriveLeadFields(payload);
 

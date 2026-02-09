@@ -1322,7 +1322,6 @@ class b1HANA {
         }
     };
 
-
     calculateScoreByDelay(delay) {
         if (delay <= 0) return 10;
         if (delay <= 6) return 9;

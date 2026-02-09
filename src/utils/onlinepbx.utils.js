@@ -18,7 +18,6 @@ function normalizePhoneToFull998(raw) {
     return null;
 }
 
-
 function pickOperatorExtFromPayload(payload) {
     const digitsOnly = (v) => String(v ?? '').replace(/\D/g, '');
 
@@ -26,12 +25,9 @@ function pickOperatorExtFromPayload(payload) {
         .map(digitsOnly)
         .filter((x) => x && x.length <= 3);
 
-    console.log(payload , candidates)
-
     const n = Number(String(candidates[0] ?? '').trim());
     return Number.isFinite(n) ? n : null;
 }
-
 
 function pickClientPhoneFromWebhook(payload) {
     const dir = String(payload.direction || '').toLowerCase();
