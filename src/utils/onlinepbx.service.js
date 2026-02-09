@@ -141,7 +141,7 @@ async function handleOnlinePbxPayload(payload) {
         const slpCode =
             operatorExt != null && operatorExt !== 0 ? opsMap.get(operatorExt) ?? null : null;
 
-        console.log(slpCode , operatorExt , opsMap.get(operatorExt))
+        console.log(slpCode , operatorExt , opsMap.get(operatorExt) , canonicalPhone , " buuuuuuu")
 
         const { source, status } = deriveLeadFields(payload);
 
