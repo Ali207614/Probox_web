@@ -194,6 +194,8 @@ async function handleOnlinePbxPayload(payload) {
             update.$inc = { callCount: 1 };
         }
 
+        console.log(JSON.stringify({ filter, update }, null, 2), " dedup filter va update")
+
         // ✅ 12) Execute upsert
         const lead = await LeadModel.findOneAndUpdate(filter, update, {
             upsert: true,
