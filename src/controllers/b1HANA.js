@@ -1182,6 +1182,12 @@ class b1HANA {
                         $gte: now.clone().startOf('day').toDate(),
                         $lte: now.clone().endOf('day').toDate(),
                     };
+            function daysAgoRange(days, now = new Date()) {
+                const from = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+                return { $gte: from, $lt: now };
+            }
+
+            const CREATED_AT_RANGE = daysAgoRange(2); // ✅ oxirgi 2 kun
 
             /**
              * ✅ Duplicate tekshirish:
@@ -1194,32 +1200,27 @@ class b1HANA {
             if (source === 'Organika') {
                 query = {
                     clientPhone: cleanedPhone,
-                    createdAt,
+                    createdAt: CREATED_AT_RANGE,
                     status: 'Active',
                 };
             } else if (source === 'Kiruvchi qongiroq') {
                 query = {
                     clientPhone: cleanedPhone,
                     source: { $in: CALL_GROUP },
-                    createdAt,
-                    status: 'Active',
+                    createdAt: CREATED_AT_RANGE,
+                    status: { $in: ['Active', 'Returned', 'Missed', 'Closed'] },
                 };
             } else {
                 query = {
                     clientPhone: cleanedPhone,
                     source,
-                    createdAt,
+                    createdAt: CREATED_AT_RANGE,
                     status: 'Active',
                 };
             }
 
             const exists = await LeadModel.exists(query);
 
-            if (exists) {
-                return res.status(409).json({
-                    message: "Bu lead allaqachon mavjud",
-                });
-            }
 
             let operator = operator1 || null;
             if (source !== 'Organika' && !operator) {
