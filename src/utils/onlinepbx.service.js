@@ -126,7 +126,7 @@ async function handleOnlinePbxPayload(payload) {
         const dedupFilter = buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex });
 
         const leadBefore = await LeadModel.findOne(dedupFilter)
-            .select('pbx.last_uuid clientPhone time status purchase')
+            .select('pbx.last_uuid clientPhone time status purchase operator')
             .lean();
 
         const isExistingLead = !!leadBefore;
@@ -136,12 +136,17 @@ async function handleOnlinePbxPayload(payload) {
         const cardCode = sapRecord?.cardCode || null;
         const cardName = sapRecord?.cardName || null;
 
-        const operatorExt = pickOperatorExtFromPayload(payload);
+        const operatorExtRaw = pickOperatorExtFromPayload(payload);
+
+        const operatorExt =
+            operatorExtRaw == null ? null : Number(String(operatorExtRaw).trim());
 
         const opsMap = await getOperatorsMapCached();
-        const slpCode =
-            operatorExt != null && operatorExt !== 0 ? opsMap.get(operatorExt) ?? null : null;
 
+        const slpCode =
+            Number.isFinite(operatorExt) && operatorExt !== 0
+                ? (opsMap.get(operatorExt) ?? null)
+                : null;
 
         const { source, status } = deriveLeadFields(payload);
 
@@ -193,6 +198,15 @@ async function handleOnlinePbxPayload(payload) {
         if (shouldIncCallCount) {
             update.$inc = { callCount: 1 };
         }
+
+        const operatorIsEmpty =
+            leadBefore?.operator == null || leadBefore?.operator === '' || leadBefore?.operator === 0;
+
+        if (operatorIsEmpty && slpCode != null) {
+            update.$set.operator = slpCode;
+            delete update.$setOnInsert.operator;
+        }
+
 
         // ✅ 12) Execute upsert
         const lead = await LeadModel.findOneAndUpdate(filter, update, {

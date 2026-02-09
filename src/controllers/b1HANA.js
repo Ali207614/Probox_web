@@ -1221,7 +1221,6 @@ class b1HANA {
 
             const exists = await LeadModel.exists(query);
 
-
             let operator = operator1 || null;
             if (source !== 'Organika' && !operator) {
                 operator = await assignBalancedOperator();
