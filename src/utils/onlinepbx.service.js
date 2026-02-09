@@ -17,7 +17,7 @@ const COMPANY_GATEWAY = '781134774';
 const ALLOWED_STATUSES = ['Active', 'Processing', 'Returned', 'Missed', 'Closed'];
 
 
-const DEDUP_WINDOW_DAYS = 2;
+const DEDUP_WINDOW_DAYS = 5;
 const DEDUP_WINDOW_MS = DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
 

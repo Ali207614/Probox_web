@@ -1187,7 +1187,7 @@ class b1HANA {
                 return { $gte: from, $lt: now };
             }
 
-            const CREATED_AT_RANGE = daysAgoRange(2); // ✅ oxirgi 2 kun
+            const CREATED_AT_RANGE = daysAgoRange(5); // ✅ oxirgi 2 kun
 
             /**
              * ✅ Duplicate tekshirish:
