@@ -92,6 +92,20 @@ function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex }) {
 async function handleOnlinePbxPayload(payload) {
     try {
         // 1) gateway check
+
+        const dbgId = `${payload?.uuid || 'no_uuid'}|${payload?.event || 'no_event'}|${Date.now()}`;
+        console.log('[PBX]', dbgId, {
+            event: payload?.event,
+            direction: payload?.direction,
+            uuid: payload?.uuid,
+            date_iso: payload?.date_iso,
+            dialog_duration: payload?.dialog_duration,
+            gateway: payload?.gateway,
+            caller: payload?.caller,
+            callee: payload?.callee,
+            operator_ext_raw: pickOperatorExtFromPayload(payload),
+        });
+
         if (payload?.gateway && String(payload.gateway) !== COMPANY_GATEWAY) {
             return { ok: true, skipped: 'wrong_gateway' };
         }
