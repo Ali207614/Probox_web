@@ -1128,7 +1128,7 @@ class b1HANA {
             }
 
             // ✅ Faqat 3 ta call source (siz aytgandek)
-            const CALL_GROUP = ['Kiruvchi qongiroq', 'Kiruvchi', 'Chiquvchi'];
+            const CALL_GROUP = ['Kiruvchi qongiroq', 'Kiruvchi', 'Chiquvchi','Community','Manychat'];
 
             const allowedSources = [
                 'Manychat',
