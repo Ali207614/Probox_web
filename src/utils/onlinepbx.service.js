@@ -252,7 +252,7 @@ async function handleOnlinePbxPayload(payload) {
             delete update.$setOnInsert.cardName;
         }
 
-        if(sapRecord?.clientName){
+        if(sapRecord?.cardName){
             update.$set.clientName = sapRecord?.cardName;
             delete update.$setOnInsert.clientName;
         }
