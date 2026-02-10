@@ -145,6 +145,136 @@ class AnalyticsController {
             next(err);
         }
     };
+
+    getLeadsFunnelByOperators = async (req, res, next) => {
+        try {
+            const { start, end } = req.query;
+
+            if (!start || !end) {
+                return res.status(400).json({ message: "start va end majburiy" });
+            }
+
+            const startDate = moment.tz(start, "DD.MM.YYYY", "Asia/Tashkent").startOf("day").toDate();
+            const endDate   = moment.tz(end, "DD.MM.YYYY", "Asia/Tashkent").endOf("day").toDate();
+
+            // operator field (sizda operator ext / operator1 bo'lishi mumkin)
+            const OP_FIELD = "operator1"; // <- kerak bo'lsa: "pbx.operator_ext" yoki "operator"
+
+            const rows = await Lead.aggregate([
+                {
+                    $match: {
+                        time: { $gte: startDate, $lte: endDate },
+                    },
+                },
+
+                // operator yo'q bo'lsa "Unknown"
+                {
+                    $addFields: {
+                        __op: { $ifNull: [`$${OP_FIELD}`, "Unknown"] },
+                    },
+                },
+
+                {
+                    $group: {
+                        _id: "$__op",
+
+                        leads: { $sum: 1 },
+
+                        called: {
+                            $sum: { $cond: [{ $eq: ["$called", true] }, 1, 0] },
+                        },
+                        answered: {
+                            $sum: { $cond: [{ $eq: ["$answered", true] }, 1, 0] },
+                        },
+                        interested: {
+                            $sum: { $cond: [{ $eq: ["$interested", true] }, 1, 0] },
+                        },
+
+                        // old logic: passportVisit === "Passport"
+                        passport: {
+                            $sum: { $cond: [{ $eq: ["$passportVisit", "Passport"] }, 1, 0] },
+                        },
+
+                        meetingSet: {
+                            $sum: {
+                                $cond: [
+                                    {
+                                        // meetingDate borligini tekshirish
+                                        $and: [
+                                            { $ne: ["$meetingDate", null] },
+                                            { $ne: ["$meetingDate", ""] },
+                                        ],
+                                    },
+                                    1,
+                                    0,
+                                ],
+                            },
+                        },
+
+                        visit: {
+                            $sum: { $cond: [{ $eq: ["$meetingHappened", true] }, 1, 0] },
+                        },
+
+                        // siz endi status enum’ni yangilayapsiz.
+                        // oldingisi: passportVisit === 'Processing' edi.
+                        // yangi enum’da "Scoring" yoki shunga o'xshash bo'lsa, shu yerda tekshiring.
+                        // Masalan: status === 'Scoring'
+                        processing: {
+                            $sum: { $cond: [{ $eq: ["$status", "Scoring"] }, 1, 0] },
+                        },
+
+                        // old logic: purchase boolean
+                        purchase: {
+                            $sum: { $cond: [{ $eq: ["$purchase", true] }, 1, 0] },
+                        },
+                    },
+                },
+
+                { $sort: { leads: -1 } },
+            ]);
+
+            const result = rows.map(r => {
+                const leads = r.leads || 0;
+
+                const funnelFinal = [
+                    { no: 1, name: "Leads", count: leads, cr: leads ? 100 : 0 },
+                    { no: 2, name: "Qo‘ng‘iroq qilindi", count: r.called, cr: percent(r.called, leads) },
+                    { no: 3, name: "Javob berdi", count: r.answered, cr: percent(r.answered, leads) },
+                    { no: 4, name: "Qiziqish bildirdi", count: r.interested, cr: percent(r.interested, leads) },
+                    { no: 5, name: "Pasport", count: r.passport, cr: percent(r.passport, leads) },
+                    { no: 6, name: "Uchrashuv belgilandi", count: r.meetingSet, cr: percent(r.meetingSet, leads) },
+                    { no: 7, name: "Vizit bo'ldi", count: r.visit, cr: percent(r.visit, leads) },
+                    { no: 8, name: "Jarayonda", count: r.processing, cr: percent(r.processing, leads) },
+                    { no: 9, name: "Harid bo'ldi", count: r.purchase, cr: percent(r.purchase, leads) },
+                ];
+
+                return {
+                    operator: r._id,          // masalan: 2
+                    totals: {
+                        leads: r.leads,
+                        called: r.called,
+                        answered: r.answered,
+                        interested: r.interested,
+                        passport: r.passport,
+                        meetingSet: r.meetingSet,
+                        visit: r.visit,
+                        processing: r.processing,
+                        purchase: r.purchase,
+                    },
+                    funnel: funnelFinal,
+                };
+            });
+
+            return res.json({
+                status: true,
+                range: { start, end },
+                analytics1_funnel_by_operators: result,
+            });
+        } catch (err) {
+            next(err);
+        }
+    };
+
 }
 
 

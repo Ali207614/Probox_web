@@ -130,6 +130,8 @@ router.post('/incomingPayment', authMiddleware, b1SL.postIncomingPayment);
 router.post('/leads', authMiddleware, b1HANA.createLead);
 
 router.get('/lead-analytics', authMiddleware, analyticsController.getLeadsAnalytics);
+router.get('/leads/analytics/funnel-by-operators', authMiddleware ,analyticsController.getLeadsFunnelByOperators);
+
 
 router.post('/leads/:id/chat', authMiddleware, b1HANA.addChat);
 router.get('/leads/:id/chat', authMiddleware, b1HANA.getChats);

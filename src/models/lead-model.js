@@ -101,12 +101,48 @@ const LeadSchema = new Schema(
             type: Boolean,
             default: null,
         },
+        // Lead status mapping (EN -> UZ)
+// Active          -> Faol
+// Blocked         -> Bloklangan
+// Purchased       -> Xarid qildi
+// Returned        -> Qaytarildi
+// Missed          -> O'tkazib yuborildi
+// Ignored         -> E'tiborsiz
+// NoAnswer        -> Javob bermadi
+// FollowUp        -> Qayta a'loqa
+// Considering     -> O'ylab ko'radi
+// WillVisitStore  -> Do'konga boradi
+// WillSendPassport-> Passport yuboradi
+// Scoring         -> Skoring
+// ScoringResult   -> Skoring natija
+// VisitedStore    -> Do'konga keldi
+// NoPurchase      -> Xarid bo'lmadi
+// LowQuality      -> Sifatsiz
+
         status: {
             type: String,
             description: "Status",
-            enum: ['Archived', 'Closed', 'Active', 'Blocked','Processing','Purchased','Returned',"Missed"],
+            enum: [
+                'Active',
+                'Blocked',
+                'Purchased',
+                'Returned',
+                'Missed',
+                'Ignored',
+                'NoAnswer',
+                'FollowUp',
+                'Considering',
+                'WillVisitStore',
+                'WillSendPassport',
+                'Scoring',
+                'ScoringResult',
+                'VisitedStore',
+                'NoPurchase',
+                'LowQuality',
+            ],
             default: 'Active',
         },
+
         invoiceCreated: {
             type: Boolean,
             default: false,
