@@ -279,7 +279,6 @@ async function handleOnlinePbxPayload(payload) {
 
         if (isCallEnd || isMissed) {
             console.log('[PBX] will write call event', dbgId);
-            await writeCallEventFromPBX({ ... });
         } else {
             console.log('[PBX] skip writeCallEventFromPBX (event not matched)', dbgId);
         }
