@@ -238,6 +238,10 @@ async function handleOnlinePbxPayload(payload) {
             update.$set.status = 'NoAnswer';
             delete update.$setOnInsert.status;
         }
+        if (baseStatus === 'Missed') {
+            update.$set.status = 'Missed';
+            delete update.$setOnInsert.status;
+        }
 
         const operatorIsEmpty =
             leadBefore?.operator == null || leadBefore?.operator === '' || leadBefore?.operator === 0;
