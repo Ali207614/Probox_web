@@ -173,7 +173,7 @@ async function handleOnlinePbxPayload(payload) {
 
         const isNoAnswerOutboundEnd = isOutbound && isCallEnd && !hasTalk;
 
-        const shouldMoveToNoAnswer = isNoAnswerOutboundEnd && leadBefore?.status === 'Active';
+        const shouldMoveToNoAnswer = isNoAnswerOutboundEnd
 
         const n = isExistingLead ? null : await generateShortId('PRO');
 
@@ -248,13 +248,11 @@ async function handleOnlinePbxPayload(payload) {
             }
         }
 
-        const willCloseNow = update.$set.status === 'Closed';
-        if (!willCloseNow && shouldMoveToNoAnswer) {
+        if ( shouldMoveToNoAnswer) {
             update.$set.status = 'NoAnswer';
             delete update.$setOnInsert.status;
         }
 
-        // 13) operator fill (faqat bo'sh bo'lsa)
         const operatorIsEmpty =
             leadBefore?.operator == null || leadBefore?.operator === '' || leadBefore?.operator === 0;
 
