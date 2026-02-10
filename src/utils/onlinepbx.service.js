@@ -106,6 +106,7 @@ async function handleOnlinePbxPayload(payload) {
             operator_ext_raw: pickOperatorExtFromPayload(payload),
         });
 
+
         if (payload?.gateway && String(payload.gateway) !== COMPANY_GATEWAY) {
             return { ok: true, skipped: 'wrong_gateway' };
         }
@@ -271,7 +272,19 @@ async function handleOnlinePbxPayload(payload) {
         }).lean();
 
 
-        console.log(event)
+        const rawEvent = String(payload?.event || '');
+        const eventLower = rawEvent.toLowerCase();
+
+        const isMissed  = eventLower.includes('missed'); // vaqtincha diagnostika uchun
+
+        if (isCallEnd || isMissed) {
+            console.log('[PBX] will write call event', dbgId);
+            await writeCallEventFromPBX({ ... });
+        } else {
+            console.log('[PBX] skip writeCallEventFromPBX (event not matched)', dbgId);
+        }
+
+
         if (event === 'call_end' || event.includes('call_missed')) {
             await writeCallEventFromPBX({
                 leadId: lead._id,
