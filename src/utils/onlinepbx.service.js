@@ -194,8 +194,7 @@ async function handleOnlinePbxPayload(payload) {
                 cardCode,
                 cardName,
                 operator: slpCode,
-                noAnswerCount: 0,
-                callCount: 0,
+
                 time: now,
 
             },

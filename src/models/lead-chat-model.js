@@ -88,7 +88,7 @@ const LeadChatSchema = new Schema(
          * - operator ext / slpCode
          */
         pbx: {
-            uuid: { type: String, index: true, default: null },
+            uuid: { type: String, index: true },
             gateway: { type: String, default: null },
             accountcode: { type: String, default: null }, // inbound/outbound/missed... (PBX dan kelsa)
             direction: { type: String, enum: ['inbound', 'outbound', null], default: null, index: true },
@@ -158,6 +158,7 @@ LeadChatSchema.index(
         partialFilterExpression: { 'pbx.uuid': { $type: 'string', $ne: '' } },
     }
 );
+
 
 
 
