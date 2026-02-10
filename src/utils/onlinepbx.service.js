@@ -242,18 +242,18 @@ async function handleOnlinePbxPayload(payload) {
             delete update.$setOnInsert.status;
         }
 
-        if (leadBefore?.cardCode) {
-            update.$set.cardCode = leadBefore?.cardCode;
+        if (sapRecord?.cardCode) {
+            update.$set.cardCode = sapRecord?.cardCode;
             delete update.$setOnInsert.cardCode;
         }
 
-        if(leadBefore?.cardName){
-            update.$set.cardName = leadBefore?.cardName;
+        if(sapRecord?.cardName){
+            update.$set.cardName = sapRecord?.cardName;
             delete update.$setOnInsert.cardName;
         }
 
-        if(leadBefore?.clientName){
-            update.$set.clientName = leadBefore?.cardName;
+        if(sapRecord?.clientName){
+            update.$set.clientName = sapRecord?.cardName;
             delete update.$setOnInsert.clientName;
         }
 
