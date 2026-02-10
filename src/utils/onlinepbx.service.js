@@ -257,6 +257,7 @@ async function handleOnlinePbxPayload(payload) {
         }).lean();
 
 
+        console.log(event)
         if (event === 'call_end' || event.includes('call_missed')) {
             await writeCallEventFromPBX({
                 leadId: lead._id,

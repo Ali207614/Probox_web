@@ -1031,6 +1031,7 @@ class b1HANA {
                 id: item._id,
                 seen:item?.seen,
                 newTime:item?.newTime,
+                noAnswerCount:item?.noAnswerCount,
                 rejectionReason: item.rejectionReason || null,
                 clientPhone2: item.clientPhone2 || null,
                 address2: item.address2 || null,
