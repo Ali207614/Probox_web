@@ -158,7 +158,7 @@ class AnalyticsController {
             const endDate   = moment.tz(end, "DD.MM.YYYY", "Asia/Tashkent").endOf("day").toDate();
 
             // operator field (sizda operator ext / operator1 bo'lishi mumkin)
-            const OP_FIELD = "operator1"; // <- kerak bo'lsa: "pbx.operator_ext" yoki "operator"
+            const OP_FIELD = "operator"; // <- kerak bo'lsa: "pbx.operator_ext" yoki "operator"
 
             const rows = await Lead.aggregate([
                 {
