@@ -14,7 +14,7 @@ const { shuffleArray, parseLocalDateString, addAndCondition } = require("../help
 const {handleOnlinePbxPayload} = require("../utils/onlinepbx.service");
 const moment = require('moment-timezone')
 const fsPromises = require('fs/promises');
-const {notIncExecutorRole} = require("../config");
+const {notIncExecutorRole, ALLOWED_STATUSES} = require("../config");
 const LeadModel = require('../models/lead-model')
 const BranchModel= require('../models/branch-model')
 const ffmpeg = require('fluent-ffmpeg');
@@ -24,7 +24,10 @@ const { validateFields } = require("../utils/validate-types")
 const { generateShortId } = require("../utils/createLead");
 const assignBalancedOperator = require("../utils/assignBalancedOperator");
 const LeadChat = require("../models/lead-chat-model");
-
+const {
+    buildUpdateEventPayload,
+    writeLeadEvent,
+} = require('../utils/lead-chat-events.util');
 const LeadLimitUsageModel = require('../models/lead-limit-usage');
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
@@ -1012,13 +1015,16 @@ class b1HANA {
                 {
                     $addFields: {
                         _statusOrder: { $cond: [{ $eq: ['$status', 'Returned'] }, 0, 1] },
+
+                        _sortTime: { $ifNull: ['$newTime', '$time'] },
                     },
                 },
-                { $sort: { _statusOrder: 1, time: -1 } },
+                { $sort: { _statusOrder: 1, _sortTime: -1 } },
                 { $skip: skip },
                 { $limit: limit },
-                { $project: { _statusOrder: 0 } },
+                { $project: { _statusOrder: 0, _sortTime: 0 } },
             ]);
+
 
             const data = rawData.map((item) => ({
                 n: item.n,
@@ -1208,7 +1214,7 @@ class b1HANA {
                     clientPhone: cleanedPhone,
                     source: { $in: CALL_GROUP },
                     createdAt: CREATED_AT_RANGE,
-                    status: { $in: ['Active', 'Returned', 'Missed', 'Closed'] },
+                    status: { $in: ALLOWED_STATUSES },
                 };
             } else {
                 query = {
@@ -1311,6 +1317,20 @@ class b1HANA {
             }
 
             const lead = await LeadModel.create(dataObj);
+
+            await writeLeadEvent({
+                leadId: lead._id,
+                reqUser: req.user,
+                isSystem: false,
+                type: 'event',
+                action: 'lead_created',
+                message: `Lead created (${lead.source})`,
+                changes: [
+                    { field: 'source', from: null, to: lead.source },
+                    { field: 'clientPhone', from: null, to: lead.clientPhone },
+                    { field: 'operator', from: null, to: lead.operator },
+                ],
+            });
 
             return res.status(201).json({
                 message: 'Lead created successfully',
@@ -2098,9 +2118,37 @@ class b1HANA {
                 runValidators: true,
             });
 
+
+
             if (!updated) {
                 return res.status(404).json({ message: 'Lead not found' });
             }
+
+            const payload = buildUpdateEventPayload({
+                existingLead,
+                validData,
+                allowedFields, // sizda bor
+            });
+
+            if (payload.changes.length) {
+                await writeLeadEvent({
+                    leadId: existingLead._id,
+                    reqUser: req.user,
+                    isSystem: false,
+
+                    type: 'event',
+                    action: payload.action,
+                    message: payload.message,
+
+                    changes: payload.changes,
+
+                    statusFrom: payload.statusFrom,
+                    statusTo: payload.statusTo,
+                    operatorFrom: payload.operatorFrom,
+                    operatorTo: payload.operatorTo,
+                });
+            }
+
 
             return res.status(200).json({
                 message: 'Lead updated successfully',

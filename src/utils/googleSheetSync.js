@@ -6,6 +6,7 @@ const { get } = require('lodash');
 const LeadModel = require('../models/lead-model');
 const DataRepositories = require('../repositories/dataRepositories');
 const b1Controller = require('../controllers/b1HANA');
+const LeadChat = require('../models/lead-chat-model');
 require('dotenv').config();
 
 
@@ -89,6 +90,7 @@ async function main(io) {
         const nextEnd = nextStart + 500;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
+        console.log(range)
         const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
         const rows = response.data.values || [];
         if (!rows.length) {
@@ -228,6 +230,43 @@ async function main(io) {
 
         const notInSap = uniqueLeads.filter((lead) => !lead.cardCode);
         const inserted = await LeadModel.insertMany(uniqueLeads);
+
+        const isSystem = true; // Excel import UI’dan bo’lsa false, cron bo’lsa true
+        const createdBy =
+            isSystem
+                ? 0
+                : (req.user?.id ?? req.user?.U_id ?? req.user?.userId ?? 0);
+
+        const createdByRole =
+            isSystem
+                ? 'System'
+                : (req.user?.U_role ?? req.user?.role ?? null);
+
+        const leadChatDocs = inserted.map((l) => ({
+            leadId: l._id,
+
+            type: 'event',
+            action: 'lead_created',
+
+            createdBy,
+            createdByRole,
+            isSystem,
+
+            message: `Lead created (${l.source})`,
+
+            changes: [
+                { field: 'source', from: null, to: l.source ?? null },
+                { field: 'clientPhone', from: null, to: l.clientPhone ?? null },
+                { field: 'operator', from: null, to: l.operator ?? null },
+            ],
+
+            statusFrom: null,
+            statusTo: l.status ?? null,
+            operatorFrom: null,
+            operatorTo: l.operator ?? null,
+        }));
+
+       const leadChatAdd = await LeadChat.insertMany(leadChatDocs);
         console.log(`📥 ${inserted.length} new leads inserted into MongoDB.`);
         console.log(`🆕 SAP’da topilmagan yangi clientlar soni: ${notInSap.length}`);
 

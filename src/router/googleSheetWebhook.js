@@ -7,7 +7,8 @@ const { get } = require('lodash');
 const LeadModel = require('../models/lead-model');
 const DataRepositories = require('../repositories/dataRepositories');
 const b1Controller = require('../controllers/b1HANA');
-const b1ServiceLayer = require('../controllers/b1SL');
+const LeadChat = require('../models/lead-chat-model');
+require('dotenv').config();
 const router = express.Router();
 
 const AUTH_USER = process.env.GS_WEBHOOK_USER || 'sheetbot';
@@ -276,38 +277,63 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
         const inserted = [];
 
+        const eventDocs = [];
+
         for (const lead of leads) {
             try {
                 const normalizedPhone = normalizePhone(lead.clientPhone);
                 if (!normalizedPhone) continue;
+
                 let existing;
 
-                if(lead.uniqueId){
-                    existing =  await LeadModel.findOne({
-                        uniqueId: lead.uniqueId.toString(),
-                    });
-                }
-                else{
-                    existing=  await LeadModel.findOne({
+                if (lead.uniqueId) {
+                    existing = await LeadModel.findOne({ uniqueId: lead.uniqueId.toString() });
+                } else {
+                    existing = await LeadModel.findOne({
                         source: lead.source,
-                        $or: [
-                            { clientPhone: normalizedPhone },
-                            { clientPhone: "998" + normalizedPhone }
-                        ],
+                        $or: [{ clientPhone: normalizedPhone }, { clientPhone: '998' + normalizedPhone }],
                     });
                 }
 
                 if (existing) continue;
 
                 lead.createdAt = new Date();
-                await LeadModel.create(lead);
+                const createdLead = await LeadModel.create(lead);
+                inserted.push(createdLead);
 
-                inserted.push(lead);
+                // actor
+                const createdBy = Number(req.user?.id ?? req.user?.U_id ?? req.user?.userId ?? 0);
+                const createdByRole = req.user?.U_role ?? req.user?.role ?? null;
+
+                eventDocs.push({
+                    leadId: createdLead._id,
+                    type: 'event',
+                    action: 'lead_created',
+
+                    createdBy,
+                    createdByRole,
+                    isSystem: false,
+
+                    message: `Lead created (${createdLead.source})`,
+                    changes: [
+                        { field: 'source', from: null, to: createdLead.source ?? null },
+                        { field: 'clientPhone', from: null, to: createdLead.clientPhone ?? null },
+                        { field: 'operator', from: null, to: createdLead.operator ?? null },
+                    ],
+                    statusFrom: null,
+                    statusTo: createdLead.status ?? null,
+                    operatorFrom: null,
+                    operatorTo: createdLead.operator ?? null,
+                });
 
             } catch (err) {
-                if (err.code === 11000) console.warn("Duplicate skipped:", lead.n);
+                if (err.code === 11000) console.warn('Duplicate skipped:', lead.n);
                 else throw err;
             }
+        }
+
+        if (eventDocs.length) {
+            await LeadChat.insertMany(eventDocs);
         }
 
 

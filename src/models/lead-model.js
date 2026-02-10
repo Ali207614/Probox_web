@@ -6,9 +6,8 @@ const LeadSchema = new Schema(
         n: { type: String, description: 'Tartib raqami' },
         uniqueId: {
             type: String,
-            unique: true,
-            sparse: true,
-            description: 'Unique ID'
+            default: undefined, // null emas
+            description: 'Unique ID',
         },
         pbx: {
             last_uuid: String,
@@ -35,11 +34,13 @@ const LeadSchema = new Schema(
         source: { type: String, description: 'Manba (reklama, ijtimoiy tarmoq, va hokazo) (Umumiy ozgarmaydi)' },
         leadTime:{ type: String,description: 'CardCode'},
         time: { type: Date, description: 'Yozilgan vaqt (Umumiy ozgarmaydi)' },
+        newTime: { type: Date, description: 'Yozilgan vaqt (Umumiy ozgarmaydi)' },
         operator: { type: String, description: 'Qo‘ng‘iroq qilgan operator (Operator1 )' },
         called: { type: Boolean, description: 'Qo‘ng‘iroq qilindimi? (Operator1 true/false)' },
         callTime: { type: Date, description: 'Qo‘ng‘iroq vaqti(Operator1 ozgarmaydi faqat view)' },
         answered: { type: Boolean, description: 'Javob berildimi? (Operator1 true/false ozgaradi)' },
         callCount: { type: Number, default: 0, description: 'Qo‘ng‘iroqlar soni (Operator1 ozgaradi )' },
+        noAnswerCount: { type: Number, default: 0, description: 'Qo‘ng‘iroqlar soni (Operator1 ozgaradi )' },
         interested: { type: Boolean, description: 'Qiziqish bildirildimi? (Operator1 true/false ozgaradi)' },
         rejectionReason: { type: String, description: 'Rad etish sababi (Operator1  ozgaradi)' },
         passportVisit: { type: String, description: 'Pasport yoki tashrif identifikatori ( Operator1 Passport/Tashrif)' },
@@ -117,7 +118,7 @@ const LeadSchema = new Schema(
 // ScoringResult   -> Skoring natija
 // VisitedStore    -> Do'konga keldi
 // NoPurchase      -> Xarid bo'lmadi
-// LowQuality      -> Sifatsiz
+// Closed      -> Sifatsiz
 
         status: {
             type: String,
@@ -166,6 +167,17 @@ const LeadSchema = new Schema(
     },
         { timestamps: true }
 );
+
+LeadSchema.index(
+    { uniqueId: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            uniqueId: { $type: 'string' }, // faqat string bo'lsa unique tekshiradi
+        },
+    }
+);
+
 
 module.exports = model('Lead', LeadSchema);
 

@@ -17,6 +17,8 @@ const api_params = {
 
 // let db = process.env.test_db
 let notIncExecutorRole= ['CEO',"Operator1","Operator2"]
+
+const ALLOWED_STATUSES = ['Active', 'Processing', 'Returned', 'Missed', 'Closed','Ignored'];
 module.exports = {
     notIncExecutorRole,
     conn_params,
@@ -26,5 +28,6 @@ module.exports = {
     PORT: process.env.PORT || 3019,
     DB_URL: process.env.DB_URL,
     JWT_SECRET: process.env.JWT_SECRET || 'your_secret_key',
-    CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:5174'
+    CLIENT_URL: process.env.CLIENT_URL || 'http://localhost:5174',
+    ALLOWED_STATUSES
 };

@@ -10,19 +10,17 @@ function normalizePhoneToFull998(raw) {
     if (!d) return null;
 
     if (d.startsWith('998') && d.length >= 12) return d.slice(0, 12);
-
     if (/^\d{9}$/.test(d)) return `998${d}`;
-
     if (d.length >= 9) return `998${d.slice(-9)}`;
 
     return null;
 }
 
 function pickOperatorExtFromPayload(payload) {
-    const digitsOnly = (v) => String(v ?? '').replace(/\D/g, '');
+    const digitsOnlyLocal = (v) => String(v ?? '').replace(/\D/g, '');
 
     const candidates = [payload.caller, payload.callee]
-        .map(digitsOnly)
+        .map(digitsOnlyLocal)
         .filter((x) => x && x.length <= 3);
 
     const n = Number(String(candidates[0] ?? '').trim());
@@ -47,21 +45,34 @@ function pickClientPhoneFromWebhook(payload) {
     );
 }
 
+/**
+ * ✅ Status qoidalari:
+ * - outbound:
+ *   - call_missed yoki call_end dialog_duration=0 -> NoAnswer
+ *   - else -> Active
+ * - inbound:
+ *   - call_missed yoki call_end dialog_duration=0 -> Missed
+ *   - else -> Active
+ */
 function deriveLeadFields(payload) {
     const dir = String(payload.direction || '').toLowerCase();
     const event = String(payload.event || '').toLowerCase();
 
     const source = dir === 'outbound' ? 'Chiquvchi' : 'Kiruvchi';
 
-    const isMissedByEvent =
-        event.includes('call_missed');
+    const dialog = Number(payload.dialog_duration ?? 0);
+    const hasTalk = Number.isFinite(dialog) && dialog > 0;
 
-    if (isMissedByEvent) return { source, status: 'Missed' };
-
-    if (event === 'call_end' && dir === 'inbound') {
-        const dialog = Number(payload.dialog_duration ?? 0);
-        if (!Number.isNaN(dialog) && dialog <= 0) return { source, status: 'Missed' };
+    // OUTBOUND
+    if (dir === 'outbound') {
+        if (event.includes('call_missed')) return { source, status: 'NoAnswer' };
+        if (event === 'call_end' && !hasTalk) return { source, status: 'NoAnswer' };
+        return { source, status: 'Active' };
     }
+
+    // INBOUND
+    if (event.includes('call_missed')) return { source, status: 'Missed' };
+    if (event === 'call_end' && !hasTalk) return { source, status: 'Missed' };
 
     return { source, status: 'Active' };
 }
