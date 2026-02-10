@@ -117,7 +117,7 @@ async function handleOnlinePbxPayload(payload) {
         // ✅ last_counted_uuid + counters kerak
         const leadBefore = await LeadModel.findOne(dedupFilter)
             .select(
-                'pbx.last_uuid pbx.last_counted_uuid clientPhone time status purchase operator noAnswerCount callCount'
+                'pbx.last_uuid pbx.last_counted_uuid cardCode cardName clientPhone time status purchase operator noAnswerCount callCount'
             )
             .lean();
 
@@ -179,12 +179,10 @@ async function handleOnlinePbxPayload(payload) {
 
                 cardCode,
                 cardName,
+                clientName:cardName || null,
                 operator: slpCode,
-
                 time: now,
-
             },
-
             $set: {
                 called: true,
                 callTime: now,
@@ -238,9 +236,25 @@ async function handleOnlinePbxPayload(payload) {
             update.$set.status = 'NoAnswer';
             delete update.$setOnInsert.status;
         }
+
         if (baseStatus === 'Missed') {
             update.$set.status = 'Missed';
             delete update.$setOnInsert.status;
+        }
+
+        if (leadBefore?.cardCode) {
+            update.$set.cardCode = leadBefore?.cardCode;
+            delete update.$setOnInsert.cardCode;
+        }
+
+        if(leadBefore?.cardName){
+            update.$set.cardName = leadBefore?.cardName;
+            delete update.$setOnInsert.cardName;
+        }
+
+        if(leadBefore?.clientName){
+            update.$set.clientName = leadBefore?.cardName;
+            delete update.$setOnInsert.clientName;
         }
 
         const operatorIsEmpty =
