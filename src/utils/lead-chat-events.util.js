@@ -84,6 +84,15 @@ function pickActor(reqUser, opts = {}) {
     };
 }
 
+function hasValidUuid(uuid) {
+    return uuid != null && String(uuid).trim() !== '';
+}
+
+function hasValidPbx(pbx) {
+    // ✅ pbx faqat uuid haqiqiy bo'lsa yozilsin (null/"" bo'lsa DBga kirmasin)
+    return pbx && typeof pbx === 'object' && hasValidUuid(pbx.uuid);
+}
+
 /**
  * ✅ writeLeadEvent
  * Universal: status change / operator change / lead updated / auto closed / note ...
@@ -98,9 +107,9 @@ async function writeLeadEvent({
                                   isSystem = false,
 
                                   // feed
-                                  type = 'event',              // 'chat' | 'event'
-                                  action = 'lead_updated',     // enum
-                                  message,                     // required
+                                  type = 'event', // 'chat' | 'event'
+                                  action = 'lead_updated', // enum
+                                  message, // required
 
                                   // changes & snapshots
                                   changes = [],
@@ -138,8 +147,8 @@ async function writeLeadEvent({
         operatorFrom,
         operatorTo,
 
-        // schema’da pbx/audio fieldlari bor bo'lsa
-        ...(pbx ? { pbx } : {}),
+        // ✅ pbx faqat uuid bo'lsa yoziladi (duplicate key muammosini yo'q qiladi)
+        ...(hasValidPbx(pbx) ? { pbx } : {}),
         ...(audio ? { audio } : {}),
     };
 
@@ -157,12 +166,9 @@ function buildUpdateEventPayload({ existingLead, validData, allowedFields }) {
     const statusCh = changes.find((c) => c.field === 'status');
     const operatorCh = changes.find((c) => c.field === 'operator');
 
-    let action = 'lead_updated';
-    let message = 'Lead updated';
-
     const payload = {
-        action,
-        message,
+        action: 'lead_updated',
+        message: 'Lead updated',
         changes,
         statusFrom: null,
         statusTo: null,
@@ -184,7 +190,6 @@ function buildUpdateEventPayload({ existingLead, validData, allowedFields }) {
         payload.action = 'lead_updated';
         payload.message = `Lead updated (${changes.length} field${changes.length === 1 ? '' : 's'})`;
     } else {
-        // hech narsa o'zgarmagan bo'lsa ham event yozishni xohlasangiz:
         payload.action = 'lead_updated';
         payload.message = 'Lead updated';
     }
@@ -222,54 +227,66 @@ function deriveCallOutcome(payload) {
 /**
  * ✅ writeCallEventFromPBX
  * - webhook’dan kelgan payload bilan event yozadi
- * - dedup: xohlasangiz leadBefore.pbx.last_counted_uuid bilan tashqarida nazorat qilasiz
+ * - IMPORTANT: uuid bo'lmasa pbx umuman yozilmaydi (duplicate index muammosi yo'q)
  */
 async function writeCallEventFromPBX({
                                          leadId,
                                          payload,
-                                         slpCode = null,     // operator slpCode
+                                         slpCode = null, // operator slpCode
                                          operatorExt = null, // operator ext
                                          clientPhone = null,
                                          isSystem = true,
                                      }) {
     const event = String(payload?.event || '').toLowerCase();
-    const direction = String(payload?.direction || '').toLowerCase();
+    const directionRaw = String(payload?.direction || '').toLowerCase();
+
+    const direction =
+        directionRaw === 'inbound' || directionRaw === 'outbound' ? directionRaw : null;
 
     const { outcome } = deriveCallOutcome(payload);
 
     // action tanlash
     let action = 'call_ended';
     if (event === 'call_start' || event === 'call_user_start') action = 'call_started';
+
     if (event === 'call_end') {
         if (outcome === 'answered') action = 'call_answered';
         else if (outcome === 'no_answer') action = 'call_no_answer';
         else if (outcome === 'missed') action = 'call_missed';
         else action = 'call_ended';
     }
+
     if (event.includes('call_missed')) action = 'call_missed';
 
-    const uuid = payload?.uuid ?? null;
+    const uuid = hasValidUuid(payload?.uuid) ? String(payload.uuid).trim() : null;
     const dialog = Number(payload?.dialog_duration ?? 0);
 
     const message = `Call ${direction || '—'}: ${action.replace('call_', '').replace('_', ' ')}`;
 
-    const pbx = {
-        uuid: uuid ? String(uuid) : null,
-        gateway: payload?.gateway ?? null,
-        accountcode: payload?.accountcode ?? null,
-        direction: direction === 'inbound' || direction === 'outbound' ? direction : null,
+    // ✅ pbx faqat uuid bo'lsa yaratiladi
+    const pbx =
+        uuid
+            ? {
+                uuid,
+                gateway: payload?.gateway ?? null,
+                accountcode: payload?.accountcode ?? null,
+                direction,
 
-        start_stamp: payload?.start_stamp ?? null,
-        end_stamp: payload?.end_stamp ?? null,
+                start_stamp: payload?.start_stamp ?? null,
+                end_stamp: payload?.end_stamp ?? null,
 
-        operator_ext: operatorExt != null ? String(operatorExt) : null,
-        operator_slpCode: Number.isFinite(Number(slpCode)) ? Number(slpCode) : null,
+                operator_ext: operatorExt != null ? String(operatorExt) : null,
+                operator_slpCode: Number.isFinite(Number(slpCode)) ? Number(slpCode) : null,
 
-        client_phone: clientPhone ? String(clientPhone) : null,
+                client_phone: clientPhone ? String(clientPhone) : null,
 
-        outcome: outcome === 'answered' || outcome === 'no_answer' || outcome === 'missed' ? outcome : 'unknown',
-        dialog_duration: Number.isFinite(dialog) ? dialog : null,
-    };
+                outcome:
+                    outcome === 'answered' || outcome === 'no_answer' || outcome === 'missed'
+                        ? outcome
+                        : 'unknown',
+                dialog_duration: Number.isFinite(dialog) ? dialog : null,
+            }
+            : null;
 
     return writeLeadEvent({
         leadId,
@@ -280,7 +297,8 @@ async function writeCallEventFromPBX({
         action,
         message,
 
-        pbx,
+        // ✅ uuid bo'lmasa pbx umuman DBga kirmaydi
+        ...(pbx ? { pbx } : {}),
         changes: [],
     });
 }

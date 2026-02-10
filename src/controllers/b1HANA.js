@@ -3949,15 +3949,21 @@ class b1HANA {
                 total,
                 totalPages: Math.ceil(total / limit),
                 data: items.map((item) => {
-                    const audioUrl = item?.pbx?.uuid
-                        ? `audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
-                        : (item?.Audio?.url ?? null);
+                    const isSystemNoAudio =
+                        item?.createdByRole === "System" &&
+                        (item?.action === "call_no_answer" || item?.action === "call_missed");
+
+                    const audioUrl = isSystemNoAudio
+                        ? null
+                        : (item?.pbx?.uuid
+                            ? `audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
+                            : (item?.Audio?.url ?? null));
 
                     return {
                         ...item,
                         Comments: item.message,
                         SlpCode: item.createdBy,
-                        Image:null,
+                        Image: null,
                         ...(audioUrl
                             ? {
                                 Audio: {
@@ -3965,9 +3971,10 @@ class b1HANA {
                                     url: audioUrl,
                                 },
                             }
-                            : {Audio: null}),
+                            : { Audio: null }),
                     };
                 }),
+
             });
         } catch (err) {
             next(err);
