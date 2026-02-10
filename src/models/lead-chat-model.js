@@ -153,8 +153,13 @@ LeadChatSchema.index({ leadId: 1, createdAt: -1 });
  */
 LeadChatSchema.index(
     { leadId: 1, 'pbx.uuid': 1 },
-    { unique: true, partialFilterExpression: { 'pbx.uuid': { $exists: true } } }
+    {
+        unique: true,
+        partialFilterExpression: { 'pbx.uuid': { $type: 'string', $ne: '' } },
+    }
 );
+
+
 
 
 module.exports = model('LeadChat', LeadChatSchema);

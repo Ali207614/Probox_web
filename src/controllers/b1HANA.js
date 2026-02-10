@@ -1030,6 +1030,7 @@ class b1HANA {
                 n: item.n,
                 id: item._id,
                 seen:item?.seen,
+                newTime:item?.newTime,
                 rejectionReason: item.rejectionReason || null,
                 clientPhone2: item.clientPhone2 || null,
                 address2: item.address2 || null,

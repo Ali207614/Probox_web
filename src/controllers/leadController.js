@@ -167,6 +167,7 @@ class LeadController {
                 id: lead._id,
                 n: lead.n ?? null,
                 status: lead?.status,
+                newTime:lead?.newTime,
                 address2: lead?.address2 || null,
                 seen: lead?.seen,
                 clientPhone2: lead?.clientPhone2 || null,

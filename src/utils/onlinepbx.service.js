@@ -136,7 +136,6 @@ async function handleOnlinePbxPayload(payload) {
         const slpCode =
             Number.isFinite(operatorExt) && operatorExt !== 0 ? (opsMap.get(operatorExt) ?? null) : null;
 
-        // 6) base fields (source/status for NEW lead)
         const { source, status: baseStatus } = deriveLeadFields(payload);
 
         const event = String(payload?.event || '').toLowerCase();
@@ -145,32 +144,24 @@ async function handleOnlinePbxPayload(payload) {
         const isCallEnd = event === 'call_end';
         const isOutbound = direction === 'outbound';
 
-        // talk?
         const dialog = Number(payload?.dialog_duration ?? 0);
         const hasTalk = Number.isFinite(dialog) && dialog > 0;
 
-        // 7) uuid logic
         const prevUuid = leadBefore?.pbx?.last_uuid ?? null;
         const incomingUuid = payload?.uuid ?? null;
 
-        // call_start attempt (optional, hohlasangiz qoldirasiz)
         const isNewUuid = incomingUuid && incomingUuid !== prevUuid;
         const shouldIncCallAttempt = isCallStartEvent(payload?.event) && isNewUuid;
 
-        // ✅ call_end count: uuid bo'yicha faqat 1 marta
         const prevCountedUuid = leadBefore?.pbx?.last_counted_uuid ?? null;
         const shouldCountEnd = isCallEnd && incomingUuid && incomingUuid !== prevCountedUuid;
 
-        // outbound + call_end + dialog_duration=0 => ko'tarmadi
         const isNoAnswerOutboundEnd = isOutbound && isCallEnd && !hasTalk;
 
-        // ✅ status transition: faqat Active bo'lsa NoAnswer ga o'tkazamiz
         const shouldMoveToNoAnswer = isNoAnswerOutboundEnd && leadBefore?.status === 'Active';
 
-        // 8) id
         const n = isExistingLead ? null : await generateShortId('PRO');
 
-        // 9) update object
         const update = {
             $setOnInsert: {
                 clientPhone: canonicalPhone,

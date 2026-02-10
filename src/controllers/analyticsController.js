@@ -234,6 +234,7 @@ class AnalyticsController {
                 { $sort: { leads: -1 } },
             ]);
 
+
             const result = rows.map(r => {
                 const leads = r.leads || 0;
 
@@ -250,7 +251,7 @@ class AnalyticsController {
                 ];
 
                 return {
-                    operator: r._id,          // masalan: 2
+                    operator: r._id,
                     totals: {
                         leads: r.leads,
                         called: r.called,
