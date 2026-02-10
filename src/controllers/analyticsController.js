@@ -170,7 +170,7 @@ class AnalyticsController {
                 // operator yo'q bo'lsa "Unknown"
                 {
                     $addFields: {
-                        __op: { $ifNull: [`$${OP_FIELD}`, "Unknown"] },
+                        __op: { $ifNull: [`$${OP_FIELD}`, "Belgilanmagan"] },
                     },
                 },
 
