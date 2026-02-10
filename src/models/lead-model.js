@@ -138,7 +138,7 @@ const LeadSchema = new Schema(
                 'ScoringResult',
                 'VisitedStore',
                 'NoPurchase',
-                'LowQuality',
+                'Closed',
             ],
             default: 'Active',
         },
