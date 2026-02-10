@@ -229,7 +229,7 @@ class AnalyticsController {
                         },
                     },
                 },
-
+                { $match: { _id: { $nin: ["Organika", "Unknown"] } } },
                 { $sort: { leads: -1 } },
             ]);
 
