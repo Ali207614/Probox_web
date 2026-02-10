@@ -257,6 +257,16 @@ async function handleOnlinePbxPayload(payload) {
             delete update.$setOnInsert.clientName;
         }
 
+        if(sapRecord?.U_jshshir){
+            update.$set.jshshir = sapRecord?.U_jshshir;
+            delete update.$setOnInsert.jshshir;
+        }
+
+        if(sapRecord?.Cellular){
+            update.$set.passportId = sapRecord?.Cellular;
+            delete update.$setOnInsert.passportId;
+        }
+
         const operatorIsEmpty =
             leadBefore?.operator == null || leadBefore?.operator === '' || leadBefore?.operator === 0;
 
