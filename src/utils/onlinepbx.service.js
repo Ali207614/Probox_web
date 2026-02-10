@@ -274,14 +274,8 @@ async function handleOnlinePbxPayload(payload) {
 
         const isMissed  = eventLower.includes('missed'); // vaqtincha diagnostika uchun
 
+
         if (isCallEnd || isMissed) {
-            console.log('[PBX] will write call event', dbgId);
-        } else {
-            console.log('[PBX] skip writeCallEventFromPBX (event not matched)', dbgId);
-        }
-
-
-        if (event === 'call_end' || event.includes('call_missed')) {
             await writeCallEventFromPBX({
                 leadId: lead._id,
                 payload,
