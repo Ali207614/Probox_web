@@ -89,6 +89,8 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
         trunk_names: 'f6813980348e52891f64fa3ce451de69',
     });
 
+
+
     const rawCalls = res?.data ?? [];
     const calls = rawCalls
 
@@ -101,6 +103,7 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     // });
     if(String(phone_numbers).includes('916525934')){
         console.log(calls , " buuu callls")
+        console.log(res ,' bu res')
     }
     if (!calls.length) return;
 
