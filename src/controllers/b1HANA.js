@@ -3956,7 +3956,7 @@ class b1HANA {
                             ? `audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
                             : (item?.Audio?.url ?? null));
                     delete item.audio;
-                    return {
+                    let result = {
                         ...item,
                         Comments: item.message,
                         SlpCode: item.createdBy,
@@ -3970,6 +3970,11 @@ class b1HANA {
                             }
                             : { Audio: null }),
                     };
+
+                    if(!result?.Audio?.duration){
+                       result.Audio = null;
+                    }
+                    return result
                 }),
 
             });
