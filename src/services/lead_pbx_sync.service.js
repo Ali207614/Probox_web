@@ -151,7 +151,11 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     });
 
     try {
-        await LeadChat.bulkWrite(ops, { ordered: false });
+
+       const leadUpdate = await LeadChat.bulkWrite(ops, { ordered: false });
+        if(String(phone_numbers).includes('900107734')) {
+            console.log('[PBX SYNC bulkWrite]', leadUpdate);
+        }
     } catch (e) {
 
         // jim o'tirmang — hech bo'lmasa log qiling

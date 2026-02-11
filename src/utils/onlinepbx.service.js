@@ -274,8 +274,6 @@ async function handleOnlinePbxPayload(payload) {
             update.$set.operator = slpCode;
             delete update.$setOnInsert.operator;
         }
-        console.log(JSON.stringify(update, null, 4))
-        // 14) Execute upsert
         const lead = await LeadModel.findOneAndUpdate(dedupFilter, update, {
             upsert: true,
             new: true,
