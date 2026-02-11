@@ -820,23 +820,35 @@ class b1HANA {
                 return str.replace(/\D+/g, '');
             };
 
+            function buildLoosePhonePattern(digits) {
+                // "998901234567" -> "9\\D*9\\D*8\\D*9\\D*0..."
+                return digits.split('').join('\\D*');
+            }
+
             if (search) {
-                const safeSearch = escapeRegex(search.trim());
-                const phoneSearch = normalizePhone(search);
+                const s = search.trim();
+                const safeSearch = escapeRegex(s);
+                const phoneSearch = normalizePhone(s); // faqat digit
 
                 if (/^\d+$/.test(phoneSearch) && phoneSearch.length >= 2) {
+                    const pattern = buildLoosePhonePattern(phoneSearch);
+
                     filter.$or = [
-                        { clientPhone: { $regex: phoneSearch, $options: '' } },
-                        { clientPhone2: { $regex: phoneSearch, $options: '' } },
+                        { clientPhone:  { $regex: pattern } },
+                        { clientPhone2: { $regex: pattern } },
+
+                        // BONUS: agar DB da ba’zi raqamlar allaqachon digits-only bo‘lsa
+                        { clientPhone:  { $regex: phoneSearch } },
+                        { clientPhone2: { $regex: phoneSearch } },
                     ];
-                }
-                else {
+                } else {
                     filter.$or = [
                         { clientName: { $regex: safeSearch, $options: 'i' } },
                         { comment: { $regex: safeSearch, $options: 'i' } },
                     ];
                 }
             }
+
             const sources = parseArray(source);
             const branches = parseArray(branch);
             const rejectionReasons = parseArray(rejectionReason);
@@ -3909,7 +3921,6 @@ class b1HANA {
             req.off("close", onClose);
         }
     };
-
 
     getChats = async (req, res, next) => {
         try {
