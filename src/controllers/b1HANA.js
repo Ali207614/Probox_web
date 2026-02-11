@@ -3971,9 +3971,9 @@ class b1HANA {
                             : { Audio: null }),
                     };
 
-                    if(!result?.Audio?.duration){
-                       result.Audio = null;
-                    }
+                    // if(!result?.Audio?.duration){
+                    //    result.Audio = null;
+                    // }
                     return result
                 }),
 
