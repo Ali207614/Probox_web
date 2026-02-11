@@ -95,17 +95,17 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     const calls = rawCalls
 
 
-    if(String(phone_numbers).includes('999171010')){
-        console.log(calls , " buuu callls")
-        console.log(res ,' bu res')
-        console.log({
-            phone_numbers,
-            user_talk_time_from: 1,
-            sort_by: 'start_stamp',
-            sort_order: 'asc',
-            trunk_names: 'f6813980348e52891f64fa3ce451de69',
-        })
-    }
+    // if(String(phone_numbers).includes('999171010')){
+    //     console.log(calls , " buuu callls")
+    //     console.log(res ,' bu res')
+    //     console.log({
+    //         phone_numbers,
+    //         user_talk_time_from: 1,
+    //         sort_by: 'start_stamp',
+    //         sort_order: 'asc',
+    //         trunk_names: 'f6813980348e52891f64fa3ce451de69',
+    //     })
+    // }
     if (!calls.length) return;
 
     const ops = calls.map((c) => {
@@ -137,13 +137,6 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
                         createdBy:operator?.SlpCode || null,
                         message: `📞 Call recording (${c.accountcode})`,
                         createdAt,
-                    },
-                    $set: {
-                        'pbx.end_stamp': c.end_stamp,
-                        'pbx.operator_ext': operatorExt ? String(operatorExt) : null,
-                        'pbx.client_phone': clientPhone ? String(clientPhone) : null,
-                        'Audio.duration': duration,
-                        createdBy: operator?.SlpCode || null,
                     },
                 },
                 upsert: true,

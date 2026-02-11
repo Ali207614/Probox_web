@@ -1139,6 +1139,11 @@ class b1HANA {
                 return res.status(400).json({ message: 'source is required' });
             }
 
+            if(source !== 'Community'){
+                return res.status(400).json({ message: "Lead qo'shish imkoniyati olib tashlandi" });
+            }
+
+
             // ✅ Faqat 3 ta call source (siz aytgandek)
             const CALL_GROUP = ['Kiruvchi qongiroq', 'Kiruvchi', 'Chiquvchi','Community','Manychat'];
 
