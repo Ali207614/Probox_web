@@ -103,7 +103,7 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
     const ops = calls.map((c) => {
         const { operatorExt, clientPhone } = pickOperatorAndClient(c);
-
+        console.log(c , " buuuuu ccccccc")
         const createdAt = new Date((c.start_stamp ?? now) * 1000);
         const duration = Number(c.user_talk_time ?? c.duration ?? 0);
 
