@@ -71,7 +71,7 @@ function pickActor(reqUser, opts = {}) {
     // sizda req.user {U_role} bor edi.
     // createdBy: sizning auth struktura bo'yicha moslab oling.
     const createdBy =
-        reqUser?.id ??
+        reqUser?.SlpCode ??
         reqUser?.U_id ??
         reqUser?.userId ??
         reqUser?.telegram_id ??
