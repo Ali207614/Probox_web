@@ -3955,7 +3955,7 @@ class b1HANA {
                         : (item?.pbx?.uuid
                             ? `audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
                             : (item?.Audio?.url ?? null));
-
+                    delete item.audio;
                     return {
                         ...item,
                         Comments: item.message,
