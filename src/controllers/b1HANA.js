@@ -3946,7 +3946,9 @@ class b1HANA {
             if (!isAdmin || !wantIncludeDeleted) filter.isDeleted = { $ne: true };
 
             const skip = (page - 1) * limit;
-
+            if(id === '698c4e8397bec65573e5529d'){
+                console.log(await LeadChat.find(filter).sort({ createdAt: 1 }).lean())
+            }
             const [items, total] = await Promise.all([
                 LeadChat.find(filter).sort({ createdAt: 1 }).skip(skip).limit(limit).lean(),
                 LeadChat.countDocuments(filter),
