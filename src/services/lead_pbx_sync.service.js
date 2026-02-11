@@ -99,11 +99,16 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     //     sort_order: 'asc',
     //     trunk_names: 'f6813980348e52891f64fa3ce451de69',
     // });
+    if(String(phone_numbers).includes('916525934')){
+        console.log(calls , " buuu callls")
+    }
     if (!calls.length) return;
 
     const ops = calls.map((c) => {
         const { operatorExt, clientPhone } = pickOperatorAndClient(c);
-        console.log(c , " buuuuu ccccccc")
+        if(String(clientPhone).includes('916525934')){
+            console.log(c , " buuuuu ccccccc")
+        }
         const createdAt = new Date((c.start_stamp ?? now) * 1000);
         const duration = Number(c.user_talk_time ?? c.duration ?? 0);
 
