@@ -87,17 +87,21 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
     );
 
     const postForm = async (path, paramsObj) => {
-        const body = new URLSearchParams();
-        Object.entries(paramsObj || {}).forEach(([k, v]) => {
-            if (v === undefined || v === null || v === '') return;
-            body.append(k, String(v));
-        });
+        try {
+            const body = new URLSearchParams();
+            Object.entries(paramsObj || {}).forEach(([k, v]) => {
+                if (v === undefined || v === null || v === '') return;
+                body.append(k, String(v));
+            });
 
-        const { data } = await api.post(path, body, {
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        });
+            const { data } = await api.post(path, body, {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            });
 
-        return data;
+            return data;
+        }catch (e){
+            return e
+        }
     };
 
     return {
