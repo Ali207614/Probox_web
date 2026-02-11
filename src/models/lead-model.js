@@ -103,7 +103,7 @@ const LeadSchema = new Schema(
             default: null,
         },
         // Lead status mapping (EN -> UZ)
-// Active          -> Faol
+// Active          -> Yange lead
 // Blocked         -> Bloklangan
 // Purchased       -> Xarid qildi
 // Returned        -> Qaytarildi

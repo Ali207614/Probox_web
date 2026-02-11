@@ -18,7 +18,20 @@ const api_params = {
 // let db = process.env.test_db
 let notIncExecutorRole= ['CEO',"Operator1","Operator2"]
 
-const ALLOWED_STATUSES = ['Active', 'Processing', 'Returned', 'Missed', 'Closed','Ignored'];
+const ALLOWED_STATUSES = [
+    "Active",
+    "Returned",
+    "Missed",
+    "Ignored",
+    "NoAnswer",
+    "FollowUp",
+    "Considering",
+    "WillVisitStore",
+    "WillSendPassport",
+    "Scoring",
+    "ScoringResult",
+    "VisitedStore"
+];
 module.exports = {
     notIncExecutorRole,
     conn_params,

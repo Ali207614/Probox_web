@@ -1208,26 +1208,23 @@ class b1HANA {
             if (source === 'Organika') {
                 query = {
                     clientPhone: cleanedPhone,
-                    createdAt: CREATED_AT_RANGE,
-                    status: 'Active',
-                };
-            } else if (source === 'Kiruvchi qongiroq') {
-                query = {
-                    clientPhone: cleanedPhone,
-                    source: { $in: CALL_GROUP },
-                    createdAt: CREATED_AT_RANGE,
                     status: { $in: ALLOWED_STATUSES },
                 };
             } else {
                 query = {
                     clientPhone: cleanedPhone,
-                    source,
-                    createdAt: CREATED_AT_RANGE,
-                    status: 'Active',
+                    source: { $in: CALL_GROUP },
+                    status: { $in: ALLOWED_STATUSES },
                 };
             }
 
             const exists = await LeadModel.exists(query);
+
+            if (exists) {
+                return res.status(409).json({
+                    message: "Bu lead allaqachon mavjud",
+                });
+            }
 
             let operator = operator1 || null;
             if (source !== 'Organika' && !operator) {
