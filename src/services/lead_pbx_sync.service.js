@@ -104,6 +104,13 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     if(String(phone_numbers).includes('916525934')){
         console.log(calls , " buuu callls")
         console.log(res ,' bu res')
+        console.log({
+            phone_numbers,
+            user_talk_time_from: 1,
+            sort_by: 'start_stamp',
+            sort_order: 'asc',
+            trunk_names: 'f6813980348e52891f64fa3ce451de69',
+        })
     }
     if (!calls.length) return;
 
