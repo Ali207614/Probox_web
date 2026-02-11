@@ -101,7 +101,7 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     //     sort_order: 'asc',
     //     trunk_names: 'f6813980348e52891f64fa3ce451de69',
     // });
-    if(String(phone_numbers).includes('916525934')){
+    if(String(phone_numbers).includes('900107734')){
         console.log(calls , " buuu callls")
         console.log(res ,' bu res')
         console.log({
@@ -116,7 +116,7 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
     const ops = calls.map((c) => {
         const { operatorExt, clientPhone } = pickOperatorAndClient(c);
-        if(String(clientPhone).includes('916525934')){
+        if(String(clientPhone).includes('900107734')){
             console.log(c , " buuuuu ccccccc")
         }
         const createdAt = new Date((c.start_stamp ?? now) * 1000);
