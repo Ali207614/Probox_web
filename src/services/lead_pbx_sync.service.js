@@ -94,14 +94,8 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     const rawCalls = res?.data ?? [];
     const calls = rawCalls
 
-    // console.log(`[PBX SYNC] ${calls.length} calls found for lead ${leadId}`,{
-    //     phone_numbers,
-    //     user_talk_time_from: 1,
-    //     sort_by: 'start_stamp',
-    //     sort_order: 'asc',
-    //     trunk_names: 'f6813980348e52891f64fa3ce451de69',
-    // });
-    if(String(phone_numbers).includes('900107734')){
+
+    if(String(phone_numbers).includes('999171010')){
         console.log(calls , " buuu callls")
         console.log(res ,' bu res')
         console.log({
@@ -116,7 +110,7 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
 
     const ops = calls.map((c) => {
         const { operatorExt, clientPhone } = pickOperatorAndClient(c);
-        if(String(clientPhone).includes('900107734')){
+        if(String(clientPhone).includes('999171010')){
             console.log(c , " buuuuu ccccccc")
         }
         const createdAt = new Date((c.start_stamp ?? now) * 1000);
@@ -160,7 +154,7 @@ async function syncLeadPbxChats({ pbxClient, leadId }) {
     try {
 
        const leadUpdate = await LeadChat.bulkWrite(ops, { ordered: false });
-        if(String(phone_numbers).includes('900107734')) {
+        if(String(phone_numbers).includes('999171010')) {
             console.log('[PBX SYNC bulkWrite]', leadUpdate);
         }
     } catch (e) {
