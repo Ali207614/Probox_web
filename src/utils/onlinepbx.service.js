@@ -289,7 +289,6 @@ async function handleOnlinePbxPayload(payload) {
         const isMissed  = eventLower.includes('missed'); // vaqtincha diagnostika uchun
 
 
-        if ((isCallEnd && dialog === 0) || isMissed) {
             await writeCallEventFromPBX({
                 leadId: lead._id,
                 payload,
@@ -298,7 +297,6 @@ async function handleOnlinePbxPayload(payload) {
                 clientPhone: canonicalPhone,
                 isSystem: true,
             });
-        }
 
         return {
             ok: true,
@@ -309,7 +307,7 @@ async function handleOnlinePbxPayload(payload) {
         };
     } catch (err) {
         console.error('[handleOnlinePbxPayload] Error:', err);
-        return { ok: false, error: err?.message || 'Unknown error' };
+       // return { ok: false, error: err?.message || 'Unknown error' };
     }
 }
 
