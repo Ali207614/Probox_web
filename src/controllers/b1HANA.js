@@ -1139,7 +1139,7 @@ class b1HANA {
                 return res.status(400).json({ message: 'source is required' });
             }
 
-            if(source !== 'Community'){
+            if(source !== 'Community' || source !== 'Organika'){
                 return res.status(400).json({ message: "Lead qo'shish imkoniyati olib tashlandi" });
             }
 
