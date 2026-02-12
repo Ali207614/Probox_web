@@ -1138,10 +1138,10 @@ class b1HANA {
             if (!source) {
                 return res.status(400).json({ message: 'source is required' });
             }
-
-            if(source !== 'Community' || source !== 'Organika'){
-                return res.status(400).json({ message: "Lead qo'shish imkoniyati olib tashlandi" });
-            }
+            //
+            // if(source !== 'Community' || source !== 'Organika'){
+            //     return res.status(400).json({ message: "Lead qo'shish imkoniyati olib tashlandi" });
+            // }
 
 
             // ✅ Faqat 3 ta call source (siz aytgandek)
