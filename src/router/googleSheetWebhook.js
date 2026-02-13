@@ -80,44 +80,51 @@ function normalizePhone(input) {
     return digits;
 }
 
-/**
- * Excel date number OR dd.mm.yyyy [HH:mm[:ss]]
- */
 function parseSheetDate(value) {
-    // fallback: now
-    if (!value) return nowTz().toDate();
+    // fallback: now (+05:00)
+    if (value == null || value === '') return nowTz().toDate();
 
-    // Excel serial number
-    if (!isNaN(value)) {
+    // normalize string (sheet sometimes sends weird spaces/slashes)
+    const cleaned = String(value)
+        .trim()
+        .replace(/[\/\\]/g, '.')     // 01/02/2026 -> 01.02.2026
+        .replace(/\u00A0/g, ' ')     // no-break space
+        .replace(/\u200B/g, '')      // zero-width space
+        .replace(/\s+/g, ' ');
+
+    // ✅ Excel serial number (e.g. 45231)
+    if (!isNaN(cleaned) && cleaned !== '') {
         const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-        const date = new Date(excelEpoch.getTime() + Number(value) * 86400000);
+        const date = new Date(excelEpoch.getTime() + Number(cleaned) * 86400000);
         return moment(date).utcOffset(TZ_OFFSET_MIN).toDate();
     }
 
-    const str = String(value)
-        .trim()
-        .replace(/[\/\\]/g, '.')
-        .replace(/\u00A0/g, ' ')
-        .replace(/\u200B/g, '')
-        .replace(/\s+/g, ' ');
+    // ✅ Supported formats from sheet
+    const formats = ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY HH:mm', 'DD.MM.YYYY'];
 
-    let parsed = moment(
-        str,
-        ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY HH:mm', 'DD.MM.YYYY'],
-        true,
-    );
+    // strict parse first
+    let parsed = moment(cleaned, formats, true);
 
-    // If only date provided: attach current time
-    if (parsed.isValid() && /^\d{2}\.\d{2}\.\d{4}$/.test(str)) {
-        const n = nowTz();
-        parsed = parsed.set({ hour: n.hour(), minute: n.minute(), second: n.second() });
-    }
+    // fallback non-strict
+    if (!parsed.isValid()) parsed = moment(cleaned, formats);
 
     if (!parsed.isValid()) return nowTz().toDate();
 
-    // enforce +05:00
-    return moment(parsed.format('YYYY-MM-DD HH:mm:ss') + ' +05:00').toDate();
+    // If only date provided: attach current time (so it doesn't become 00:00:00)
+    if (/^\d{2}\.\d{2}\.\d{4}$/.test(cleaned)) {
+        const n = nowTz();
+        parsed = parsed.set({
+            hour: n.hour(),
+            minute: n.minute(),
+            second: n.second(),
+            millisecond: 0,
+        });
+    }
+
+    // ✅ Force timezone +05:00 WITHOUT rebuilding a string (no Moment deprecation warning)
+    return parsed.utcOffset(TZ_OFFSET_MIN, true).toDate();
 }
+
 
 function getWeekdaySafe(dateLike) {
     let m = moment(dateLike);
@@ -402,7 +409,20 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 });
 
                 const existing = await LeadModel.findOne(dedupFilter).select('_id').lean();
-                if (existing) continue;
+
+                if (existing) {
+                    await LeadModel.updateOne(
+                        { _id: existing._id },
+                        {
+                            $set: {
+                                newTime: lead.time,          // parsedTime
+                            },
+                        },
+                    );
+
+                    continue;
+                }
+
 
                 lead.createdAt = new Date();
                 const createdLead = await LeadModel.create(lead);

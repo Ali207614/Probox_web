@@ -80,18 +80,14 @@ function parseSheetDate(value) {
     // ✅ strict parse
     let parsed = moment(cleaned, formats, true);
 
-    // fallback non-strict
     if (!parsed.isValid()) parsed = moment(cleaned, formats);
 
     if (!parsed.isValid()) return moment().utcOffset(5).toDate();
 
-    // ✅ timezone’ni shu yerda beramiz, qayta string yasamaymiz
     return parsed.utcOffset(5, true).toDate();
 }
 
-/**
- * If time >= 19:00 -> next day weekday
- */
+
 function getWeekdaySafe(dateLike) {
     let m = moment(dateLike);
     if (!m.isValid()) m = moment();
@@ -101,20 +97,10 @@ function getWeekdaySafe(dateLike) {
     return m.isoWeekday().toString();
 }
 
-/**
- * =========================
- * Dedup helpers (NEW)
- * =========================
- */
+
 const DEDUP_WINDOW_DAYS = Number(process.env.DEDUP_WINDOW_DAYS || 2);
 const DEDUP_WINDOW_MS = DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
-/**
- * Build phone candidates:
- * - local9: "901234567"
- * - full:   "998901234567"
- * plus legacyRegex: /901234567$/
- */
 function buildPhoneCandidates(rawLocal9) {
     const local9 = digitsOnly(rawLocal9);
     if (local9.length !== 9) {
@@ -152,6 +138,15 @@ function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex, source }) 
     if (source) filter.source = source;
 
     return filter;
+}
+
+function parseWorkDays(raw) {
+    if (!raw) return [];
+    const normalized = String(raw)
+        .replace(/[،，؛;|\t]/g, ',')
+        .replace(/\s+/g, '')
+        .replace(/[^1-7,]/g, '');
+    return Array.from(new Set(normalized.split(',').filter(Boolean)));
 }
 
 /**
@@ -315,40 +310,37 @@ async function main(io) {
             }
         }
 
-        /**
-         * 5) Dedup: uniqueId first, else phone-based (NEW)
-         */
-        const sinceDedup = new Date(Date.now() - DEDUP_WINDOW_MS);
-
         const uniqueLeads = [];
+
         for (const lead of leads) {
             const local9 = normalizePhone(lead.clientPhone);
             if (!local9) continue;
 
-            let exists = false;
+            const { phoneCandidates, legacyRegex } = buildPhoneCandidates(local9);
 
+            const dedupFilter = buildDedupFilter({
+                phoneCandidates,
+                legacyRegex,
+            });
 
-                const { phoneCandidates, legacyRegex } = buildPhoneCandidates(local9);
+            const existing = await LeadModel.findOne(dedupFilter).select('_id').lean();
 
+            if (existing) {
+                await LeadModel.updateOne(
+                    { _id: existing._id },
+                    {
+                        $set: {
+                            newTime: lead.time,        // parsedTime
+                        },
+                    }
+                );
 
-                const dedupFilter = buildDedupFilter({
-                    phoneCandidates,
-                    legacyRegex,
-                });
+                continue;
+            }
 
-                exists = Boolean(await LeadModel.exists(dedupFilter));
-
-            if (!exists) uniqueLeads.push(lead);
+            uniqueLeads.push(lead);
         }
 
-        if (!uniqueLeads.length) {
-            console.log('✅ No unique new leads found.');
-            return;
-        }
-
-        /**
-         * 6) Assign operator (round-robin inside available operators)
-         */
         let lastAssignedIndex = 0;
 
         for (const lead of uniqueLeads) {
@@ -359,7 +351,10 @@ async function main(io) {
                 continue;
             }
 
-            const availableOperators = operators.filter((op) => String(op?.U_workDay || '').includes(weekday));
+            const availableOperators = operators.filter((op) => {
+                const days = parseWorkDays(get(op, 'U_workDay', ''));
+                return days.includes(weekday);
+            });
             if (!availableOperators.length) {
                 lead.operator = null;
                 continue;
@@ -369,14 +364,10 @@ async function main(io) {
             lastAssignedIndex++;
         }
 
-        /**
-         * 7) Insert leads + LeadChat events
-         */
         const notInSap = uniqueLeads.filter((lead) => !lead.cardCode);
 
         const inserted = await LeadModel.insertMany(uniqueLeads, { ordered: false });
 
-        // cron => system
         const isSystem = true;
         const createdBy = 0;
         const createdByRole = 'System';
