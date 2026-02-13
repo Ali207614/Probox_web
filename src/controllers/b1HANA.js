@@ -974,17 +974,42 @@ class b1HANA {
             }
 
 
+            // if (req.user?.U_role === 'Scoring') {
+            //     addAndCondition(filter, {
+            //         $or: [
+            //             { source: 'Qayta sotuv' },
+            //             {
+            //                 $and: [
+            //                     { source: { $ne: 'Qayta sotuv' } },
+            //                     {
+            //                         $or: [
+            //                             { passportId: { $exists: true, $nin: [null, ''] } },
+            //                             { jshshir: { $exists: true, $nin: [null, ''] } },
+            //                         ],
+            //                     },
+            //                 ],
+            //             },
+            //         ],
+            //     });
+            // }
+
             if (req.user?.U_role === 'Scoring') {
                 addAndCondition(filter, {
                     $or: [
-                        { source: 'Qayta sotuv' },
+                        { status: 'Scoring' },
+
                         {
-                            $and: [
-                                { source: { $ne: 'Qayta sotuv' } },
+                            $or: [
+                                { source: 'Qayta sotuv' },
                                 {
-                                    $or: [
-                                        { passportId: { $exists: true, $nin: [null, ''] } },
-                                        { jshshir: { $exists: true, $nin: [null, ''] } },
+                                    $and: [
+                                        { source: { $ne: 'Qayta sotuv' } },
+                                        {
+                                            $or: [
+                                                { passportId: { $exists: true, $nin: [null, ''] } },
+                                                { jshshir: { $exists: true, $nin: [null, ''] } },
+                                            ],
+                                        },
                                     ],
                                 },
                             ],
@@ -992,6 +1017,7 @@ class b1HANA {
                     ],
                 });
             }
+
 
             if (req.user?.U_role !== 'Scoring') {
                 addAndCondition(filter, {
