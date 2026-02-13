@@ -106,6 +106,9 @@ const LeadSchema = new Schema(
             type: Boolean,
             default: null,
         },
+        talkedFlag: { type: Boolean, default: false, index: true },
+        talkedAt: { type: Date, default: null, index: true },
+
         // Lead status mapping (EN -> UZ)
 // Active          -> Yange lead
 // Blocked         -> Bloklangan

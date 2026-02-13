@@ -309,6 +309,12 @@ async function handleOnlinePbxPayload(payload) {
             recallDate
         }
 
+        if (shouldCountEnd && hasTalk) {
+            update.$set.talkedFlag = true;
+            update.$set.talkedAt = now;
+        }
+
+
         const operatorIsEmpty =
             leadBefore?.operator == null || leadBefore?.operator === '' || leadBefore?.operator === 0;
 
