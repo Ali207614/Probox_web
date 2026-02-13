@@ -1070,7 +1070,7 @@ class b1HANA {
                 seen:item?.seen,
                 newTime:item.newTime ? moment(item.newTime).format('YYYY.MM.DD HH:mm') : null,
                 noAnswerCount:item?.noAnswerCount,
-                recallDate:item?.recallDate,
+                recallDate:item?.recallDate ? moment(item.recallDate).format('YYYY.MM.DD HH:mm') : null,
                 rejectionReason: item.rejectionReason || null,
                 clientPhone2: item.clientPhone2 || null,
                 address2: item.address2 || null,
