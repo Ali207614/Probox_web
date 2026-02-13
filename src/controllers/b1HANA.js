@@ -1251,6 +1251,7 @@ class b1HANA {
 
                 query = {
                     clientPhone: cleanedPhone,
+                    purchase: { $ne: true },
                     status: { $in: ALLOWED_STATUSES },
                 };
 
