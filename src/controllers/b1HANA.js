@@ -2167,7 +2167,11 @@ class b1HANA {
 
                 validData['pbx.prev_status'] = prevStatus || null;
 
-                validData.recallDate = null;
+                const keepRecallStatuses = new Set(['FollowUp', 'WillVisitStore', 'WillSendPassport']);
+
+                if (!keepRecallStatuses.has(nextStatus)) {
+                    validData.recallDate = null;
+                }
 
                 // validData.newTime = now;
             }
