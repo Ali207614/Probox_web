@@ -1,26 +1,47 @@
+'use strict';
+
 const path = require('path');
 const moment = require('moment');
 const { google } = require('googleapis');
 const { GoogleAuth } = require('google-auth-library');
 const { get } = require('lodash');
+
+require('dotenv').config();
+
 const LeadModel = require('../models/lead-model');
 const DataRepositories = require('../repositories/dataRepositories');
 const b1Controller = require('../controllers/b1HANA');
 const LeadChat = require('../models/lead-chat-model');
-require('dotenv').config();
+const { ALLOWED_STATUSES } = require('../config');
 
+/**
+ * =========================
+ * Small utils
+ * =========================
+ */
+function digitsOnly(v = '') {
+    return String(v ?? '').replace(/\D/g, '');
+}
 
+/**
+ * ✅ Returns ONLY local 9 digits (e.g. 901234567)
+ * - "+998 90 123 45 67" -> "901234567"
+ * - "0901234567" -> "901234567"
+ * - invalid -> null
+ */
 function normalizePhone(input) {
     if (!input) return null;
-    let digits = String(input).replace(/\D/g, '');
 
-    if (digits.startsWith('998') && digits.length > 9) {
-        digits = digits.slice(3);
-    }
+    let digits = digitsOnly(input);
 
-    if (digits.length === 10 && digits.startsWith('0')) {
-        digits = digits.slice(1);
-    }
+    // remove country code if exists
+    if (digits.startsWith('998')) digits = digits.slice(3);
+
+    // remove leading 0
+    if (digits.startsWith('0')) digits = digits.slice(1);
+
+    if (digits.length !== 9) return null;
+
     return digits;
 }
 
@@ -30,53 +51,150 @@ function chunk(arr, size) {
     return out;
 }
 
+function nowTz() {
+    return moment().utcOffset(5);
+}
+
+/**
+ * Excel serial OR dd.mm.yyyy [HH:mm[:ss]]
+ */
+function parseSheetDate(value) {
+    if (!value) return moment().utcOffset(5).toDate();
+
+    const cleaned = String(value)
+        .trim()
+        .replace(/[\/\\]/g, '.')
+        .replace(/\u00A0/g, ' ')
+        .replace(/\u200B/g, '')
+        .replace(/\s+/g, ' ');
+
+    // Excel numeric date
+    if (!isNaN(cleaned) && cleaned !== '') {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        const date = new Date(excelEpoch.getTime() + Number(cleaned) * 86400000);
+        return moment(date).utcOffset(5).toDate();
+    }
+
+    const formats = ['DD.MM.YYYY HH:mm:ss', 'DD.MM.YYYY HH:mm', 'DD.MM.YYYY'];
+
+    // ✅ strict parse
+    let parsed = moment(cleaned, formats, true);
+
+    // fallback non-strict
+    if (!parsed.isValid()) parsed = moment(cleaned, formats);
+
+    if (!parsed.isValid()) return moment().utcOffset(5).toDate();
+
+    // ✅ timezone’ni shu yerda beramiz, qayta string yasamaymiz
+    return parsed.utcOffset(5, true).toDate();
+}
+
+/**
+ * If time >= 19:00 -> next day weekday
+ */
 function getWeekdaySafe(dateLike) {
     let m = moment(dateLike);
+    if (!m.isValid()) m = moment();
 
-    if (!m.isValid()) {
-        m = moment();
-    }
-
-    const hour = m.hour();
-    if (hour >= 19) {
-        return m.add(1, 'day').isoWeekday().toString();
-    }
+    if (m.hour() >= 19) return m.add(1, 'day').isoWeekday().toString();
 
     return m.isoWeekday().toString();
 }
 
+/**
+ * =========================
+ * Dedup helpers (NEW)
+ * =========================
+ */
+const DEDUP_WINDOW_DAYS = Number(process.env.DEDUP_WINDOW_DAYS || 2);
+const DEDUP_WINDOW_MS = DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Build phone candidates:
+ * - local9: "901234567"
+ * - full:   "998901234567"
+ * plus legacyRegex: /901234567$/
+ */
+function buildPhoneCandidates(rawLocal9) {
+    const local9 = digitsOnly(rawLocal9);
+    if (local9.length !== 9) {
+        return { phoneCandidates: [], legacyRegex: null };
+    }
+
+    const full = `998${local9}`;
+    const phoneCandidates = [local9, full];
+
+    const legacyRegex = new RegExp(`${local9}$`);
+    return { phoneCandidates, legacyRegex };
+}
+
+/**
+ * Dedup filter:
+ * - allowed statuses
+ * - not purchased
+ * - createdAt >= sinceDedup (optional)
+ * - phone candidates OR legacy regex
+ * - source filter optional (old behavior)
+ */
+function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex, source }) {
+    const filter = {
+        status: { $in: ALLOWED_STATUSES },
+        purchase: { $ne: true },
+        ...(sinceDedup ? { createdAt: { $gte: sinceDedup } } : {}),
+        $or: [
+            { clientPhone: { $in: phoneCandidates } },
+            ...(legacyRegex ? [{ clientPhone: { $regex: legacyRegex } }] : []),
+        ],
+    };
+
+    // If you want "dedup per source" keep this:
+    // If you want global dedup across sources: comment it out.
+    if (source) filter.source = source;
+
+    return filter;
+}
+
+/**
+ * =========================
+ * MAIN
+ * =========================
+ */
 async function main(io) {
     try {
         const sheetId = process.env.SHEET_ID;
         const saKeyPath = process.env.SA_KEY_PATH;
+        const minCountExcel = Number(process.env.MIN_COUNT_EXCEL || 1);
 
+        if (!sheetId) throw new Error('❌ Missing SHEET_ID in .env');
         if (!saKeyPath) throw new Error('❌ Missing SA_KEY_PATH in .env');
 
+        /**
+         * Google Auth
+         */
         const auth = new GoogleAuth({
             keyFile: path.resolve(saKeyPath),
             scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
         });
         const sheets = google.sheets({ version: 'v4', auth });
 
+        /**
+         * 1) Determine range based on last lead n
+         */
         const [lastLead] = await LeadModel.aggregate([
             {
                 $match: {
                     $or: [
-                        { n: { $type: "int" } },
-                        { n: { $type: "long" } },
-                        { n: { $type: "double" } },
-                        { n: { $type: "string", $regex: /^\d+$/ } },
+                        { n: { $type: 'int' } },
+                        { n: { $type: 'long' } },
+                        { n: { $type: 'double' } },
+                        { n: { $type: 'string', $regex: /^\d+$/ } },
                     ],
                 },
             },
             {
                 $addFields: {
                     nNumeric: {
-                        $cond: [
-                            { $eq: [{ $type: "$n" }, "string"] },
-                            { $toInt: "$n" },
-                            "$n",
-                        ],
+                        $cond: [{ $eq: [{ $type: '$n' }, 'string'] }, { $toInt: '$n' }, '$n'],
                     },
                 },
             },
@@ -90,47 +208,62 @@ async function main(io) {
         const nextEnd = nextStart + 500;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
-        console.log(range)
-        const response = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
-        const rows = response.data.values || [];
-        if (!rows.length) {
-            return;
-        }
+        console.log('📄 Sheet range:', range);
 
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: sheetId,
+            range,
+        });
+
+        const rows = response.data.values || [];
+        if (!rows.length) return;
+
+        /**
+         * 2) Load operators (SAP)
+         */
         const query = DataRepositories.getSalesPersons({ include: ['Operator1'] });
         const operators = await b1Controller.execute(query);
+
         const allOperatorCodes = operators.map((op) => op.SlpCode);
         if (!allOperatorCodes.length) throw new Error('❌ No operators found in SAP.');
 
+        /**
+         * 3) Build leads from sheet rows
+         */
         const leads = [];
-
-        const minCountExcel= process.env.MIN_COUNT_EXCEL || 1 ;
 
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             const rowNumber = nextStart + i;
-            const parsedTime = parseSheetDate(row[3]);
 
+            const parsedTime = parseSheetDate(row[3]);
             const weekday = moment(parsedTime).isoWeekday().toString();
 
-            let clientName = row[0]?.trim() || '';
+            let clientName = String(row[0] || '').trim();
             clientName = clientName.replace(/[^a-zA-Z\u0400-\u04FF\s]/g, '').trim();
 
             if (!clientName) {
                 const timestamp = moment().format('YYYYMMDD_HHmmss');
                 clientName = `Mijoz_${timestamp}_${rowNumber}`;
             }
+
             const clientPhone = normalizePhone(row[1]);
             if (!clientPhone) continue;
 
+            const source = String(row[2] || '').trim();
+
+            // uniqueId logic must be numeric-safe
+            const uniqueCandidate = Number(row[6] || 0);
+            const uniqueId = uniqueCandidate >= minCountExcel && row[6] ? String(row[6]) : null;
+
             leads.push({
                 n: rowNumber,
-                uniqueId: minCountExcel < row[6] ? row[6] : null,
+                uniqueId,
                 clientName,
-                clientPhone,
-                source: row[2]?.trim() || '',
+                clientPhone, // local 9 digits
+                source,
                 time: parsedTime,
-                leadTime:row[3],
+                leadTime: row[3],
                 weekday,
                 cardCode: null,
                 cardName: null,
@@ -142,11 +275,15 @@ async function main(io) {
             return;
         }
 
-        const phones = Array.from(new Set(leads.map((l) => l.clientPhone)));
-        let existingMap = new Map();
+        /**
+         * 4) SAP match CardCode/CardName by phone (LIKE '%9digits')
+         */
+        const phones = Array.from(new Set(leads.map((l) => l.clientPhone))).filter(Boolean);
+        const existingMap = new Map();
 
-        if (phones.length > 0) {
+        if (phones.length) {
             const chunks = chunk(phones, 300);
+
             for (const group of chunks) {
                 const likeParts = group
                     .map((p) => `("Phone1" LIKE '%${p}' OR "Phone2" LIKE '%${p}')`)
@@ -157,11 +294,13 @@ async function main(io) {
           FROM ${DataRepositories.db}.OCRD
           WHERE ${likeParts}
         `;
+
                 const existingRecords = await b1Controller.execute(sapQuery);
 
                 for (const r of existingRecords) {
                     const phone1 = normalizePhone(r.Phone1);
                     const phone2 = normalizePhone(r.Phone2);
+
                     if (phone1) existingMap.set(phone1, { cardCode: r.CardCode, cardName: r.CardName });
                     if (phone2) existingMap.set(phone2, { cardCode: r.CardCode, cardName: r.CardName });
                 }
@@ -176,25 +315,28 @@ async function main(io) {
             }
         }
 
+        /**
+         * 5) Dedup: uniqueId first, else phone-based (NEW)
+         */
+        const sinceDedup = new Date(Date.now() - DEDUP_WINDOW_MS);
+
         const uniqueLeads = [];
         for (const lead of leads) {
-            const normalizedPhone = normalizePhone(lead.clientPhone);
-            let exists;
+            const local9 = normalizePhone(lead.clientPhone);
+            if (!local9) continue;
 
-            if(lead.uniqueId){
-                exists =  await LeadModel.exists({
-                    uniqueId: lead.uniqueId.toString(),
+            let exists = false;
+
+
+                const { phoneCandidates, legacyRegex } = buildPhoneCandidates(local9);
+
+
+                const dedupFilter = buildDedupFilter({
+                    phoneCandidates,
+                    legacyRegex,
                 });
-            }
-            else{
-                exists =  await LeadModel.exists({
-                    source: lead.source,
-                    $or: [
-                        { clientPhone: normalizedPhone },
-                        { clientPhone: "998" + normalizedPhone }
-                    ],
-                });
-            }
+
+                exists = Boolean(await LeadModel.exists(dedupFilter));
 
             if (!exists) uniqueLeads.push(lead);
         }
@@ -204,21 +346,20 @@ async function main(io) {
             return;
         }
 
-        const totalLeads = uniqueLeads.length;
-
+        /**
+         * 6) Assign operator (round-robin inside available operators)
+         */
         let lastAssignedIndex = 0;
 
         for (const lead of uniqueLeads) {
-            const weekday = getWeekdaySafe(lead.time)
+            const weekday = getWeekdaySafe(lead.time);
 
             if (lead.source?.trim() === 'Organika') {
                 lead.operator = null;
                 continue;
             }
-            const availableOperators = operators.filter((op) =>
-                op?.U_workDay?.includes(weekday)
-            );
 
+            const availableOperators = operators.filter((op) => String(op?.U_workDay || '').includes(weekday));
             if (!availableOperators.length) {
                 lead.operator = null;
                 continue;
@@ -228,19 +369,17 @@ async function main(io) {
             lastAssignedIndex++;
         }
 
+        /**
+         * 7) Insert leads + LeadChat events
+         */
         const notInSap = uniqueLeads.filter((lead) => !lead.cardCode);
-        const inserted = await LeadModel.insertMany(uniqueLeads);
 
-        const isSystem = true; // Excel import UI’dan bo’lsa false, cron bo’lsa true
-        const createdBy =
-            isSystem
-                ? 0
-                : (req.user?.id ?? req.user?.U_id ?? req.user?.userId ?? 0);
+        const inserted = await LeadModel.insertMany(uniqueLeads, { ordered: false });
 
-        const createdByRole =
-            isSystem
-                ? 'System'
-                : (req.user?.U_role ?? req.user?.role ?? null);
+        // cron => system
+        const isSystem = true;
+        const createdBy = 0;
+        const createdByRole = 'System';
 
         const leadChatDocs = inserted.map((l) => ({
             leadId: l._id,
@@ -266,68 +405,32 @@ async function main(io) {
             operatorTo: l.operator ?? null,
         }));
 
-       const leadChatAdd = await LeadChat.insertMany(leadChatDocs);
+        await LeadChat.insertMany(leadChatDocs, { ordered: false });
+
         console.log(`📥 ${inserted.length} new leads inserted into MongoDB.`);
         console.log(`🆕 SAP’da topilmagan yangi clientlar soni: ${notInSap.length}`);
+
 
         if (io && inserted.length > 0) {
             io.emit('new_leads_summary', {
                 total: inserted.length,
                 notInSap: notInSap.length,
             });
-            console.log('📡 Socket broadcast: new_leads + summary sent to all clients');
+            console.log('📡 Socket broadcast: new_leads_summary sent to all clients');
         }
+
 
         const operatorStats = {};
         for (const lead of uniqueLeads) {
-            operatorStats[lead.operator] = (operatorStats[lead.operator] || 0) + 1;
+            const key = lead.operator ?? 'null';
+            operatorStats[key] = (operatorStats[key] || 0) + 1;
         }
         console.table(operatorStats);
 
-        console.log('✅ Lead sync completed (balanced operator assignment + 998 normalized).');
+        console.log('✅ Lead sync completed (dedup + operator assignment).');
     } catch (err) {
-        console.error('❌ Error in Google Sheet sync:', err.message || err);
+        console.error('❌ Error in Google Sheet sync:', err?.message || err);
     }
-}
-
-function parseSheetDate(value) {
-    if (!value) {
-        return moment().utcOffset(5).toDate();
-    }
-
-    let cleaned = String(value)
-        .trim()
-        .replace(/\//g, '.')
-        .replace(/\u00A0/g, ' ')
-        .replace(/\u200B/g, '')
-        .replace(/\s+/g, ' ');
-
-    if (!isNaN(cleaned) && cleaned !== "") {
-        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-        const date = new Date(excelEpoch.getTime() + Number(cleaned) * 86400000);
-
-        return moment(date).utcOffset(5).toDate();
-    }
-
-    const formats = [
-        "DD.MM.YYYY HH:mm:ss",
-        "DD.MM.YYYY HH:mm",
-        "DD.MM.YYYY"
-    ];
-
-    let parsed = moment(cleaned, formats, true);
-
-    if (!parsed.isValid()) {
-        parsed = moment(cleaned, formats);
-    }
-
-    if (!parsed.isValid()) {
-        return moment().utcOffset(5).toDate();
-    }
-
-    parsed = moment(parsed.format("YYYY-MM-DD HH:mm:ss") + " +05:00");
-
-    return parsed.toDate();
 }
 
 module.exports = { main };

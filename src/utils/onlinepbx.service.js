@@ -70,17 +70,9 @@ async function getOperatorsMapCached() {
     return map;
 }
 
-/**
- * ✅ Dedup filter:
- * - oxirgi DEDUP_WINDOW_DAYS ichida
- * - status ALLOWED_STATUSES ichida (NoAnswer, Closed ham bo'lsin!)
- * - purchase != true
- * - clientPhone match: candidates OR legacyRegex
- */
 function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex }) {
     return {
         status: { $in: ALLOWED_STATUSES },
-        time: { $gte: sinceDedup },
         purchase: { $ne: true },
         $or: [
             { clientPhone: { $in: phoneCandidates } },
