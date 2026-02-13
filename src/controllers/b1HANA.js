@@ -2149,6 +2149,30 @@ class b1HANA {
                 validData.limitDate = new Date();
             }
 
+            const now = new Date();
+
+            const nextStatus =
+                typeof validData.status === 'string' ? String(validData.status) : undefined;
+
+            const prevStatus =
+                typeof existingLead.status === 'string' ? String(existingLead.status) : undefined;
+
+            const isStatusChanging =
+                nextStatus != null &&
+                nextStatus !== '' &&
+                nextStatus !== prevStatus;
+
+            if (isStatusChanging) {
+                validData.statusChangedAt = now;
+
+                validData['pbx.prev_status'] = prevStatus || null;
+
+                validData.recallDate = null;
+
+                // validData.newTime = now;
+            }
+
+
             await this.writeLimitUsageHistory({
                 leadId: existingLead._id,
                 existingLead,

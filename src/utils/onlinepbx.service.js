@@ -306,6 +306,7 @@ async function handleOnlinePbxPayload(payload) {
 
         if(update.$set.status){
             update.$set.statusChangedAt = now;
+            recallDate
         }
 
         const operatorIsEmpty =
