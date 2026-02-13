@@ -303,6 +303,11 @@ async function handleOnlinePbxPayload(payload) {
             delete update.$setOnInsert.passportId;
         }
 
+
+        if(update.$set.status){
+            update.$set.statusChangedAt = now;
+        }
+
         const operatorIsEmpty =
             leadBefore?.operator == null || leadBefore?.operator === '' || leadBefore?.operator === 0;
 

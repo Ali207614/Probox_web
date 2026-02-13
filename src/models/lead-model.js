@@ -167,7 +167,8 @@ const LeadSchema = new Schema(
             type: Date,
             default: null,
             description: "Invoice yaratilgan sana"
-        }
+        },
+        statusChangedAt: { type: Date, default: null, index: true },
     },
         { timestamps: true }
 );
