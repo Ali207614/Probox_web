@@ -1172,7 +1172,7 @@ class b1HANA {
 
 
             // ✅ Faqat 3 ta call source (siz aytgandek)
-            const CALL_GROUP = ['Kiruvchi qongiroq', 'Kiruvchi', 'Chiquvchi','Community','Manychat'];
+            const CALL_GROUP = ['Kiruvchi qongiroq', 'Kiruvchi', 'Chiquvchi','Community','Manychat','Meta'];
 
             const allowedSources = [
                 'Manychat',
@@ -1249,18 +1249,10 @@ class b1HANA {
              */
             let query;
 
-            if (source === 'Organika') {
                 query = {
                     clientPhone: cleanedPhone,
                     status: { $in: ALLOWED_STATUSES },
                 };
-            } else {
-                query = {
-                    clientPhone: cleanedPhone,
-                    source: { $in: CALL_GROUP },
-                    status: { $in: ALLOWED_STATUSES },
-                };
-            }
 
             const exists = await LeadModel.exists(query);
 
