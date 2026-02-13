@@ -11,7 +11,7 @@ const {
 const { generateShortId } = require('../utils/createLead');
 const b1Sl = require('../controllers/b1SL');
 const { ALLOWED_STATUSES } = require('../config');
-const {writeCallEventFromPBX} = require("./lead-chat-events.util");
+const { writeCallEventFromPBX } = require('./lead-chat-events.util');
 
 const COMPANY_GATEWAY = '781134774';
 
@@ -70,7 +70,7 @@ async function getOperatorsMapCached() {
     return map;
 }
 
-function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex }) {
+function buildDedupFilter({ phoneCandidates, legacyRegex }) {
     return {
         status: { $in: ALLOWED_STATUSES },
         purchase: { $ne: true },
@@ -84,7 +84,6 @@ function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex }) {
 async function handleOnlinePbxPayload(payload) {
     try {
         // 1) gateway check
-
         if (payload?.gateway && String(payload.gateway) !== COMPANY_GATEWAY) {
             return { ok: true, skipped: 'wrong_gateway' };
         }
@@ -100,16 +99,29 @@ async function handleOnlinePbxPayload(payload) {
             return { ok: true, skipped: 'bad_phone' };
         }
 
-        // 3) time window (dedup)
+        // 3) time window (dedup) - info uchun qaytaramiz
         const now = payload?.date_iso ? new Date(payload.date_iso) : new Date();
         const sinceDedup = getSinceDedup(now);
 
-        const dedupFilter = buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex });
+        const dedupFilter = buildDedupFilter({ phoneCandidates, legacyRegex });
 
-        // ✅ last_counted_uuid + counters kerak
+        // ✅ leadBefore
         const leadBefore = await LeadModel.findOne(dedupFilter)
             .select(
-                'pbx.last_uuid pbx.last_counted_uuid cardCode cardName clientPhone time status purchase operator noAnswerCount callCount'
+                [
+                    'pbx.last_uuid',
+                    'pbx.last_counted_uuid',
+                    'pbx.prev_status', // ✅ NEW
+                    'cardCode',
+                    'cardName',
+                    'clientPhone',
+                    'time',
+                    'status',
+                    'purchase',
+                    'operator',
+                    'noAnswerCount',
+                    'callCount',
+                ].join(' ')
             )
             .lean();
 
@@ -149,9 +161,18 @@ async function handleOnlinePbxPayload(payload) {
         const prevCountedUuid = leadBefore?.pbx?.last_counted_uuid ?? null;
         const shouldCountEnd = isCallEnd && incomingUuid && incomingUuid !== prevCountedUuid;
 
+        // outbound call_end & no talk => NoAnswer
         const isNoAnswerOutboundEnd = isOutbound && isCallEnd && !hasTalk;
+        const shouldMoveToNoAnswer = isNoAnswerOutboundEnd;
 
-        const shouldMoveToNoAnswer = isNoAnswerOutboundEnd
+        // ✅ NEW: call_end + talk bo'lsa — status restore (Missed/NoAnswer bo'lmasa)
+        const isMissedBase = baseStatus === 'Missed';
+        const shouldRestoreStatus =
+            isCallEnd &&
+            hasTalk &&
+            shouldCountEnd &&
+            !isMissedBase &&
+            !isNoAnswerOutboundEnd;
 
         const n = isExistingLead ? null : await generateShortId('PRO');
 
@@ -171,7 +192,7 @@ async function handleOnlinePbxPayload(payload) {
 
                 cardCode,
                 cardName,
-                clientName:cardName || null,
+                clientName: cardName || null,
                 operator: slpCode,
                 time: now,
             },
@@ -180,6 +201,7 @@ async function handleOnlinePbxPayload(payload) {
                 callTime: now,
                 updatedAt: now,
                 newTime: now,
+
                 // pbx meta
                 'pbx.last_uuid': incomingUuid,
                 'pbx.last_event': payload?.event ?? null,
@@ -189,11 +211,16 @@ async function handleOnlinePbxPayload(payload) {
             },
         };
 
+        // ✅ call_start bo'lganda oldingi statusni snapshot qilib qo'yamiz
         if (shouldIncCallAttempt) {
             update.$inc = update.$inc || {};
             update.$inc.callAttemptCount = 1;
+
+            // lead bo'lsa - shu paytdagi status; bo'lmasa baseStatus/Active
+            update.$set['pbx.prev_status'] = leadBefore?.status ?? baseStatus ?? 'Active';
         }
 
+        // call_end sanog'i (faqat 1 marta)
         if (shouldCountEnd) {
             update.$inc = update.$inc || {};
 
@@ -209,6 +236,7 @@ async function handleOnlinePbxPayload(payload) {
             update.$set['pbx.last_counted_uuid'] = incomingUuid;
         }
 
+        // NoAnswer ketma-ket 6 bo'lsa auto-close
         if (shouldCountEnd && isNoAnswerOutboundEnd) {
             const prevNoAnswer = Number(leadBefore?.noAnswerCount ?? 0);
             const nextNoAnswer = prevNoAnswer + 1;
@@ -219,19 +247,37 @@ async function handleOnlinePbxPayload(payload) {
             if (canAutoClose && nextNoAnswer >= 6) {
                 update.$set.status = 'Closed';
                 update.$set.rejectionReason = "Umuman aloqaga chiqib bo`lmadi";
-
                 delete update.$setOnInsert.status;
             }
         }
 
+        // NoAnswer status
         if (shouldMoveToNoAnswer) {
             update.$set.status = 'NoAnswer';
             delete update.$setOnInsert.status;
         }
 
-        if (baseStatus === 'Missed') {
+        // Missed status (deriveLeadFields() bo'yicha)
+        if (isMissedBase) {
             update.$set.status = 'Missed';
             delete update.$setOnInsert.status;
+        }
+
+        const shouldRestoreOnTalkEnd = isCallEnd && hasTalk && shouldCountEnd;
+
+        if (shouldRestoreOnTalkEnd) {
+            if (isExistingLead) {
+                const curStatus = leadBefore?.status;
+
+                if (curStatus === 'Missed' || curStatus === 'NoAnswer') {
+                    const prevStatus = leadBefore?.pbx?.prev_status || 'Ignored';
+                    update.$set.status = prevStatus;
+                    delete update.$setOnInsert.status;
+                }
+            } else {
+                update.$set.status = 'Ignored';
+                delete update.$setOnInsert.status;
+            }
         }
 
         if (sapRecord?.cardCode) {
@@ -239,22 +285,20 @@ async function handleOnlinePbxPayload(payload) {
             delete update.$setOnInsert.cardCode;
         }
 
-        if(sapRecord?.cardName){
+        if (sapRecord?.cardName) {
             update.$set.cardName = sapRecord?.cardName;
             delete update.$setOnInsert.cardName;
-        }
 
-        if(sapRecord?.cardName){
             update.$set.clientName = sapRecord?.cardName;
             delete update.$setOnInsert.clientName;
         }
 
-        if(sapRecord?.U_jshshir){
+        if (sapRecord?.U_jshshir) {
             update.$set.jshshir = sapRecord?.U_jshshir;
             delete update.$setOnInsert.jshshir;
         }
 
-        if(sapRecord?.Cellular){
+        if (sapRecord?.Cellular) {
             update.$set.passportId = sapRecord?.Cellular;
             delete update.$setOnInsert.passportId;
         }
@@ -266,18 +310,16 @@ async function handleOnlinePbxPayload(payload) {
             update.$set.operator = slpCode;
             delete update.$setOnInsert.operator;
         }
+
         const lead = await LeadModel.findOneAndUpdate(dedupFilter, update, {
             upsert: true,
             new: true,
             setDefaultsOnInsert: true,
         }).lean();
 
-
         const rawEvent = String(payload?.event || '');
         const eventLower = rawEvent.toLowerCase();
-
-        const isMissed  = eventLower.includes('missed'); // vaqtincha diagnostika uchun
-
+        const isMissed = eventLower.includes('missed');
 
         if ((isCallEnd && dialog === 0) || isMissed) {
             await writeCallEventFromPBX({
@@ -299,7 +341,7 @@ async function handleOnlinePbxPayload(payload) {
         };
     } catch (err) {
         console.error('[handleOnlinePbxPayload] Error:', err);
-       // return { ok: false, error: err?.message || 'Unknown error' };
+        // return { ok: false, error: err?.message || 'Unknown error' };
     }
 }
 

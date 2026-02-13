@@ -38,7 +38,8 @@ const permissions = {
         'street',
         'house',
         'address2',
-        'seen'
+        'seen',
+        'status'
     ],
     Operator2: [
 
