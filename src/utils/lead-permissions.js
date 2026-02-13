@@ -39,7 +39,8 @@ const permissions = {
         'house',
         'address2',
         'seen',
-        'status'
+        'status',
+        'recallDate'
     ],
     Operator2: [
 
