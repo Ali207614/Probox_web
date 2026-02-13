@@ -365,7 +365,6 @@ async function main(io) {
         }
 
         const notInSap = uniqueLeads.filter((lead) => !lead.cardCode);
-
         const inserted = await LeadModel.insertMany(uniqueLeads, { ordered: false });
 
         const isSystem = true;
