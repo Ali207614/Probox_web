@@ -199,7 +199,6 @@ class AnalyticsController {
                             $sum: {
                                 $cond: [
                                     {
-                                        // meetingDate borligini tekshirish
                                         $and: [
                                             { $ne: ["$meetingDate", null] },
                                             { $ne: ["$meetingDate", ""] },
