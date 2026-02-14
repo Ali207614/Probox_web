@@ -265,7 +265,7 @@ async function handleOnlinePbxPayload(payload) {
 
                 if (curStatus === 'Missed' || curStatus === 'NoAnswer') {
                     const prevStatus = leadBefore?.pbx?.prev_status || 'Ignored';
-                    update.$set.status = prevStatus;
+                    update.$set.status = prevStatus === 'Active' ? 'Ignored' : prevStatus;
                     delete update.$setOnInsert.status;
                 }
                 else{
