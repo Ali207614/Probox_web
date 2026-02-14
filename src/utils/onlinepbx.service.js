@@ -268,6 +268,10 @@ async function handleOnlinePbxPayload(payload) {
                     update.$set.status = prevStatus;
                     delete update.$setOnInsert.status;
                 }
+                else{
+                    update.$set.status = 'Ignored';
+                    delete update.$setOnInsert.status;
+                }
             } else {
                 update.$set.status = 'Ignored';
                 delete update.$setOnInsert.status;
