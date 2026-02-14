@@ -233,6 +233,7 @@ async function main(io) {
             const rowNumber = nextStart + i;
 
             const parsedTime = parseSheetDate(row[3]);
+            console.log(parsedTime ," bu parsedTime")
             const weekday = moment(parsedTime).isoWeekday().toString();
 
             let clientName = String(row[0] || '').trim();
