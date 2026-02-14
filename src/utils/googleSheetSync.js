@@ -226,6 +226,7 @@ async function main(io) {
          * 3) Build leads from sheet rows
          */
         const leads = [];
+        console.log(rows.length, 'rows loaded from Google Sheet.')
 
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
