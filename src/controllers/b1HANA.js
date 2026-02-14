@@ -2155,6 +2155,14 @@ class b1HANA {
                 nextStatus !== '' &&
                 nextStatus !== prevStatus;
 
+            if (isStatusChanging && nextStatus === 'Active' && prevStatus !== 'Active') {
+                return res.status(400).json({
+                    message: "Statusni Active'ga qaytarib bo'lmaydi. Active faqat birinchi status.",
+                    statusFrom: prevStatus,
+                    statusTo: nextStatus,
+                });
+            }
+
             if (isStatusChanging) {
                 validData.statusChangedAt = now;
 
