@@ -1949,11 +1949,13 @@ class b1HANA {
 
             if(validData.rejectionReason){
                 validData.status = 'Closed';
+                validData.rejectionReason2 = validData.rejectionReason
             }
 
 
             if(validData.rejectionReason2){
                 validData.status = 'Closed';
+                validData.rejectionReason = validData.rejectionReason2
             }
 
             if(validData.status === 'Returned'){
