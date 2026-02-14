@@ -320,30 +320,25 @@ async function handleOnlinePbxPayload(payload) {
             delete update.$setOnInsert.operator;
         }
 
+
         const res = await LeadModel.findOneAndUpdate(dedupFilter, update, {
             upsert: true,
             new: true,
             setDefaultsOnInsert: true,
-            includeResultMetadata: true, //
-        });
-        console.log('keys:', Object.keys(res || {}));
-        console.log('has value:', !!res?.value);
-        console.log('leo:', res?.lastErrorObject);
+            includeResultMetadata: true,
+        }).lean();
 
         const lead = res.value;
-        const wasUpserted = res?.lastErrorObject?.updatedExisting === false; // ✅ yangi lead bo'lsa true
-
-
-
+        const wasInserted = res?.lastErrorObject?.updatedExisting === false;
 
         const rawEvent = String(payload?.event || '');
         const eventLower = rawEvent.toLowerCase();
         const isMissed = eventLower.includes('missed');
 
-        const shouldWriteBecauseNewLead = wasUpserted; // ✅ lead yangi ochildi
-        const shouldWriteBecauseMissedOrZeroTalk = (isCallEnd && dialog === 0) || isMissed;
+        const shouldWriteNewLeadEvent = wasInserted; // ✅ yangi lead bo'lsa
+        const shouldWriteNoAnswerOrMissed = (isCallEnd && dialog === 0) || isMissed;
 
-        if (shouldWriteBecauseNewLead || shouldWriteBecauseMissedOrZeroTalk) {
+        if (shouldWriteNewLeadEvent || shouldWriteNoAnswerOrMissed) {
             await writeCallEventFromPBX({
                 leadId: lead._id,
                 payload,
@@ -353,6 +348,7 @@ async function handleOnlinePbxPayload(payload) {
                 isSystem: true,
             });
         }
+
 
 
         return {
