@@ -1340,8 +1340,7 @@ class b1HANA {
             if (source === 'Organika') {
                 dataObj = {
                     ...dataObj,
-                    // meetingConfirmed: true,
-                    // meetingConfirmedDate: new Date(),
+                    status: 'VisitedStore',
                     branch2,
                     seller,
                 };
