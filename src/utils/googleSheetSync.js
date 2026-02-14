@@ -231,7 +231,7 @@ async function main(io) {
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             const rowNumber = nextStart + i;
-
+            console.log(row)
             const parsedTime = parseSheetDate(row[3]);
             console.log(parsedTime ," bu parsedTime " , row[3])
             const weekday = moment(parsedTime).isoWeekday().toString();
