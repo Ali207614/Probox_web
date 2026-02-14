@@ -167,12 +167,7 @@ async function handleOnlinePbxPayload(payload) {
 
         // ✅ NEW: call_end + talk bo'lsa — status restore (Missed/NoAnswer bo'lmasa)
         const isMissedBase = baseStatus === 'Missed';
-        const shouldRestoreStatus =
-            isCallEnd &&
-            hasTalk &&
-            shouldCountEnd &&
-            !isMissedBase &&
-            !isNoAnswerOutboundEnd;
+
 
         const n = isExistingLead ? null : await generateShortId('PRO');
 
@@ -229,22 +224,18 @@ async function handleOnlinePbxPayload(payload) {
             }
 
             if (hasTalk) {
-                update.$inc.callCount = 1;
                 update.$set.answered = true;
             }
+            update.$inc.callCount = 1;
 
             update.$set['pbx.last_counted_uuid'] = incomingUuid;
         }
 
-        // NoAnswer ketma-ket 6 bo'lsa auto-close
         if (shouldCountEnd && isNoAnswerOutboundEnd) {
             const prevNoAnswer = Number(leadBefore?.noAnswerCount ?? 0);
             const nextNoAnswer = prevNoAnswer + 1;
 
-            const canAutoClose =
-                !leadBefore?.status || leadBefore.status === 'Active' || leadBefore.status === 'NoAnswer';
-
-            if (canAutoClose && nextNoAnswer >= 6) {
+            if (nextNoAnswer >= 6) {
                 update.$set.status = 'Closed';
                 update.$set.rejectionReason = "Umuman aloqaga chiqib bo`lmadi";
                 delete update.$setOnInsert.status;
@@ -263,9 +254,8 @@ async function handleOnlinePbxPayload(payload) {
             delete update.$setOnInsert.status;
         }
 
-        const shouldRestoreOnTalkEnd = isCallEnd && hasTalk && shouldCountEnd;
 
-        if (shouldRestoreOnTalkEnd) {
+        if (isCallEnd && hasTalk) {
             if (isExistingLead) {
                 const curStatus = leadBefore?.status;
 
