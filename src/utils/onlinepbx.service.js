@@ -214,7 +214,7 @@ async function handleOnlinePbxPayload(payload) {
         // ✅ call_start bo'lganda oldingi statusni snapshot qilib qo'yamiz
         if (shouldIncCallAttempt) {
             update.$inc = update.$inc || {};
-            update.$inc.callAttemptCount = 1;
+            update.$inc.callCount = 1;
 
             // lead bo'lsa - shu paytdagi status; bo'lmasa baseStatus/Active
             update.$set['pbx.prev_status'] = leadBefore?.status ?? baseStatus ?? 'Active';
@@ -231,7 +231,6 @@ async function handleOnlinePbxPayload(payload) {
             if (hasTalk) {
                 update.$set.answered = true;
             }
-            update.$inc.callCount = 1;
 
             update.$set['pbx.last_counted_uuid'] = incomingUuid;
         }
