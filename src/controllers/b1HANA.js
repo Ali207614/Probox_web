@@ -2157,7 +2157,7 @@ class b1HANA {
 
             if (isStatusChanging && nextStatus === 'Active' && prevStatus !== 'Active') {
                 return res.status(400).json({
-                    message: "Statusni Active'ga qaytarib bo'lmaydi. Active faqat birinchi status.",
+                    message: "Statusni Yengi lead'ga qaytarib bo'lmaydi. Yengi lead faqat birinchi status.",
                     statusFrom: prevStatus,
                     statusTo: nextStatus,
                 });
