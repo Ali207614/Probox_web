@@ -107,8 +107,12 @@ permissions.OperatorM = [
     'operator2',
     'status',
     'isBlocked',
-    'seen'
-
+    'seen',
+    'callTime',
+    'called',
+    'answered',
+    'callCount',
+    'interested',
 ];
 
 permissions.CEO = [
