@@ -67,6 +67,8 @@ const permissions = {
         'house',
         'address2',
         'status',
+        'clientName',
+        'clientFullName',
     ],
     Scoring: [
         'clientFullName',
