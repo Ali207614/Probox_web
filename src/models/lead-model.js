@@ -108,6 +108,8 @@ const LeadSchema = new Schema(
         },
         talkedFlag: { type: Boolean, default: false, index: true },
         talkedAt: { type: Date, default: null, index: true },
+        consideringBumped: { type: Boolean, default: false, index: true },
+        consideringBumpedAt: { type: Date, default: null },
 
         // Lead status mapping (EN -> UZ)
 // Active          -> Yange lead

@@ -16,6 +16,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const { startExpireLeadLimitsCron } = require('./utils/expire-lead-limits');
+const {startConsideringBumpCron} = require("./utils/considering-newtime.cron");
 //require('./utils/cronBusinessPartners');
 app.use(express.urlencoded({ extended: false }));
 // === SOCKET.IO ===
@@ -65,6 +66,7 @@ io.on('connection', (socket) => {
 //require("./utils/cronInvoice");
 
 startExpireLeadLimitsCron();
+startConsideringBumpCron()
 // === SERVER ===
 const port = PORT || 3019;
 server.listen(port, () => {

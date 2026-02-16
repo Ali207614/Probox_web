@@ -201,7 +201,8 @@ async function handleOnlinePbxPayload(payload) {
                 callTime: now,
                 updatedAt: now,
                 newTime: now,
-
+                consideringBumped: false,
+                consideringBumpedAt: null,
                 // pbx meta
                 'pbx.last_uuid': incomingUuid,
                 'pbx.last_event': payload?.event ?? null,
@@ -269,7 +270,7 @@ async function handleOnlinePbxPayload(payload) {
                     delete update.$setOnInsert.status;
                 }
                 else{
-                    update.$set.status = 'Ignored';
+                    update.$set.status = leadBefore?.pbx?.prev_status || 'Ignored';
                     delete update.$setOnInsert.status;
                 }
             } else {

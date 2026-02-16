@@ -2172,7 +2172,9 @@ class b1HANA {
                 validData.statusChangedAt = now;
                 validData['pbx.prev_status'] = prevStatus || null;
 
-                // ✅ recallDate faqat shu 3 statusda qoladi, boshqalarida null
+                validData.consideringBumped = false;
+                validData.consideringBumpedAt = null;
+
                 const keepRecallStatuses = new Set([
                     'FollowUp',
                     'WillVisitStore',

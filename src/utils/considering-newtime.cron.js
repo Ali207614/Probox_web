@@ -1,34 +1,49 @@
+'use strict';
+
 const cron = require('node-cron');
 const LeadModel = require('../models/lead-model');
 
-function startOfToday() {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
+function startConsideringBumpCron() {
+    cron.schedule(
+        '0 10 * * *',
+        async () => {
+            try {
+                const now = new Date();
+                const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 soat
+
+                const res = await LeadModel.updateMany(
+                    {
+                        status: 'Considering',
+                        $expr: {
+                            $lt: [
+                                {
+                                    $ifNull: [
+                                        '$statusChangedAt',
+                                        { $ifNull: ['$newTime', '$time'] },
+                                    ],
+                                },
+                                cutoff,
+                            ],
+                        },
+                    },
+                    {
+                        $set: {
+                            newTime: now,
+                            consideringBumped: true,
+                            consideringBumpedAt: now,
+                            updatedAt: now,
+                        },
+                    }
+                );
+
+                const modified = res?.modifiedCount ?? res?.nModified ?? 0;
+                console.log(`[CRON] considering bump done. modified=${modified}`);
+            } catch (err) {
+                console.error('[CRON] considering bump error:', err);
+            }
+        },
+        { timezone: 'Asia/Tashkent' }
+    );
 }
 
-// Har kuni 09:00 da (server timezone bo'yicha)
-cron.schedule('0 9 * * *', async () => {
-    try {
-        const todayStart = startOfToday();
-        const now = new Date();
-
-        const result = await LeadModel.updateMany(
-            {
-                status: 'Considering',
-                $or: [
-                    { newTime: { $exists: false } },
-                    { newTime: null },
-                    { newTime: { $lt: todayStart } },
-                ],
-            },
-            {
-                $set: { newTime: now },
-            }
-        );
-
-        console.log('[cron] Considering newTime updated:', result.modifiedCount ?? result.nModified);
-    } catch (e) {
-        console.error('[cron] Considering newTime update error:', e);
-    }
-});
+module.exports = { startConsideringBumpCron };
