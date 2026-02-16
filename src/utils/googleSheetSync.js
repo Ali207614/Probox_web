@@ -203,7 +203,6 @@ async function main(io) {
         const nextEnd = nextStart + 500;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
-        console.log('📄 Sheet range:', range);
 
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: sheetId,
@@ -226,14 +225,11 @@ async function main(io) {
          * 3) Build leads from sheet rows
          */
         const leads = [];
-        console.log(rows.length, 'rows loaded from Google Sheet.')
 
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
             const rowNumber = nextStart + i;
-            console.log(row)
             const parsedTime = parseSheetDate(row[3]);
-            console.log(parsedTime ," bu parsedTime " , row[3])
             const weekday = moment(parsedTime).isoWeekday().toString();
 
             let clientName = String(row[0] || '').trim();

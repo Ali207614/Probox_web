@@ -168,6 +168,7 @@ class LeadController {
                 n: lead.n ?? null,
                 status: lead?.status,
                 noAnswerCount: lead?.noAnswerCount,
+                consideringBumped: lead?.consideringBumped,
                 recallDate:lead?.recallDate ? moment(lead.recallDate).format('YYYY.MM.DD HH:mm') : null,
                 newTime:lead.newTime ? moment(lead.newTime).format('YYYY.MM.DD HH:mm') : null,
                 address2: lead?.address2 || null,

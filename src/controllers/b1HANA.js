@@ -1068,6 +1068,7 @@ class b1HANA {
                 n: item.n,
                 id: item._id,
                 seen:item?.seen,
+                consideringBumped:item?.consideringBumped,
                 newTime:item.newTime ? moment(item.newTime).format('YYYY.MM.DD HH:mm') : null,
                 noAnswerCount:item?.noAnswerCount,
                 recallDate:item?.recallDate ? moment(item.recallDate).format('YYYY.MM.DD HH:mm') : null,
