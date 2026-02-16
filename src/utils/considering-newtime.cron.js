@@ -12,8 +12,8 @@ function startConsideringBumpCron() {
 
                 return
                 const now = new Date();
-               // const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 soat
-                const cutoff = new Date(now.getTime() - 10 * 1000); // 10 sekund
+                const cutoff = new Date(now.getTime() - 8 * 60 * 60 * 1000); // 12 soat
+               // const cutoff = new Date(now.getTime() - 10 * 1000); // 10 sekund
               //  const cutoff = new Date(now.getTime() - 60 * 1000); // 1 minut
 
                 const res = await LeadModel.updateMany(
