@@ -110,7 +110,7 @@ const LeadSchema = new Schema(
         talkedAt: { type: Date, default: null, index: true },
         consideringBumped: { type: Boolean, default: false, index: true },
         consideringBumpedAt: { type: Date, default: null },
-
+        consideringBumpedReason: { type: String, default: null },
         // Lead status mapping (EN -> UZ)
 // Active          -> Yange lead
 // Blocked         -> Bloklangan
