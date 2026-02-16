@@ -5,14 +5,13 @@ const LeadModel = require('../models/lead-model');
 
 function startConsideringBumpCron() {
     cron.schedule(
-        '20 16 * * *',
+        '0 10 * * *',
         async () => {
             try {
                 console.log('[CRON] considering bump started --------------------------------------------------------');
 
-                return
                 const now = new Date();
-                const cutoff = new Date(now.getTime() - 8 * 60 * 60 * 1000); // 12 soat
+                const cutoff = new Date(now.getTime() - 8 * 60 * 60 * 1000); // 8 soat
                // const cutoff = new Date(now.getTime() - 10 * 1000); // 10 sekund
               //  const cutoff = new Date(now.getTime() - 60 * 1000); // 1 minut
 
