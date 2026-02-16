@@ -1165,6 +1165,18 @@ class b1HANA {
             if (!source) {
                 return res.status(400).json({ message: 'source is required' });
             }
+
+            if (source === "Kiruvchi qongiroq") {
+                const userRole = req.user?.U_role ?? req.user?.role ?? null;
+
+                if (userRole !== "OperatorM") {
+                    return res.status(403).json({
+                        message:
+                            "Kiruvchi qo'ng'iroq qo'shish imkoniyatini olib tashladik. Manager bilan gaplashing",
+                        location: "lead_create_forbidden_kiruvchi_qongiroq",
+                    });
+                }
+            }
             //
             // if(source !== 'Community' || source !== 'Organika'){
             //     return res.status(400).json({ message: "Lead qo'shish imkoniyati olib tashlandi" });
