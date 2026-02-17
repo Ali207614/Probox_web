@@ -73,7 +73,6 @@ async function getOperatorsMapCached() {
 function buildDedupFilter({ phoneCandidates, legacyRegex }) {
     return {
         status: { $in: ALLOWED_STATUSES },
-        purchase: { $ne: true },
         $or: [
             { clientPhone: { $in: phoneCandidates } },
             ...(legacyRegex ? [{ clientPhone: { $regex: legacyRegex } }] : []),
@@ -167,12 +166,6 @@ async function handleOnlinePbxPayload(payload) {
 
         // ✅ NEW: call_end + talk bo'lsa — status restore (Missed/NoAnswer bo'lmasa)
         const isMissedBase = baseStatus === 'Missed';
-        const shouldRestoreStatus =
-            isCallEnd &&
-            hasTalk &&
-            shouldCountEnd &&
-            !isMissedBase &&
-            !isNoAnswerOutboundEnd;
 
         const n = isExistingLead ? null : await generateShortId('PRO');
 
