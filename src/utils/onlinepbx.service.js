@@ -264,15 +264,15 @@ async function handleOnlinePbxPayload(payload) {
             if (isExistingLead) {
                 const curStatus = leadBefore?.status;
 
-                if (curStatus === 'Missed' || curStatus === 'NoAnswer') {
+                // if (curStatus === 'Missed' || curStatus === 'NoAnswer') {
                     const prevStatus = leadBefore?.pbx?.prev_status || 'Ignored';
                     update.$set.status = prevStatus === 'Active' ? 'Ignored' : prevStatus;
                     delete update.$setOnInsert.status;
-                }
-                else{
-                    update.$set.status = leadBefore?.pbx?.prev_status || 'Ignored';
-                    delete update.$setOnInsert.status;
-                }
+                // }
+                // else{
+                //     update.$set.status = leadBefore?.pbx?.prev_status || 'Ignored';
+                //     delete update.$setOnInsert.status;
+                // }
             } else {
                 update.$set.status = 'Ignored';
                 delete update.$setOnInsert.status;
