@@ -18,6 +18,7 @@ const server = http.createServer(app);
 const { startExpireLeadLimitsCron } = require('./utils/expire-lead-limits');
 const {startLeadBumpCron} = require("./utils/lead-bump.cron");
 const {startLeadAutoIgnoreCron} = require("./utils/lead-auto-ignore.cron");
+const {startLeadRecallBumpCron} = require("./utils/lead-recall-bump.cron");
 //require('./utils/cronBusinessPartners');
 app.use(express.urlencoded({ extended: false }));
 // === SOCKET.IO ===
@@ -69,6 +70,7 @@ io.on('connection', (socket) => {
 startExpireLeadLimitsCron();
 startLeadBumpCron()
 startLeadAutoIgnoreCron()
+startLeadRecallBumpCron()
 // === SERVER ===
 const port = PORT || 3019;
 server.listen(port, () => {
