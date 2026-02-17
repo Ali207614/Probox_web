@@ -38,6 +38,7 @@ const LeadSchema = new Schema(
         leadTime:{ type: String,description: 'CardCode'},
         time: { type: Date, description: 'Yozilgan vaqt (Umumiy ozgarmaydi)' },
         recallDate: { type: Date, description: 'Kelishilgan vaqt' },
+        recallBumpedAt: { type: Date, default: null, index: true },
         newTime: { type: Date, index: true, description: 'Yozilgan vaqt (Umumiy ozgarmaydi)' },
         operator: { type: String, description: 'Qo‘ng‘iroq qilgan operator (Operator1 )' },
         called: { type: Boolean, description: 'Qo‘ng‘iroq qilindimi? (Operator1 true/false)' },
