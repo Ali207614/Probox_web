@@ -1880,11 +1880,6 @@ class b1HANA {
                 return res.status(404).json({ message: 'Lead not found' });
             }
 
-            // ✅ Agar sotib olingan bo'lsa status o'zgarmasin
-            // ... prevStatus, nextStatus, isStatusChanging hisoblanganidan keyin:
-
-
-
             if (!permissions[U_role]) {
                 return res.status(403).json({
                     message: `Role ${U_role} is not allowed to update leads`,
@@ -1955,35 +1950,10 @@ class b1HANA {
                 }
             }
 
-            // ✅ rejectionReason / rejectionReason2 normalize
-            if (validData.rejectionReason) {
-                validData.status = 'Closed';
-                validData.rejectionReason2 = validData.rejectionReason;
-            }
-
-            if (validData.rejectionReason2) {
-                validData.status = 'Closed';
-                validData.rejectionReason = validData.rejectionReason2;
-            }
 
             // ✅ Returned bo'lsa seen=false
             if (validData.status === 'Returned') {
                 validData.seen = false;
-            }
-
-            // ✅ answered=false va callCount>=5 bo'lsa Closed
-            const answeredNext =
-                Object.prototype.hasOwnProperty.call(validData, 'answered')
-                    ? validData.answered
-                    : existingLead.answered;
-
-            const callCountNext =
-                Object.prototype.hasOwnProperty.call(validData, 'callCount')
-                    ? Number(validData.callCount)
-                    : Number(existingLead.callCount);
-
-            if ((answeredNext === false) && callCountNext >= 5) {
-                validData.status = 'Closed';
             }
 
             // ✅ meetingConfirmed bo'lsa meetingHappened=true
@@ -2076,12 +2046,29 @@ class b1HANA {
                 typeof existingLead.status === 'string'
                     ? String(existingLead.status)
                     : undefined;
-
             const isStatusChanging =
                 nextStatus != null && nextStatus !== '' && nextStatus !== prevStatus;
 
 
             const LOCKED_STATUSES = new Set(['Closed', 'Purchased', 'NoPurchase']);
+            const prevStatusLocked = LOCKED_STATUSES.has(prevStatus);
+
+
+            if (validData.rejectionReason != null && validData.rejectionReason !== '') {
+                validData.rejectionReason2 = validData.rejectionReason;
+
+                if (!prevStatusLocked) {
+                    validData.status = 'Closed';
+                }
+            }
+
+            if (validData.rejectionReason2 != null && validData.rejectionReason2 !== '') {
+                validData.rejectionReason = validData.rejectionReason2;
+
+                if (!prevStatusLocked) {
+                    validData.status = 'Closed';
+                }
+            }
 
             if (isStatusChanging && LOCKED_STATUSES.has(prevStatus)) {
                 return res.status(400).json({
