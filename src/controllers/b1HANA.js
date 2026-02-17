@@ -1883,16 +1883,7 @@ class b1HANA {
             // ✅ Agar sotib olingan bo'lsa status o'zgarmasin
             // ... prevStatus, nextStatus, isStatusChanging hisoblanganidan keyin:
 
-            const LOCKED_STATUSES = new Set(['Closed', 'Purchased', 'NoPurchase']);
 
-            if (isStatusChanging && LOCKED_STATUSES.has(prevStatus)) {
-                return res.status(400).json({
-                    message: `Status ${prevStatus} yakuniy. Uni boshqa statusga o'zgartirib bo'lmaydi.`,
-                    statusFrom: prevStatus,
-                    statusTo: nextStatus,
-                    location: 'status_locked',
-                });
-            }
 
             if (!permissions[U_role]) {
                 return res.status(403).json({
@@ -2089,7 +2080,18 @@ class b1HANA {
             const isStatusChanging =
                 nextStatus != null && nextStatus !== '' && nextStatus !== prevStatus;
 
-            // ❌ Active'ga qaytarish mumkin emas
+
+            const LOCKED_STATUSES = new Set(['Closed', 'Purchased', 'NoPurchase']);
+
+            if (isStatusChanging && LOCKED_STATUSES.has(prevStatus)) {
+                return res.status(400).json({
+                    message: `Status ${prevStatus} yakuniy. Uni boshqa statusga o'zgartirib bo'lmaydi.`,
+                    statusFrom: prevStatus,
+                    statusTo: nextStatus,
+                    location: 'status_locked',
+                });
+            }
+
             if (isStatusChanging && nextStatus === 'Active' && prevStatus !== 'Active') {
                 return res.status(400).json({
                     message:
