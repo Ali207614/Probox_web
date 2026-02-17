@@ -27,9 +27,14 @@ function startLeadBumpCron() {
 
                 const RULES = [
                     { statuses: ['Considering'], hours: 8, reason: 'Considering' },
-                    { statuses: ['WillVisitStore'], hours: 48, reason: 'WillVisitStore' },
+                    //{ statuses: ['WillVisitStore'], hours: 48, reason: 'WillVisitStore' },
                     { statuses: ['Missed', 'Ignored'], hours: 1, reason: 'MissedIgnored' },
                 ];
+
+                // Qayta aloqa
+                // Do'konga boradi
+                // Passport yuboradi
+
 
                 for (const rule of RULES) {
                     const cutoff = new Date(now.getTime() - rule.hours * 60 * 60 * 1000);

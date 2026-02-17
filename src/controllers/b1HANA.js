@@ -1881,16 +1881,19 @@ class b1HANA {
             }
 
             // ✅ Agar sotib olingan bo'lsa status o'zgarmasin
-            if (
-                (existingLead.purchase === true || existingLead.status === 'Purchased') &&
-                body.status
-            ) {
+            // ... prevStatus, nextStatus, isStatusChanging hisoblanganidan keyin:
+
+            const LOCKED_STATUSES = new Set(['Closed', 'Purchased', 'NoPurchase']);
+
+            if (isStatusChanging && LOCKED_STATUSES.has(prevStatus)) {
                 return res.status(400).json({
-                    message: "Mijoz allaqachon mahsulot sotib olgan shu sababli status o'zgarmaydi",
+                    message: `Status ${prevStatus} yakuniy. Uni boshqa statusga o'zgartirib bo'lmaydi.`,
+                    statusFrom: prevStatus,
+                    statusTo: nextStatus,
+                    location: 'status_locked',
                 });
             }
 
-            // ✅ Role permission
             if (!permissions[U_role]) {
                 return res.status(403).json({
                     message: `Role ${U_role} is not allowed to update leads`,
