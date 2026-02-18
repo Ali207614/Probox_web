@@ -2057,6 +2057,13 @@ class b1HANA {
             if (validData.rejectionReason != null && validData.rejectionReason !== '') {
                 validData.rejectionReason2 = validData.rejectionReason;
 
+                validData.statusChangedAt = now;
+                validData['pbx.prev_status'] = prevStatus || null;
+
+                validData.consideringBumped = false;
+                validData.consideringBumpedAt = null;
+                validData.recallBumpedAt = null;
+
                 if (!prevStatusLocked) {
                     validData.status = 'Closed';
                 }
@@ -2064,6 +2071,14 @@ class b1HANA {
 
             if (validData.rejectionReason2 != null && validData.rejectionReason2 !== '') {
                 validData.rejectionReason = validData.rejectionReason2;
+
+                validData.statusChangedAt = now;
+                validData['pbx.prev_status'] = prevStatus || null;
+
+                validData.consideringBumped = false;
+                validData.consideringBumpedAt = null;
+                validData.recallBumpedAt = null;
+
 
                 if (!prevStatusLocked) {
                     validData.status = 'Closed';
