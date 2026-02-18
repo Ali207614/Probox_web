@@ -1091,7 +1091,7 @@ class b1HANA {
                 invoiceDocEntry:item.invoiceDocEntry || null,
                 invoiceDocNum:item.invoiceDocNum || null,
                 invoiceCreatedAt:item.invoiceCreatedAt || null,
-                status: (item.purchase || item.invoiceCreated) ? 'Purchased' : item.status,
+                status:  item.status,
                 isBlocked: item?.isBlocked ?? false,
                 clientName: item.clientName || '',
                 jsshir: item.jshshir || '',
