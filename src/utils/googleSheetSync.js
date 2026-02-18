@@ -122,23 +122,20 @@ function buildPhoneCandidates(rawLocal9) {
  * - phone candidates OR legacy regex
  * - source filter optional (old behavior)
  */
-function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex, source }) {
+function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex, looseRegex, source }) {
     const filter = {
         status: { $in: ALLOWED_STATUSES },
-        purchase: { $ne: true },
-        ...(sinceDedup ? { createdAt: { $gte: sinceDedup } } : {}),
         $or: [
             { clientPhone: { $in: phoneCandidates } },
             ...(legacyRegex ? [{ clientPhone: { $regex: legacyRegex } }] : []),
+            ...(looseRegex ? [{ clientPhone: { $regex: looseRegex } }] : []),
         ],
     };
 
-    // If you want "dedup per source" keep this:
-    // If you want global dedup across sources: comment it out.
     if (source) filter.source = source;
-
     return filter;
 }
+
 
 function parseWorkDays(raw) {
     if (!raw) return [];
@@ -154,6 +151,13 @@ function parseWorkDays(raw) {
  * MAIN
  * =========================
  */
+
+function buildLoosePhoneRegexFromLocal9(local9) {
+    if (!local9) return null;
+    const pat = local9.split('').join('\\D*');
+    return new RegExp(pat);
+}
+
 async function main(io) {
     try {
         const sheetId = process.env.SHEET_ID;
@@ -314,12 +318,17 @@ async function main(io) {
             const local9 = normalizePhone(lead.clientPhone);
             if (!local9) continue;
 
+
+
             const { phoneCandidates, legacyRegex } = buildPhoneCandidates(local9);
+            const looseRegex = buildLoosePhoneRegexFromLocal9(local9);
 
             const dedupFilter = buildDedupFilter({
                 phoneCandidates,
                 legacyRegex,
+                looseRegex,
             });
+
 
             const existing = await LeadModel.findOne(dedupFilter).select('_id').lean();
 

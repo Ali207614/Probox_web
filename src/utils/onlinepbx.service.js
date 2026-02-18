@@ -61,6 +61,13 @@ function isCallStartEvent(event) {
     return e === 'call_start' || e === 'call_user_start';
 }
 
+function buildLoosePhoneRegexFromLocal9(local9) {
+    if (!local9) return null;
+    const pat = local9.split('').join('\\D*');
+    return new RegExp(pat);
+}
+
+
 async function getOperatorsMapCached() {
     const now = Date.now();
     if (OPS_CACHE.map && now - OPS_CACHE.at < OPS_TTL_MS) return OPS_CACHE.map;
@@ -70,15 +77,19 @@ async function getOperatorsMapCached() {
     return map;
 }
 
-function buildDedupFilter({ phoneCandidates, legacyRegex }) {
+function buildDedupFilter({ phoneCandidates, legacyRegex, local9 }) {
+    const loose = buildLoosePhoneRegexFromLocal9(local9);
+
     return {
         status: { $in: ALLOWED_STATUSES },
         $or: [
-            { clientPhone: { $in: phoneCandidates } },
-            ...(legacyRegex ? [{ clientPhone: { $regex: legacyRegex } }] : []),
+            { clientPhone: { $in: phoneCandidates } },                  // "998500103850" / "500103850"
+            ...(legacyRegex ? [{ clientPhone: { $regex: legacyRegex } }] : []), // endsWith
+            ...(loose ? [{ clientPhone: { $regex: loose } }] : []),      // "+998 50 010..."
         ],
     };
 }
+
 
 async function handleOnlinePbxPayload(payload) {
     try {
@@ -91,20 +102,17 @@ async function handleOnlinePbxPayload(payload) {
         const rawClientPhone = pickClientPhoneFromWebhook(payload);
         if (!rawClientPhone) return { ok: true, skipped: 'no_client_phone' };
 
-        const { canonical: canonicalPhone, candidates: phoneCandidates, legacyRegex } =
+        const { canonical: canonicalPhone,local9, candidates: phoneCandidates, legacyRegex } =
             buildPhoneCandidates(rawClientPhone);
 
         if (!canonicalPhone || !phoneCandidates.length) {
             return { ok: true, skipped: 'bad_phone' };
         }
 
-        // 3) time window (dedup) - info uchun qaytaramiz
         const now = payload?.date_iso ? new Date(payload.date_iso) : new Date();
-        const sinceDedup = getSinceDedup(now);
 
-        const dedupFilter = buildDedupFilter({ phoneCandidates, legacyRegex });
+        const dedupFilter = buildDedupFilter({ phoneCandidates: phoneCandidates, legacyRegex, local9 });
 
-        // ✅ leadBefore
         const leadBefore = await LeadModel.findOne(dedupFilter)
             .select(
                 [
@@ -168,10 +176,20 @@ async function handleOnlinePbxPayload(payload) {
         const isMissedBase = baseStatus === 'Missed';
 
         const n = isExistingLead ? null : await generateShortId('PRO');
+        function digitsOnly(v = '') {
+            return String(v ?? '').replace(/\D/g, '');
+        }
+
+
+        let normalizedPhone = digitsOnly(rawClientPhone);
+        if (normalizedPhone.length === 9) normalizedPhone = `998${normalizedPhone}`;
+        if (normalizedPhone.startsWith('998') && normalizedPhone.length > 12) normalizedPhone = normalizedPhone.slice(0, 12);
+        normalizedPhone = normalizedPhone || canonicalPhone;
+
 
         const update = {
             $setOnInsert: {
-                clientPhone: canonicalPhone,
+                clientPhone: normalizedPhone,
                 createdAt: now,
                 n: n || undefined,
 
@@ -350,7 +368,6 @@ async function handleOnlinePbxPayload(payload) {
             leadId: String(lead._id),
             isExistingLead,
             matchedPhone: lead?.clientPhone ?? null,
-            dedupSince: sinceDedup,
         };
     } catch (err) {
         console.error('[handleOnlinePbxPayload] Error:', err);

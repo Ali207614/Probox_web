@@ -214,21 +214,25 @@ function buildPhoneCandidates(raw) {
     return { canonical, local9, candidates, legacyRegex };
 }
 
-function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex, source }) {
+function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex, looseRegex, source }) {
     const filter = {
         status: { $in: ALLOWED_STATUSES },
-        purchase: { $ne: true },
-        ...(sinceDedup ? { createdAt: { $gte: sinceDedup } } : {}),
         $or: [
             { clientPhone: { $in: phoneCandidates } },
             ...(legacyRegex ? [{ clientPhone: { $regex: legacyRegex } }] : []),
+            ...(looseRegex ? [{ clientPhone: { $regex: looseRegex } }] : []),
         ],
     };
 
-    // eski behavior (xohlasangiz): source bo‘yicha ham dedup
     if (source) filter.source = source;
-
     return filter;
+}
+
+
+function buildLoosePhoneRegexFromLocal9(local9) {
+    if (!local9) return null;
+    const pat = local9.split('').join('\\D*');
+    return new RegExp(pat);
 }
 
 /**
@@ -398,13 +402,16 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 const normalizedPhone = normalizePhone(lead.clientPhone);
                 if (!normalizedPhone) continue;
 
-                const { candidates: phoneCandidates, legacyRegex } =
+                const { candidates: phoneCandidates, legacyRegex ,local9} =
                     buildPhoneCandidates(normalizedPhone);
+
+                const looseRegex = buildLoosePhoneRegexFromLocal9(local9);
 
                 const dedupFilter = buildDedupFilter({
                     sinceDedup,
                     phoneCandidates,
                     legacyRegex,
+                    looseRegex
                     // source: lead.source, // agar dedup source bo‘yicha ham bo‘lsin desangiz oching
                 });
 

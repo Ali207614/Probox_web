@@ -1151,6 +1151,13 @@ class b1HANA {
                 operator1,
             } = req.body;
 
+            function buildLoosePhoneRegexFromDigits12(phone12) {
+                const local9 = String(phone12).slice(-9);           // 500103850
+                const pat = local9.split('').join('\\D*');          // 5\D*0\D*...
+                return new RegExp(pat);
+            }
+
+
             function validatePhone(phone) {
                 if (!phone) return false;
                 let digits = String(phone).replace(/\D/g, '');
@@ -1254,13 +1261,19 @@ class b1HANA {
              * - Kiruvchi qongiroq: Kiruvchi/Chiquvchi bilan ham tekshiradi (CALL_GROUP)
              * - Kiruvchi yoki Chiquvchi: faqat o'z source'i
              */
-            let query;
+            const local9 = cleanedPhone.slice(-9);
+            const legacyRegex = new RegExp(`${local9}$`);
+            const looseRegex = buildLoosePhoneRegexFromDigits12(cleanedPhone);
 
-                query = {
-                    clientPhone: cleanedPhone,
-                    purchase: { $ne: true },
-                    status: { $in: ALLOWED_STATUSES },
-                };
+            const query = {
+                status: { $in: ALLOWED_STATUSES },
+                $or: [
+                    { clientPhone: cleanedPhone },                 // "998500103850"
+                    { clientPhone: local9 },                       // eski local9 saqlangan bo‘lsa
+                    { clientPhone: { $regex: legacyRegex } },      // "...500103850" bilan tugasa
+                    { clientPhone: { $regex: looseRegex } },       // "+998 50 010 38 50" kabi
+                ],
+            };
 
             const exists = await LeadModel.exists(query);
 
