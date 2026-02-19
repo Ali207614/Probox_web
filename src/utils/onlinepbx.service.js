@@ -357,22 +357,6 @@ async function handleOnlinePbxPayload(payload , io) {
             update.$set.answeredAt = now;
         }
 
-            if (io && shouldEmitAnsweredSocket) {
-
-                console.log('[handleOnlinePbxPayload] emit answered socket');
-                io.emit('pbx_answered', {
-                    leadId: String(leadBefore._id),
-                    uuid: incomingUuid,
-                    clientPhone: canonicalPhone,
-                    direction,
-                    dialogDuration: dialog,
-                    SlpCode: slpCode || leadBefore?.operator || null,
-                    operatorExt,
-                    at: now.toISOString(),
-                    ...leadBefore
-                });
-        }
-
 
         const res = await LeadModel.findOneAndUpdate(dedupFilter, update, {
             upsert: true,
@@ -384,6 +368,26 @@ async function handleOnlinePbxPayload(payload , io) {
         const lead = res.value;
         const wasInserted = res?.lastErrorObject?.updatedExisting === false;
 
+        if (io && shouldEmitAnsweredSocket) {
+            io.emit('pbx_answered', {
+                leadId: String(lead._id),
+                uuid: incomingUuid,
+                clientPhone: lead.clientPhone,            // yoki canonicalPhone
+                direction,
+                dialogDuration: dialog,
+                SlpCode: slpCode || lead?.operator || null,
+                operatorExt,
+                at: now.toISOString(),
+                isNewLead: wasInserted,
+            });
+        }
+
+        if (io && wasInserted) {
+            io.emit('new_leads', {
+                ...lead,
+                SlpCode: lead.seller || lead.operator,
+            });
+        }
         const rawEvent = String(payload?.event || '');
         const eventLower = rawEvent.toLowerCase();
         const isMissed = eventLower.includes('missed');
