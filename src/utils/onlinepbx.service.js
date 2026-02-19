@@ -360,6 +360,8 @@ async function handleOnlinePbxPayload(payload , io) {
         }
 
             if (io && shouldEmitAnsweredSocket) {
+
+                console.log('[handleOnlinePbxPayload] emit answered socket');
                 io.emit('pbx_answered', {
                     leadId: String(leadBefore._id),
                     uuid: incomingUuid,
