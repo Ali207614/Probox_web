@@ -2188,7 +2188,33 @@ class b1HANA {
                 }
             }
 
-            // ✅ status changing bo'lsa timestamps va recallDate
+            function parseRecallDate(v) {
+                const m = moment(v, 'DD.MM.YYYY HH:mm', true); // strict
+                if (!m.isValid()) return null; // yoki error tashlang
+                return m.toDate();
+            }
+
+            const bodyRecall = req.body.recallDate;
+            const keepRecallStatuses = new Set(['FollowUp', 'WillVisitStore', 'WillSendPassport']);
+
+            if (bodyRecall) {
+                const parsed = parseRecallDate(bodyRecall);
+
+                if (!parsed) {
+                    return res.status(400).json({
+                        message: "recallDate format invalid. Expected 'DD.MM.YYYY HH:mm'",
+                        location: 'recallDate',
+                    });
+                }
+                if (keepRecallStatuses.has(nextStatus)) {
+                    validData.recallDate = parsed;
+                } else {
+                    return res.status(400).json({
+                        message: `recallDate can only be set for statuses: ${Array.from(keepRecallStatuses).join(', ')}`,
+                        location: 'recallDate',
+                    });
+                }
+            }
             if (isStatusChanging) {
                 validData.statusChangedAt = now;
                 validData['pbx.prev_status'] = prevStatus || null;
@@ -2348,376 +2374,7 @@ class b1HANA {
     };
 
 
-    // updateLead = async (req, res, next) => {
-    //     try {
-    //         const { id } = req.params;
-    //         const { U_role } = req.user;
-    //         const body = req.body;
-    //
-    //         const existingLead = await LeadModel.findById(id).lean();
-    //         if (!existingLead) {
-    //             return res.status(404).json({ message: 'Lead not found' });
-    //         }
-    //
-    //         if((existingLead.purchase === true || existingLead.status === 'Purchased') && body.status){
-    //             return res.status(400).json({ message: "Mijoz allaqachon mahsulot sotib olgan shu sababli status o'zgarmaydi" });
-    //         }
-    //
-    //         if (!permissions[U_role]) {
-    //             return res.status(403).json({
-    //                 message: `Role ${U_role} is not allowed to update leads`,
-    //             });
-    //         }
-    //
-    //         const allowedFields = permissions[U_role];
-    //         const { validData, errors } = validateFields(
-    //             body,
-    //             LeadModel.schema,
-    //             allowedFields
-    //         );
-    //
-    //         if (errors.length) {
-    //             return res.status(400).json({
-    //                 message: 'Type validation failed',
-    //                 details: errors,
-    //             });
-    //         }
-    //
-    //         const bodyKeys = Object.keys(body);
-    //         const invalidFields = bodyKeys.filter(
-    //             (key) => !allowedFields.includes(key)
-    //         );
-    //
-    //         if (Object.keys(validData).length === 0) {
-    //             return res.status(400).json({
-    //                 message: 'No valid fields provided for update',
-    //                 invalidFields: invalidFields.length ? invalidFields : undefined,
-    //                 allowedFields,
-    //             });
-    //         }
-    //
-    //         if( validData.callCount && existingLead.callCount  !== validData.callCount) {
-    //             const prev = existingLead.callCount || 0;
-    //
-    //             if (validData.callCount - prev !== 1) {
-    //                 return res.status(400).json({
-    //                     message: "Qo'ng'iroqlar soni faqat bittaga oshishi mumkin"
-    //                 });
-    //             }
-    //         }
-    //
-    //
-    //         if(validData.callCount2 &&  existingLead.callCount2  !== validData.callCount2) {
-    //             const prev = existingLead.callCount2 || 0;
-    //
-    //             if (validData.callCount2 - prev !== 1) {
-    //                 return res.status(400).json({
-    //                     message: "Qo'ng'iroqlar soni faqat bittaga oshishi mumkin"
-    //                 });
-    //             }
-    //         }
-    //
-    //         if (validData?.interested) {
-    //             const interestedBool = validData.interested === true
-    //
-    //             if (!interestedBool) {
-    //                 if (!validData.rejectionReason || String(validData.rejectionReason).trim() === '') {
-    //                     return res.status(400).json({
-    //                         message: "Rad etish sababini to'ldirish kerak ",
-    //                         location: 'rejectionReason_required',
-    //                     });
-    //                 }
-    //
-    //                 validData.status = 'Closed';
-    //             }
-    //         }
-    //
-    //         if(validData.rejectionReason){
-    //             validData.status = 'Closed';
-    //             validData.rejectionReason2 = validData.rejectionReason
-    //         }
-    //
-    //
-    //         if(validData.rejectionReason2){
-    //             validData.status = 'Closed';
-    //             validData.rejectionReason = validData.rejectionReason2
-    //         }
-    //
-    //         if(validData.status === 'Returned'){
-    //             validData.seen = false
-    //         }
-    //
-    //         if (
-    //             (validData.answered === false || existingLead.answered === false) &&
-    //             (Number(validData.callCount) >= 5)
-    //         ) {
-    //             validData.status = 'Closed';
-    //         }
-    //
-    //
-    //         if(validData.meetingConfirmed){
-    //             validData.meetingHappened = true
-    //         }
-    //
-    //         if((validData.rejectionReason2 || validData.rejectionReason) && req.user?.U_role === 'Seller'){
-    //             validData.meetingHappened = true
-    //         }
-    //
-    //         // === Normalize fields
-    //         if (validData?.clientFullName) {
-    //             validData.clientName = validData.clientFullName;
-    //             if(existingLead.cardCode){
-    //                 await b1Sl.updateBusinessPartner({
-    //                     CardCode: existingLead.cardCode,
-    //                     CardName: validData.clientFullName,
-    //                     U_jshshir:validData.jshshir || null,
-    //                     Cellular:  validData.passportId || null
-    //                 } )
-    //             }
-    //         }
-    //
-    //         if (validData.passportId) {
-    //             validData.idX = validData.passportId;
-    //         } else if (validData.idX) {
-    //             validData.passportId = validData.idX;
-    //         }
-    //
-    //         if (validData.jshshir2) {
-    //             validData.jshshir = validData.jshshir2;
-    //         } else if (validData.jshshir) {
-    //             validData.jshshir2 = validData.jshshir;
-    //         }
-    //
-    //         // === Validation checks
-    //         if (validData.jshshir) {
-    //             const jshshirStr = String(validData.jshshir).trim();
-    //             validData.jshshir = jshshirStr;
-    //             if (!/^\d{14}$/.test(jshshirStr)) {
-    //                 return res.status(400).json({
-    //                     message: 'JSSHR 14 raqamdan iborat bo\'lishi kerak',
-    //                     location: 'jshshir_invalid',
-    //                 });
-    //             }
-    //         }
-    //
-    //         if (validData.passportId) {
-    //             const passportStr = String(validData.passportId).trim();
-    //             validData.passportId = passportStr;
-    //             if (!/^[A-Z]{2}\d{7}$/.test(passportStr)) {
-    //                 return res.status(400).json({
-    //                     message: 'Passport 2 ta harf va 7 raqamdan iborat bo\'lishi kerak',
-    //                     location: 'passport_invalid',
-    //                 });
-    //             }
-    //         }
-    //
-    //         if (validData.meetingConfirmed === true) {
-    //             if (!validData.branch2 && !validData.seller) {
-    //                 return res.status(400).json({
-    //                     message: `Uchrashuv bo'lganda filial va sotuvchi tanlash majburiy`,
-    //                 });
-    //             }
-    //         }
-    //
-    //         if (validData.passportVisit && validData.passportVisit === 'Passport') {
-    //             if (!validData.jshshir || !validData.jshshir2) {
-    //                 return res.status(400).json({
-    //                     message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
-    //                     location: 'jshshir_required'
-    //                 });
-    //             }
-    //
-    //             if (!validData.idX || !validData.passportId) {
-    //                 return res.status(400).json({
-    //                     message: 'Passport tanlanganda JSSHR va IDX kiritishi majburiy',
-    //                     location: 'idX_required'
-    //                 });
-    //             }
-    //         }
-    //
-    //         if (
-    //             validData.passportVisit &&
-    //             ['Passport', 'Visit'].includes(validData.passportVisit)
-    //         ) {
-    //
-    //             if (
-    //                 !existingLead.scoring && validData.passportVisit === 'Passport'
-    //             ) {
-    //                 validData.scoring = await this.assignScoringOperator();
-    //
-    //                 if (validData.scoring) {
-    //                     const io = req.app.get('io');
-    //                     if (io) {
-    //                         io.emit('scoring_lead', {
-    //                             n: existingLead.n,
-    //                             _id: existingLead._id,
-    //                             source: existingLead.source,
-    //                             clientName: existingLead.clientName,
-    //                             time: existingLead.time,
-    //                             clientPhone: existingLead.clientPhone,
-    //                             SlpCode: validData.scoring
-    //                         });
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //
-    //         if (
-    //             validData.jshshir ||
-    //             validData.passportId ||
-    //             validData.clientPhone ||
-    //             existingLead.clientPhone
-    //         ) {
-    //             try {
-    //                 const jshshir = validData.jshshir || validData.jshshir2 || null;
-    //                 const passport = validData.passportId || validData.idX || null;
-    //                 const phoneRaw =
-    //                     validData.clientPhone || existingLead.clientPhone || '';
-    //                 const phone = phoneRaw.replace(/\D/g, '');
-    //                 const query = DataRepositories.getBusinessPartners({ jshshir, passport, phone: `%${phone}` })
-    //                 const sapResult = await this.execute(query);
-    //                 if (sapResult.length > 0) {
-    //                     const record = sapResult[0];
-    //
-    //                     validData.isBlocked = record.U_blocked === 'yes';
-    //                     validData.cardCode = record.CardCode;
-    //                     validData.cardName = record.CardName;
-    //
-    //                     if (validData.isBlocked !== true) {
-    //                         const {
-    //                             score,
-    //                             totalContracts,
-    //                             openContracts,
-    //                             totalAmount,
-    //                             totalPaid,
-    //                             overdueDebt,
-    //                             maxDelay,
-    //                             avgPaymentDelay
-    //                         } = await this.calculateLeadPaymentScore(record.CardCode);
-    //
-    //                         if (score !== null) {
-    //                             validData.paymentScore = score;
-    //                             validData.totalContracts = totalContracts;
-    //                             validData.openContracts = openContracts;
-    //                             validData.totalAmount = totalAmount;
-    //                             validData.totalPaid = totalPaid;
-    //                             validData.overdueDebt = overdueDebt;
-    //                             validData.maxDelay = maxDelay;
-    //                             validData.avgPaymentDelay = avgPaymentDelay;
-    //                         }
-    //                     }
-    //
-    //                     console.log(`SAP match found → ${record.CardCode} | ${record.CardName}`);
-    //                 } else {
-    //
-    //                     validData.cardCode = null;
-    //                     validData.cardName = null;
-    //                     console.log(`SAP: No record found for ${jshshir || passport || phone}`);
-    //                 }
-    //             } catch (sapErr) {
-    //                 console.warn('SAP check failed:', sapErr.message);
-    //             }
-    //         }
-    //
-    //         if(validData.purchase){
-    //             validData.status = 'Purchased'
-    //         }else if(validData.purchase === false){
-    //             validData.status = 'Closed'
-    //         }
-    //
-    //         if(validData.finalLimit){
-    //             validData.limitDate = new Date();
-    //         }
-    //
-    //         const now = new Date();
-    //
-    //         const nextStatus =
-    //             typeof validData.status === 'string' ? String(validData.status) : undefined;
-    //
-    //         const prevStatus =
-    //             typeof existingLead.status === 'string' ? String(existingLead.status) : undefined;
-    //
-    //         const isStatusChanging =
-    //             nextStatus != null &&
-    //             nextStatus !== '' &&
-    //             nextStatus !== prevStatus;
-    //
-    //         if (isStatusChanging && nextStatus === 'Active' && prevStatus !== 'Active') {
-    //             return res.status(400).json({
-    //                 message: "Statusni Yengi lead'ga qaytarib bo'lmaydi. Yengi lead faqat birinchi status.",
-    //                 statusFrom: prevStatus,
-    //                 statusTo: nextStatus,
-    //             });
-    //         }
-    //
-    //         if (isStatusChanging) {
-    //             validData.statusChangedAt = now;
-    //
-    //             validData['pbx.prev_status'] = prevStatus || null;
-    //
-    //             const keepRecallStatuses = new Set(['FollowUp', 'WillVisitStore', 'WillSendPassport']);
-    //
-    //             if (!keepRecallStatuses.has(nextStatus)) {
-    //                 validData.recallDate = null;
-    //             }
-    //
-    //             // validData.newTime = now;
-    //         }
-    //
-    //
-    //         await this.writeLimitUsageHistory({
-    //             leadId: existingLead._id,
-    //             existingLead,
-    //             validData,
-    //             req,
-    //         });
-    //
-    //         const updated = await LeadModel.findByIdAndUpdate(id, validData, {
-    //             new: true,
-    //             runValidators: true,
-    //         });
-    //
-    //
-    //
-    //         if (!updated) {
-    //             return res.status(404).json({ message: 'Lead not found' });
-    //         }
-    //
-    //         const payload = buildUpdateEventPayload({
-    //             existingLead,
-    //             validData,
-    //             allowedFields, // sizda bor
-    //         });
-    //
-    //         if (payload.changes.length) {
-    //             await writeLeadEvent({
-    //                 leadId: existingLead._id,
-    //                 reqUser: req.user,
-    //                 isSystem: false,
-    //
-    //                 type: 'event',
-    //                 action: payload.action,
-    //                 message: payload.message,
-    //
-    //                 changes: payload.changes,
-    //
-    //                 statusFrom: payload.statusFrom,
-    //                 statusTo: payload.statusTo,
-    //                 operatorFrom: payload.operatorFrom,
-    //                 operatorTo: payload.operatorTo,
-    //             });
-    //         }
-    //
-    //
-    //         return res.status(200).json({
-    //             message: 'Lead updated successfully',
-    //             data: updated,
-    //         });
-    //     } catch (err) {
-    //         console.error('Error updating lead:', err);
-    //         next(err);
-    //     }
-    // };
+
 
     findAllBranch = async(req, res, next) => {
         try {
