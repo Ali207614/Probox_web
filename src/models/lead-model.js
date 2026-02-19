@@ -16,10 +16,11 @@ const LeadSchema = new Schema(
             last_date: Date,
             last_operator_ext: String,
             last_download_url: String,
-
+            last_answered_uuid: String,
             prev_status: { type: String, default: null },
         },
-
+        answered: { type: Boolean, default: false },
+        answeredAt: { type: Date, default: null },
         limit: { type: Number, description: 'Ajratilgan limit yoki kredit miqdori' },
         paymentScore: { type: String, description: 'Payment Score' },
         totalContracts: { type: String, description: 'Payment Score' },

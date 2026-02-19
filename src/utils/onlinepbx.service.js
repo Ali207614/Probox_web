@@ -343,6 +343,41 @@ async function handleOnlinePbxPayload(payload) {
             }
         }
 
+        const isAnsweredEvent =
+            event === 'call_answered';
+
+        const shouldMarkAnswered = isAnsweredEvent || (event === 'call_end' && hasTalk);
+
+        const prevAnsweredUuid = leadBefore?.pbx?.last_answered_uuid ?? null;
+
+        const shouldEmitAnsweredSocket = shouldMarkAnswered && incomingUuid && incomingUuid !== prevAnsweredUuid;
+
+        if (shouldEmitAnsweredSocket) {
+            update.$set['pbx.last_answered_uuid'] = incomingUuid;
+            update.$set.answered = true;
+            update.$set.answeredAt = now;
+        }
+
+        if (shouldEmitAnsweredSocket) {
+            const io = req.app.get('io');
+
+            if (io && shouldEmitAnsweredSocket) {
+                io.emit('pbx_answered', {
+                    leadId: String(leadBefore._id),
+                    uuid: incomingUuid,
+                    clientPhone: canonicalPhone,
+                    direction,
+                    dialogDuration: dialog,
+                    SlpCode: slpCode || leadBefore?.operator || null,
+                    operatorExt,
+                    at: now.toISOString(),
+                    ...leadBefore
+                });
+            }
+
+        }
+
+
         const res = await LeadModel.findOneAndUpdate(dedupFilter, update, {
             upsert: true,
             new: true,
@@ -370,6 +405,9 @@ async function handleOnlinePbxPayload(payload) {
                 isSystem: true,
             });
         }
+
+
+
 
 
 
