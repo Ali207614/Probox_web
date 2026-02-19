@@ -94,10 +94,12 @@ function buildDedupFilter({ phoneCandidates, legacyRegex, local9 }) {
 async function handleOnlinePbxPayload(payload) {
     try {
         // 1) gateway check
+
         if (payload?.gateway && String(payload.gateway) !== COMPANY_GATEWAY) {
             return { ok: true, skipped: 'wrong_gateway' };
         }
 
+        console.log('[handleOnlinePbxPayload] payload:', payload);
         // 2) phone
         const rawClientPhone = pickClientPhoneFromWebhook(payload);
         if (!rawClientPhone) return { ok: true, skipped: 'no_client_phone' };
