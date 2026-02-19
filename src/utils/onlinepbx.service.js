@@ -260,7 +260,7 @@ async function handleOnlinePbxPayload(payload) {
         }
 
         // NoAnswer status
-        if (shouldMoveToNoAnswer) {
+        if (shouldMoveToNoAnswer && leadBefore?.status === 'Active') {
             update.$set.status = 'NoAnswer';
             delete update.$setOnInsert.status;
         }
@@ -276,11 +276,11 @@ async function handleOnlinePbxPayload(payload) {
             if (isExistingLead) {
                 const curStatus = leadBefore?.status;
                  if (curStatus === 'Missed' || curStatus === 'NoAnswer') {
-                    update.$set.status ='Ignored';
+                    update.$set.status = 'Ignored';
                     delete update.$setOnInsert.status;
                  }
-                else{
-                    update.$set.status = leadBefore?.pbx?.prev_status || 'Ignored';
+                else if(curStatus === 'Active'){
+                    update.$set.status = 'Ignored';
                     delete update.$setOnInsert.status;
                 }
             } else {
