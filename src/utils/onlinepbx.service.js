@@ -369,6 +369,7 @@ async function handleOnlinePbxPayload(payload , io) {
         const wasInserted = res?.lastErrorObject?.updatedExisting === false;
 
         if (io && shouldEmitAnsweredSocket) {
+            console.log('[handleOnlinePbxPayload] emit answered socket');
             io.emit('pbx_answered', {
                 leadId: String(lead._id),
                 uuid: incomingUuid,
