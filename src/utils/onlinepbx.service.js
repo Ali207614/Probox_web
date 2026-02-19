@@ -379,6 +379,7 @@ async function handleOnlinePbxPayload(payload , io) {
                 operatorExt,
                 at: now.toISOString(),
                 isNewLead: wasInserted,
+                ...lead
             });
         }
 
