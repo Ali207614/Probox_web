@@ -2196,16 +2196,16 @@ class b1HANA {
                 validData.consideringBumped = false;
                 validData.consideringBumpedAt = null;
                 validData.recallBumpedAt = null;
+            }
 
-                const keepRecallStatuses = new Set([
-                    'FollowUp',
-                    'WillVisitStore',
-                    'WillSendPassport',
-                ]);
+            const keepRecallStatuses = new Set([
+                'FollowUp',
+                'WillVisitStore',
+                'WillSendPassport',
+            ]);
 
-                if (!keepRecallStatuses.has(nextStatus)) {
-                    validData.recallDate = null;
-                }
+            if (!keepRecallStatuses.has(nextStatus)) {
+                validData.recallDate = null;
             }
 
             // =========================================================
