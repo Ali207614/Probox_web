@@ -13,6 +13,7 @@ const b1Sl = require('../controllers/b1SL');
 const { ALLOWED_STATUSES } = require('../config');
 const { writeCallEventFromPBX } = require('./lead-chat-events.util');
 
+
 const COMPANY_GATEWAY = '781134774';
 
 const DEDUP_WINDOW_DAYS = 5;
@@ -91,7 +92,7 @@ function buildDedupFilter({ phoneCandidates, legacyRegex, local9 }) {
 }
 
 
-async function handleOnlinePbxPayload(payload) {
+async function handleOnlinePbxPayload(payload , io) {
     try {
         // 1) gateway check
 
@@ -358,9 +359,6 @@ async function handleOnlinePbxPayload(payload) {
             update.$set.answeredAt = now;
         }
 
-        if (shouldEmitAnsweredSocket) {
-            const io = req.app.get('io');
-
             if (io && shouldEmitAnsweredSocket) {
                 io.emit('pbx_answered', {
                     leadId: String(leadBefore._id),
@@ -373,8 +371,6 @@ async function handleOnlinePbxPayload(payload) {
                     at: now.toISOString(),
                     ...leadBefore
                 });
-            }
-
         }
 
 
