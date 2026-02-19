@@ -100,8 +100,6 @@ async function handleOnlinePbxPayload(payload , io) {
             return { ok: true, skipped: 'wrong_gateway' };
         }
 
-        console.log('[handleOnlinePbxPayload] payload:', payload);
-        // 2) phone
         const rawClientPhone = pickClientPhoneFromWebhook(payload);
         if (!rawClientPhone) return { ok: true, skipped: 'no_client_phone' };
 
