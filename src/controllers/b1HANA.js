@@ -2196,17 +2196,18 @@ class b1HANA {
                 validData.consideringBumped = false;
                 validData.consideringBumpedAt = null;
                 validData.recallBumpedAt = null;
+                const keepRecallStatuses = new Set([
+                    'FollowUp',
+                    'WillVisitStore',
+                    'WillSendPassport',
+                ]);
+
+                if (!keepRecallStatuses.has(nextStatus)) {
+                    validData.recallDate = null;
+                }
             }
 
-            const keepRecallStatuses = new Set([
-                'FollowUp',
-                'WillVisitStore',
-                'WillSendPassport',
-            ]);
 
-            if (!keepRecallStatuses.has(nextStatus)) {
-                validData.recallDate = null;
-            }
 
             // =========================================================
             // ✅ SAP check (sizdagi eski logika)
