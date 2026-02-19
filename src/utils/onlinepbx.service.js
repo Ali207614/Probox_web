@@ -206,7 +206,6 @@ async function handleOnlinePbxPayload(payload) {
                 cardCode,
                 cardName,
                 clientName: cardName || null,
-                operator: slpCode,
                 time: now,
             },
             $set: {
@@ -276,16 +275,14 @@ async function handleOnlinePbxPayload(payload) {
         if (isCallEnd && hasTalk) {
             if (isExistingLead) {
                 const curStatus = leadBefore?.status;
-
-                // if (curStatus === 'Missed' || curStatus === 'NoAnswer') {
-                    const prevStatus = leadBefore?.pbx?.prev_status || 'Ignored';
-                    update.$set.status = prevStatus === 'Active' ? 'Ignored' : prevStatus;
+                 if (curStatus === 'Missed' || curStatus === 'NoAnswer') {
+                    update.$set.status ='Ignored';
                     delete update.$setOnInsert.status;
-                // }
-                // else{
-                //     update.$set.status = leadBefore?.pbx?.prev_status || 'Ignored';
-                //     delete update.$setOnInsert.status;
-                // }
+                 }
+                else{
+                    update.$set.status = leadBefore?.pbx?.prev_status || 'Ignored';
+                    delete update.$setOnInsert.status;
+                }
             } else {
                 update.$set.status = 'Ignored';
                 delete update.$setOnInsert.status;
@@ -325,15 +322,26 @@ async function handleOnlinePbxPayload(payload) {
             update.$set.talkedAt = now;
         }
 
+        const isInbound = direction === 'inbound';
+        const isNewLead = !isExistingLead;
 
-        const operatorIsEmpty =
-            leadBefore?.operator == null || leadBefore?.operator === '' || leadBefore?.operator === 0;
+        const leadHasOperator =
+            leadBefore?.operator != null &&
+            leadBefore?.operator !== '' &&
+            Number(leadBefore?.operator) !== 0;
 
-        if (operatorIsEmpty && slpCode != null) {
-            update.$set.operator = slpCode;
-            delete update.$setOnInsert.operator;
+        const shouldSetInboundOperatorForNewLead =
+            isInbound  && isCallEnd && hasTalk && slpCode != null;
+
+        const shouldSetOutboundOperatorForNewLead =
+            isOutbound && isNewLead && shouldIncCallAttempt && slpCode != null;
+
+        if (!leadHasOperator) {
+            if (shouldSetInboundOperatorForNewLead || shouldSetOutboundOperatorForNewLead) {
+                update.$set.operator = slpCode;
+                delete update.$setOnInsert.operator;
+            }
         }
-
 
         const res = await LeadModel.findOneAndUpdate(dedupFilter, update, {
             upsert: true,
