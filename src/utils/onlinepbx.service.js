@@ -259,7 +259,7 @@ async function handleOnlinePbxPayload(payload , io) {
         }
 
         // NoAnswer status
-        if (shouldMoveToNoAnswer && leadBefore?.status === 'Active') {
+        if (shouldMoveToNoAnswer && (leadBefore?.status === 'Active' || leadBefore?.status === 'Ignored')) {
             update.$set.status = 'NoAnswer';
             delete update.$setOnInsert.status;
         }
