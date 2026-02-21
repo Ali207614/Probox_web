@@ -183,8 +183,9 @@ const LeadSchema = new Schema(
 LeadSchema.index(
     { uniqueId: 1 },
     {
+        unique: true,
         partialFilterExpression: {
-            uniqueId: { $type: 'string' },
+            uniqueId: { $type: 'string' }, // faqat string bo'lsa unique tekshiradi
         },
     }
 );

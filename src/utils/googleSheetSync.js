@@ -202,11 +202,13 @@ async function main(io) {
         ]);
 
         const nValue = lastLead?.nNumeric || 0;
+        console.log(`Last lead n: ${nValue}`);
         const lastRow = nValue > 500 ? nValue - 500 : 1;
         const nextStart = lastRow;
         const nextEnd = nextStart + 500;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
+        console.log(`Fetching sheet range: ${range}`);
 
         const response = await sheets.spreadsheets.values.get({
             spreadsheetId: sheetId,
