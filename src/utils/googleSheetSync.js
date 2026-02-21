@@ -214,6 +214,7 @@ async function main(io) {
         });
 
         const rows = response.data.values || [];
+        console.log(rows.length, 'rows fetched from Google Sheets.')
         if (!rows.length) return;
 
         /**
@@ -426,6 +427,8 @@ async function main(io) {
 
         console.log('✅ Lead sync completed (dedup + operator assignment).');
     } catch (err) {
+
+        console.log(err)
         console.error('❌ Error in Google Sheet sync:', err?.message || err);
     }
 }
