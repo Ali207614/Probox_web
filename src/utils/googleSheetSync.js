@@ -165,26 +165,19 @@ async function main(io) {
         const [lastLead] = await LeadModel.aggregate([
             {
                 $match: {
-                    $or: [
-                        { n: { $type: 'int' } },
-                        { n: { $type: 'long' } },
-                        { n: { $type: 'double' } },
-                        { n: { $type: 'string', $regex: /^\d+$/ } },
-                    ],
+                    uniqueId: { $type: 'string', $regex: /^\d+$/ }, // faqat raqam stringlar
                 },
             },
             {
                 $addFields: {
-                    nNumeric: {
-                        $cond: [{ $eq: [{ $type: '$n' }, 'string'] }, { $toInt: '$n' }, '$n'],
-                    },
+                    uniqueIdNumeric: { $toLong: '$uniqueId' }, // katta qiymatlar uchun safer
                 },
             },
-            { $sort: { nNumeric: -1 } },
+            { $sort: { uniqueIdNumeric: -1 } },
             { $limit: 1 },
         ]);
 
-        const nValue = lastLead?.nNumeric || 0;
+        const nValue = lastLead?.uniqueIdNumeric || 0;
         console.log(`Last lead n: ${nValue}`);
 
         const lastRow = nValue > 500 ? nValue - 500 : 1;
