@@ -185,7 +185,7 @@ LeadSchema.index(
     {
         unique: true,
         partialFilterExpression: {
-            uniqueId: { $type: 'string' }, // faqat string bo'lsa unique tekshiradi
+            uniqueId: { $type: 'string' },
         },
     }
 );
