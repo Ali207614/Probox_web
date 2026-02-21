@@ -349,7 +349,7 @@ async function main(io) {
         }
 
         let lastAssignedIndex = 0;
-
+        console.log(uniqueLeads , " bu unuques leads")
         for (const lead of uniqueLeads) {
             const weekday = getWeekdaySafe(lead.time);
 
