@@ -182,7 +182,7 @@ async function main(io) {
 
         const lastRow = nValue > 500 ? nValue - 500 : 1;
         const nextStart = lastRow;
-        const nextEnd = nextStart + 1000;
+        const nextEnd = nextStart + 600;
 
         const range = `Asosiy!A${nextStart}:J${nextEnd}`;
         console.log(`Fetching sheet range: ${range}`);
