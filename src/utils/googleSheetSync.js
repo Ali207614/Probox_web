@@ -321,17 +321,14 @@ async function main(io) {
             const local9 = normalizePhone(lead.clientPhone);
             if (!local9) continue;
 
-
-
             const { phoneCandidates, legacyRegex } = buildPhoneCandidates(local9);
             const looseRegex = buildLoosePhoneRegexFromLocal9(local9);
 
             const dedupFilter = buildDedupFilter({
                 phoneCandidates,
                 legacyRegex,
-                looseRegex,
+                looseRegex:null,
             });
-
 
             const existing = await LeadModel.findOne(dedupFilter).select('_id').lean();
 
