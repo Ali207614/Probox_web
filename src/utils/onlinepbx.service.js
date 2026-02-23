@@ -59,7 +59,7 @@ function getSinceDedup(now = new Date()) {
 
 function isCallStartEvent(event) {
     const e = String(event || '').toLowerCase();
-    return e === 'call_start' || e === 'call_user_start';
+    return e === 'call_start'
 }
 
 function buildLoosePhoneRegexFromLocal9(local9) {

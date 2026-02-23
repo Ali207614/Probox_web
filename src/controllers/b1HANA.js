@@ -33,7 +33,7 @@ ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
 const { createOnlinePbx } = require('./pbx.client');
-const {syncLeadPbxChats} = require("../services/lead_pbx_sync.service");
+const {fetchLeadPbxChats} = require("../services/lead_pbx_sync.service");
 const axios = require("axios");
 
 const pbxClient = createOnlinePbx({
@@ -2373,9 +2373,6 @@ class b1HANA {
         }
     };
 
-
-
-
     findAllBranch = async(req, res, next) => {
         try {
             const page = parseInt(req.query.page) || 1;
@@ -2761,7 +2758,6 @@ class b1HANA {
         }
     };
 
-
     async  fetchRateFromDb(execute ,DataRepositories) {
         const query = DataRepositories.getRate({ /* sizning paramlaringiz bo'lsa */ });
         const data = await execute(query);
@@ -2769,7 +2765,6 @@ class b1HANA {
 
         return row?.rate ?? row?.Rate ?? row?.UZS ?? null;
     }
-
 
     async getUsdUzsRateCached(fetchRateFn) {
         const now = Date.now();
@@ -2805,7 +2800,6 @@ class b1HANA {
             RATE_CACHE.inflight = null;
         }
     }
-
 
     getRate = async (req, res, next) => {
         const query = await DataRepositories.getRate(req.query)
@@ -4134,68 +4128,132 @@ class b1HANA {
 
             page = Number(page);
             limit = Number(limit);
+
             if (!Number.isFinite(page) || page < 1) page = 1;
             if (!Number.isFinite(limit) || limit < 1) limit = 20;
             if (limit > 100) limit = 100;
 
             const lead = await LeadModel.findById(id).select("_id").lean();
-            if (!lead) return res.status(404).json({ message: "Lead not found" });
-
-            await syncLeadPbxChats({ pbxClient, leadId: id });
+            if (!lead) {
+                return res.status(404).json({ message: "Lead not found" });
+            }
 
             const userRole = req.user?.U_role;
             const isAdmin = userRole === "Admin";
             const wantIncludeDeleted = String(includeDeleted).toLowerCase() === "true";
 
             const filter = { leadId: id };
-            if (!isAdmin || !wantIncludeDeleted) filter.isDeleted = { $ne: true };
-
-            const skip = (page - 1) * limit;
-            if(id === '698c4e8397bec65573e5529d'){
-                let l = await LeadChat.find(filter).sort({ createdAt: 1 }).lean()
-                console.log(l.length , " bu length")
+            if (!isAdmin || !wantIncludeDeleted) {
+                filter.isDeleted = { $ne: true };
             }
-            const [items, total] = await Promise.all([
-                LeadChat.find(filter).sort({ createdAt: 1 }).skip(skip).limit(limit).lean(),
-                LeadChat.countDocuments(filter),
-            ]);
+
+            // 1) Mongo chatlar (paginationsiz — merge qilish uchun hammasi kerak)
+            const dbChats = await LeadChat.find(filter).sort({ createdAt: 1 }).lean();
+
+            // 2) PBX live chatlar (DBga yozmaydi)
+            let pbxChats = [];
+            try {
+                pbxChats = await fetchLeadPbxChats({ pbxClient, leadId: id });
+            } catch (e) {
+                console.error("[PBX FETCH ERROR]", e?.message);
+                pbxChats = [];
+            }
+
+            // 3) DBdagi mavjud PBX uuid larni yig'amiz (duplicate oldini olish)
+            const existingPbxUuids = new Set(
+                dbChats
+                    .map((item) => item?.pbx?.uuid)
+                    .filter(Boolean)
+                    .map((v) => String(v))
+            );
+
+            // 4) Faqat yangi (DBda yo'q) PBX live calllarni qoldiramiz
+            const filteredPbxChats = pbxChats.filter((item) => {
+                const uuid = item?.pbx?.uuid ? String(item.pbx.uuid) : null;
+                if (!uuid) return true; // uuid yo'q bo'lsa ham qoldiramiz
+                return !existingPbxUuids.has(uuid);
+            });
+
+            // 5) Merge
+            const merged = [...dbChats, ...filteredPbxChats];
+
+            // 6) Yakuniy dedup (xavfsizlik uchun, faqat pbx uuid bo'yicha)
+            const seen = new Set();
+            const deduped = [];
+
+            for (const item of merged) {
+                const uuid = item?.pbx?.uuid ? String(item.pbx.uuid) : null;
+
+                if (uuid) {
+                    const key = `pbx:${uuid}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                } else {
+                    const idKey = item?._id ? `db:${String(item._id)}` : `tmp:${Math.random()}`;
+                    if (seen.has(idKey)) continue;
+                    seen.add(idKey);
+                }
+
+                deduped.push(item);
+            }
+
+            // 7) Sort (eski -> yangi)
+            deduped.sort((a, b) => {
+                const ta = new Date(a?.createdAt ?? 0).getTime();
+                const tb = new Date(b?.createdAt ?? 0).getTime();
+                return ta - tb;
+            });
+
+            // 8) Pagination (merge qilingan natijaga)
+            const total = deduped.length;
+            const totalPages = Math.ceil(total / limit) || 1;
+            const skip = (page - 1) * limit;
+            const items = deduped.slice(skip, skip + limit);
+
+            // 9) Frontend format
+            const data = items.map((item) => {
+                const isSystemNoAudio =
+                    item?.createdByRole === "System" &&
+                    (item?.action === "call_no_answer" || item?.action === "call_missed");
+
+                const audioUrl = isSystemNoAudio
+                    ? null
+                    : (
+                        item?.pbx?.uuid
+                            ? `audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
+                            : (item?.Audio?.url ?? null)
+                    );
+
+                if (item?.audio !== undefined) delete item.audio;
+
+                const result = {
+                    ...item,
+                    Comments: item.message,
+                    SlpCode: item.createdBy,
+                    Image: null,
+                    ...(audioUrl
+                        ? {
+                            Audio: {
+                                duration: item?.Audio?.duration ?? null,
+                                url: audioUrl,
+                            },
+                        }
+                        : { Audio: null }),
+                };
+
+                if (result?.action) {
+                    result.Audio = null;
+                }
+
+                return result;
+            });
+
             return res.json({
                 page,
                 limit,
                 total,
-                totalPages: Math.ceil(total / limit),
-                data: items.map((item) => {
-                    const isSystemNoAudio =
-                        item?.createdByRole === "System" &&
-                        (item?.action === "call_no_answer" || item?.action === "call_missed");
-
-                    const audioUrl = isSystemNoAudio
-                        ? null
-                        : (item?.pbx?.uuid
-                            ? `audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
-                            : (item?.Audio?.url ?? null));
-                    delete item.audio;
-                    let result = {
-                        ...item,
-                        Comments: item.message,
-                        SlpCode: item.createdBy,
-                        Image: null,
-                        ...(audioUrl
-                            ? {
-                                Audio: {
-                                    duration: item?.Audio?.duration ?? null,
-                                    url: audioUrl,
-                                },
-                            }
-                            : { Audio: null }),
-                    };
-
-                    if(result?.action){
-                       result.Audio = null;
-                    }
-                    return result
-                }),
-
+                totalPages,
+                data,
             });
         } catch (err) {
             next(err);
