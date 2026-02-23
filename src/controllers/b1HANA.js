@@ -2135,13 +2135,13 @@ class b1HANA {
                 });
             }
 
-// ✅ Closed'dan boshqa statusga qaytsa rejection reasonlarni tozalaymiz
+            // ✅ Closed'dan boshqa statusga qaytsa rejection reasonlarni tozalaymiz
             if (isStatusChanging && prevStatusIsClosed && nextStatus !== 'Closed') {
                 validData.rejectionReason = null;
                 validData.rejectionReason2 = null;
             }
 
-// ✅ Active ga qaytish baribir taqiqlanadi (hamma uchun)
+            // ✅ Active ga qaytish baribir taqiqlanadi (hamma uchun)
             if (isStatusChanging && nextStatus === 'Active' && prevStatus !== 'Active') {
                 return res.status(400).json({
                     message:
@@ -2328,8 +2328,8 @@ class b1HANA {
 
                         console.log(`SAP match found → ${record.CardCode} | ${record.CardName}`);
                     } else {
-                        validData.cardCode = null;
-                        validData.cardName = null;
+                        validData.cardCode = existingLead.cardCode || null;
+                        validData.cardName = existingLead.cardName || null;
                         console.log(`SAP: No record found for ${jshshir || passport || phone}`);
                     }
                 } catch (sapErr) {
