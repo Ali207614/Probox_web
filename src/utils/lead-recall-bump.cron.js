@@ -104,7 +104,7 @@ function canBumpForRecall(lead, now) {
 
 function startLeadRecallBumpCron() {
     cron.schedule(
-        '* * * * *', // ✅ har 5 minutda
+        '*/5 * * * *', // ✅ har 5 minutda
         async () => {
             const now = new Date();
 
