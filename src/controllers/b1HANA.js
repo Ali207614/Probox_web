@@ -4253,6 +4253,14 @@ class b1HANA {
                 return result;
             });
 
+
+            if(id == '699b0c8e97bec6557307e0ab'){
+                console.log(data.map(x => ({
+                    uuid: x?.pbx?.uuid,
+                    audio: x?.Audio?.url
+                })));
+            }
+
             return res.json({
                 page,
                 limit,
