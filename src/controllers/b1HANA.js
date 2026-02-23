@@ -2050,6 +2050,9 @@ class b1HANA {
             // =========================================================
             // ✅ STATUS CHANGE LOGIC (passportVisit olib tashlandi)
             // =========================================================
+            // =========================================================
+// ✅ STATUS CHANGE LOGIC (passportVisit olib tashlandi)
+// =========================================================
             const now = new Date();
 
             const nextStatus =
@@ -2059,14 +2062,22 @@ class b1HANA {
                 typeof existingLead.status === 'string'
                     ? String(existingLead.status)
                     : undefined;
+
             const isStatusChanging =
                 nextStatus != null && nextStatus !== '' && nextStatus !== prevStatus;
 
+// ✅ Final statuslar
+            const HARD_LOCKED_STATUSES = new Set(['Purchased', 'NoPurchase']); // hech kim o'zgartira olmaydi
+            const SOFT_LOCKED_STATUS = 'Closed'; // faqat ayrim rollar o'zgartira oladi
 
-            const LOCKED_STATUSES = new Set(['Closed', 'Purchased', 'NoPurchase']);
-            const prevStatusLocked = LOCKED_STATUSES.has(prevStatus);
+// ✅ Faqat shu rollar Closed'dan qayta o'tkaza oladi
+            const CLOSED_OVERRIDE_ROLES = new Set(['OperatorM', 'CEO']);
+            const canOverrideClosed = CLOSED_OVERRIDE_ROLES.has(U_role);
 
+            const prevStatusHardLocked = HARD_LOCKED_STATUSES.has(prevStatus);
+            const prevStatusIsClosed = prevStatus === SOFT_LOCKED_STATUS;
 
+// ✅ rejectionReason berilsa status Closed qilamiz (lekin Purchased/NoPurchase bo'lsa tegmaymiz)
             if (validData.rejectionReason != null && validData.rejectionReason !== '') {
                 validData.rejectionReason2 = validData.rejectionReason;
 
@@ -2077,7 +2088,8 @@ class b1HANA {
                 validData.consideringBumpedAt = null;
                 validData.recallBumpedAt = null;
 
-                if (!prevStatusLocked) {
+                // Purchased / NoPurchase bo'lsa statusni o'zgartirmaymiz
+                if (!prevStatusHardLocked) {
                     validData.status = 'Closed';
                 }
             }
@@ -2092,21 +2104,35 @@ class b1HANA {
                 validData.consideringBumpedAt = null;
                 validData.recallBumpedAt = null;
 
-
-                if (!prevStatusLocked) {
+                // Purchased / NoPurchase bo'lsa statusni o'zgartirmaymiz
+                if (!prevStatusHardLocked) {
                     validData.status = 'Closed';
                 }
             }
 
-            if (isStatusChanging && LOCKED_STATUSES.has(prevStatus)) {
+// ✅ Purchased / NoPurchase => hech kim o'zgartira olmaydi
+            if (isStatusChanging && prevStatusHardLocked) {
                 return res.status(400).json({
                     message: `Status ${prevStatus} yakuniy. Uni boshqa statusga o'zgartirib bo'lmaydi.`,
                     statusFrom: prevStatus,
                     statusTo: nextStatus,
-                    location: 'status_locked',
+                    role: U_role,
+                    location: 'status_hard_locked',
                 });
             }
 
+// ✅ Closed => faqat OperatorM va CEO o'zgartira oladi
+            if (isStatusChanging && prevStatusIsClosed && !canOverrideClosed) {
+                return res.status(400).json({
+                    message: `Status ${prevStatus} dan faqat OperatorM yoki CEO boshqa statusga o'tkaza oladi.`,
+                    statusFrom: prevStatus,
+                    statusTo: nextStatus,
+                    role: U_role,
+                    location: 'status_closed_locked',
+                });
+            }
+
+// ✅ Active ga qaytish baribir taqiqlanadi (hamma uchun)
             if (isStatusChanging && nextStatus === 'Active' && prevStatus !== 'Active') {
                 return res.status(400).json({
                     message:
@@ -2115,6 +2141,7 @@ class b1HANA {
                     statusTo: nextStatus,
                 });
             }
+
 
             // ✅ Scoring statusiga o‘tganda jshshir + passportId majburiy
             const REQUIRE_DOC_STATUSES = new Set(['Scoring']);
