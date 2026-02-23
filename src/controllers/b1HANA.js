@@ -4147,75 +4147,60 @@ class b1HANA {
                 filter.isDeleted = { $ne: true };
             }
 
-            // 1) Mongo chatlar (paginationsiz — merge qilish uchun hammasi kerak)
+            // 1) Mongo chatlar (hammasi) — merge + dedup + pagination uchun
             const dbChats = await LeadChat.find(filter).sort({ createdAt: 1 }).lean();
 
             // 2) PBX live chatlar (DBga yozmaydi)
             let pbxChats = [];
             try {
                 pbxChats = await fetchLeadPbxChats({ pbxClient, leadId: id });
-                if(id == '699b0c8e97bec6557307e0ab'){
-                    console.log(pbxChats)
-                    console.log(pbxChats.length)
-                }
 
+                // debug
+                if (id === "699b0c8e97bec6557307e0ab") {
+                    console.log("[PBX LIVE CHATS]", pbxChats.length);
+                    console.log(pbxChats);
+                }
             } catch (e) {
                 console.error("[PBX FETCH ERROR]", e?.message);
                 pbxChats = [];
             }
 
-            // 3) DBdagi mavjud PBX uuid larni yig'amiz (duplicate oldini olish)
-            const existingPbxUuids = new Set(
-                dbChats
-                    .map((item) => item?.pbx?.uuid)
-                    .filter(Boolean)
-                    .map((v) => String(v))
-            );
+            // 3) Merge + dedup
+            // ✅ Muhim: PBX uuid bo'yicha duplicate bo'lsa LIVE record ustun bo'ladi
+            const mergedMap = new Map();
 
-            // 4) Faqat yangi (DBda yo'q) PBX live calllarni qoldiramiz
-            const filteredPbxChats = pbxChats.filter((item) => {
+            // 3.1) Avval DB chatlarni qo'yamiz
+            for (const item of dbChats) {
                 const uuid = item?.pbx?.uuid ? String(item.pbx.uuid) : null;
-                if (!uuid) return true; // uuid yo'q bo'lsa ham qoldiramiz
-                return !existingPbxUuids.has(uuid);
-            });
-
-            // 5) Merge
-            const merged = [...dbChats, ...filteredPbxChats];
-
-            // 6) Yakuniy dedup (xavfsizlik uchun, faqat pbx uuid bo'yicha)
-            const seen = new Set();
-            const deduped = [];
-
-            for (const item of merged) {
-                const uuid = item?.pbx?.uuid ? String(item.pbx.uuid) : null;
-
-                if (uuid) {
-                    const key = `pbx:${uuid}`;
-                    if (seen.has(key)) continue;
-                    seen.add(key);
-                } else {
-                    const idKey = item?._id ? `db:${String(item._id)}` : `tmp:${Math.random()}`;
-                    if (seen.has(idKey)) continue;
-                    seen.add(idKey);
-                }
-
-                deduped.push(item);
+                const key = uuid ? `pbx:${uuid}` : `db:${String(item?._id)}`;
+                mergedMap.set(key, item);
             }
 
-            // 7) Sort (eski -> yangi)
+            // 3.2) Keyin PBX live chatlarni qo'yamiz (shu duplicate bo'lsa overwrite qiladi)
+            for (const item of pbxChats) {
+                const uuid = item?.pbx?.uuid ? String(item.pbx.uuid) : null;
+                const key = uuid ? `pbx:${uuid}` : `pbx_tmp:${String(item?._id ?? Math.random())}`;
+
+                // ✅ live variantni ustun qoldiramiz
+                mergedMap.set(key, item);
+            }
+
+            let deduped = Array.from(mergedMap.values());
+
+            // 4) Yakuniy sort (eski -> yangi)
             deduped.sort((a, b) => {
                 const ta = new Date(a?.createdAt ?? 0).getTime();
                 const tb = new Date(b?.createdAt ?? 0).getTime();
                 return ta - tb;
             });
 
-            // 8) Pagination (merge qilingan natijaga)
+            // 5) Pagination (merged resultga)
             const total = deduped.length;
             const totalPages = Math.ceil(total / limit) || 1;
             const skip = (page - 1) * limit;
             const items = deduped.slice(skip, skip + limit);
 
-            // 9) Frontend format
+            // 6) Frontend format
             const data = items.map((item) => {
                 const isSystemNoAudio =
                     item?.createdByRole === "System" &&
@@ -4223,11 +4208,9 @@ class b1HANA {
 
                 const audioUrl = isSystemNoAudio
                     ? null
-                    : (
-                        item?.pbx?.uuid
-                            ? `audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
-                            : (item?.Audio?.url ?? null)
-                    );
+                    : item?.pbx?.uuid
+                        ? `audio/${id}/chats/recordings/${item.pbx.uuid}.mp3`
+                        : (item?.Audio?.url ?? null);
 
                 if (item?.audio !== undefined) delete item.audio;
 
@@ -4253,12 +4236,15 @@ class b1HANA {
                 return result;
             });
 
-
-            if(id == '699b0c8e97bec6557307e0ab'){
-                console.log(data.map(x => ({
-                    uuid: x?.pbx?.uuid,
-                    audio: x?.Audio?.url
-                })));
+            // debug: qaysi uuidlarga audio url tushganini ko'rish
+            if (id === "699b0c8e97bec6557307e0ab") {
+                console.log(
+                    data.map((x) => ({
+                        uuid: x?.pbx?.uuid,
+                        audio: x?.Audio?.url,
+                        source: x?._source || "db",
+                    }))
+                );
             }
 
             return res.json({
