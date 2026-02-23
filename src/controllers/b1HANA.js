@@ -2051,6 +2051,9 @@ class b1HANA {
             // ✅ STATUS CHANGE LOGIC (passportVisit olib tashlandi)
             // =========================================================
             // =========================================================
+            // ✅ STATUS CHANGE LOGIC (passportVisit olib tashlandi)
+            // =========================================================
+            // =========================================================
 // ✅ STATUS CHANGE LOGIC (passportVisit olib tashlandi)
 // =========================================================
             const now = new Date();
@@ -2130,6 +2133,12 @@ class b1HANA {
                     role: U_role,
                     location: 'status_closed_locked',
                 });
+            }
+
+// ✅ Closed'dan boshqa statusga qaytsa rejection reasonlarni tozalaymiz
+            if (isStatusChanging && prevStatusIsClosed && nextStatus !== 'Closed') {
+                validData.rejectionReason = null;
+                validData.rejectionReason2 = null;
             }
 
 // ✅ Active ga qaytish baribir taqiqlanadi (hamma uchun)
