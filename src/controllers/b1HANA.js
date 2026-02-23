@@ -4124,7 +4124,7 @@ class b1HANA {
     getChats = async (req, res, next) => {
         try {
             const { id } = req.params;
-            let { page = 1, limit = 20, includeDeleted = "false" } = req.query;
+            let { page = 1, limit = 30, includeDeleted = "false" } = req.query;
 
             page = Number(page);
             limit = Number(limit);
@@ -4154,6 +4154,11 @@ class b1HANA {
             let pbxChats = [];
             try {
                 pbxChats = await fetchLeadPbxChats({ pbxClient, leadId: id });
+                if(id == '699b0c8e97bec6557307e0ab'){
+                    console.log(pbxChats)
+                    console.log(pbxChats.length)
+                }
+
             } catch (e) {
                 console.error("[PBX FETCH ERROR]", e?.message);
                 pbxChats = [];
