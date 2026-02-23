@@ -115,6 +115,7 @@ permissions.OperatorM = [
     'answered',
     'callCount',
     'interested',
+    'scoring'
 ];
 
 permissions.CEO = [
