@@ -13,11 +13,28 @@ const multer = require('multer');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+const imageUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10 MB (xohlasangiz o'zgartirasiz)
+    },
+    fileFilter: (req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (!allowed.includes(file.mimetype)) {
+            return cb(new Error('Faqat rasm yuklash mumkin (jpg, jpeg, png, webp)'));
+        }
+        cb(null, true);
+    },
+});
+
+
+
 const uploadService = new UploadService();
 const purchasePdfController = purchasePdfControllerFactory({ uploadService });
 const router = new Router();
 
 const invoiceRouter = require("./invoice")
+const {telegramBotBasicAuth} = require("../middlewares/basic-auth-telegram");
 
 router.post('/login', b1HANA.login);
 
@@ -67,6 +84,13 @@ router.get('/rate', authMiddleware, b1HANA.getRate)
 router.get('/leads', authMiddleware, b1HANA.leads)
 
 router.get('/leads/:id', authMiddleware, leadController.leadOne)
+
+router.post(
+    '/leads/telegram-bot',
+    telegramBotBasicAuth,
+    imageUpload.single('file'),
+    b1HANA.createLeadFromTelegramBotWithImage
+);
 
 router.post(
     '/lead-images/upload',
