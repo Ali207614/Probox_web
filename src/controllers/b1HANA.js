@@ -1157,8 +1157,8 @@ class b1HANA {
 
             const file = req.file;
 
-            const source = 'Telegram bot';
-            const status = 'Yangi lead';
+            const source = 'TelegramBot';
+            const status = 'Active';
 
             function buildLoosePhoneRegexFromDigits12(phone12) {
                 const local9 = String(phone12).slice(-9);
