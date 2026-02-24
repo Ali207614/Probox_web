@@ -45,6 +45,7 @@ const LeadChatSchema = new Schema(
 
                 // optional
                 'note',
+                'telegram_bot_image_upload_failed'
             ],
             default: null,
             index: true,

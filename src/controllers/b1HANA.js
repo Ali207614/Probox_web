@@ -1155,7 +1155,7 @@ class b1HANA {
                 cardCode: cardCodeFromBody, // optional
             } = req.body;
 
-            const file = req.file;
+            const file = req.file; // optional
 
             const source = 'TelegramBot';
             const status = 'Active';
@@ -1170,18 +1170,15 @@ class b1HANA {
                 if (!phone) return false;
                 let digits = String(phone).replace(/\D/g, '');
 
-                // 901234567 -> 998901234567
                 if (digits.length === 9 && digits.startsWith('9')) digits = '998' + digits;
 
                 const isValid = /^998\d{9}$/.test(digits);
                 return isValid ? digits : false;
             }
 
-            // ✅ required fields
             const missing = [];
             if (!clientName || !String(clientName).trim()) missing.push('clientName');
             if (!clientPhone || !String(clientPhone).trim()) missing.push('clientPhone');
-            if (!file) missing.push('file');
 
             if (missing.length) {
                 return res.status(400).json({
@@ -1190,15 +1187,13 @@ class b1HANA {
                 });
             }
 
-            // ✅ faqat rasm (route fileFilter ham tekshiradi, bu yerda ham double-check)
-            if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+            if (file && (!file.mimetype || !file.mimetype.startsWith('image/'))) {
                 return res.status(400).json({
                     message: 'Faqat rasm yuklash mumkin',
                     location: 'telegram_bot_lead_only_image',
                 });
             }
 
-            // ✅ phone normalize
             const cleanedPhone = validatePhone(clientPhone);
             if (!cleanedPhone) {
                 return res.status(400).json({
@@ -1207,7 +1202,7 @@ class b1HANA {
                 });
             }
 
-            // ✅ duplicate check
+            // ✅ duplicate search query
             const local9 = cleanedPhone.slice(-9);
             const legacyRegex = new RegExp(`${local9}$`);
             const looseRegex = buildLoosePhoneRegexFromDigits12(cleanedPhone);
@@ -1222,15 +1217,167 @@ class b1HANA {
                 ],
             };
 
-            const exists = await LeadModel.exists(duplicateQuery);
-            if (exists) {
-                return res.status(409).json({
-                    message: 'Bu lead allaqachon mavjud',
-                    location: 'telegram_bot_lead_duplicate',
+            // ✅ oldin lead bormi?
+            let lead = await LeadModel.findOne(duplicateQuery);
+
+            let savedImage = null;
+            let imageUploadStatus = null;
+            let imageUploadError = null;
+            let actionType = 'created';
+
+            if (lead) {
+                // =========================================================
+                // ✅ DUPLICATE BO'LSA: ERROR EMAS, UPDATE + BUMP
+                // =========================================================
+                actionType = 'updated_existing';
+
+                const before = {
+                    jshshir: lead.jshshir ?? null,
+                    passportId: lead.passportId ?? null,
+                    newTime: lead.newTime ?? null,
+                    comment: lead.comment ?? null,
+                    source2: lead.source2 ?? null,
+                };
+
+                // TelegramBot source bo'lsin (agar boshqa source bilan yaratilgan bo'lsa ham)
+                lead.source = source;
+
+                // Siz aytganingiz bo'yicha status Active qilib qo'yamiz
+                lead.status = status;
+
+                // Telefonni normalize qilingan holda saqlab qo'yamiz
+                lead.clientPhone = cleanedPhone;
+
+                // Ism yangilansin (agar kelsa)
+                if (clientName && String(clientName).trim()) {
+                    lead.clientName = String(clientName).trim();
+                }
+
+                // ✅ jshshir / passportId doim yangilanaversin (kelgan bo'lsa)
+                if (jshshir !== undefined && jshshir !== null && String(jshshir).trim() !== '') {
+                    lead.jshshir = String(jshshir).trim();
+                    lead.jshshir2 = String(jshshir).trim();
+                }
+
+                if (passportId !== undefined && passportId !== null && String(passportId).trim() !== '') {
+                    lead.passportId = String(passportId).trim();
+                }
+
+                // optional maydonlar ham yangilansin (kelgan bo'lsa)
+                if (comment !== undefined) lead.comment = comment || null;
+                if (source2 !== undefined) lead.source2 = source2 || null;
+
+                // cardCode bodydan kelsa ustun qo'yamiz
+                if (cardCodeFromBody) {
+                    lead.cardCode = cardCodeFromBody;
+                }
+
+                // ✅ tepaga chiqarish uchun newTime yangilanadi
+                lead.newTime = new Date();
+
+                // time ham yangilab qo'yish mumkin (siz ishlatayotgan flowga qarab)
+                lead.time = new Date();
+
+                // operator bo'sh bo'lsa assign qilamiz
+                if (!lead.operator) {
+                    try {
+                        lead.operator = await assignBalancedOperator();
+                    } catch (e) {
+                        console.warn('assignBalancedOperator failed on duplicate:', e?.message || e);
+                    }
+                }
+
+                await lead.save();
+
+                // ✅ rasm bo'lsa duplicate leadga ham image qo'shamiz
+                if (file) {
+                    try {
+                        const entityId = lead.cardCode ? lead.cardCode : lead._id.toString();
+
+                        const uploaded = await UploadService.uploadImage('lead-images', entityId, file);
+
+                        if (uploaded?.isPdf) {
+                            throw new Error('PDF not allowed for Telegram bot lead upload');
+                        }
+
+                        const imagePayload = {
+                            leadId: lead._id,
+                            cardCode: lead.cardCode ?? null,
+                            fileName: file.originalname,
+                            mimeType: file.mimetype,
+                            size: file.size,
+                            isPdf: false,
+                            keys: uploaded.keys || uploaded,
+                        };
+
+                        savedImage = await LeadImage.create(imagePayload);
+                        imageUploadStatus = true;
+                    } catch (uploadErr) {
+                        console.error('Telegram bot duplicate lead image upload failed:', uploadErr);
+                        imageUploadStatus = false;
+                        imageUploadError = uploadErr?.message || 'Upload error';
+
+                        await writeLeadEvent({
+                            leadId: lead._id,
+                            reqUser: null,
+                            isSystem: true,
+                            type: 'event',
+                            action: 'telegram_bot_image_upload_failed',
+                            message: 'Existing lead bumped, but image upload failed (Telegram bot)',
+                            changes: [],
+                        });
+                    }
+                }
+
+                // socket emit (tepaga chiqqani uchun ham emit qilamiz)
+                const io = req.app.get('io');
+                if (io) {
+                    io.emit('new_leads', {
+                        ...lead.toObject(),
+                        SlpCode: lead.seller || lead.operator,
+                    });
+                }
+
+                // event history
+                await writeLeadEvent({
+                    leadId: lead._id,
+                    reqUser: null,
+                    isSystem: true,
+                    type: 'event',
+                    action: 'lead_updated',
+                    message: file
+                        ? 'Existing lead bumped and updated with image (Telegram bot)'
+                        : 'Existing lead bumped and updated (Telegram bot)',
+                    changes: [
+                        { field: 'newTime', from: before.newTime, to: lead.newTime },
+                        { field: 'jshshir', from: before.jshshir, to: lead.jshshir ?? null },
+                        { field: 'passportId', from: before.passportId, to: lead.passportId ?? null },
+                        { field: 'comment', from: before.comment, to: lead.comment ?? null },
+                        { field: 'source2', from: before.source2, to: lead.source2 ?? null },
+                        ...(savedImage
+                            ? [{ field: 'image', from: null, to: savedImage?._id?.toString() || null }]
+                            : []),
+                    ],
+                });
+
+                return res.status(200).json({
+                    message: file
+                        ? 'Existing lead updated and bumped successfully (Telegram bot) with image'
+                        : 'Existing lead updated and bumped successfully (Telegram bot)',
+                    action: actionType,
+                    data: {
+                        lead,
+                        image: savedImage,
+                    },
+                    ...(file ? { imageUploadStatus, imageUploadError } : {}),
                 });
             }
 
-            // ✅ operator auto assign (optional)
+            // =========================================================
+            // ✅ LEAD YO'Q BO'LSA: YANGI CREATE
+            // =========================================================
+
+            // operator auto assign
             let operator = null;
             try {
                 operator = await assignBalancedOperator();
@@ -1242,27 +1389,27 @@ class b1HANA {
             const n = await generateShortId('PRO');
             const time = new Date();
 
-            // ✅ SAP BP
+            // SAP BP
             const sapRecord = await b1Sl.findOrCreateBusinessPartner(cleanedPhone, clientName);
 
             const cardCode = cardCodeFromBody || sapRecord?.cardCode || null;
             const cardName = sapRecord?.cardName || null;
 
-            let dataObj = {
+            const dataObj = {
                 n,
                 source,
-                status, // ✅ Yangi lead
+                status,
                 clientName: cardName || clientName,
                 clientPhone: cleanedPhone,
                 source2: source2 || null,
                 comment: comment || null,
                 operator,
                 time,
+                newTime: new Date(), // ✅ yaratganda ham tepaga logikaga mos bo'lsin
 
                 cardCode,
                 cardName,
 
-                // Telegram botdan kelgan maydonlar
                 jshshir: jshshir || sapRecord?.U_jshshir || null,
                 jshshir2: jshshir || sapRecord?.U_jshshir || null,
                 passportId: passportId || null,
@@ -1270,51 +1417,49 @@ class b1HANA {
                 idX: sapRecord?.Cellular || null,
             };
 
-            // ✅ Lead yaratamiz
-            const lead = await LeadModel.create(dataObj);
+            lead = await LeadModel.create(dataObj);
 
-            // ✅ Image upload (faqat image)
-            let savedImage = null;
+            // image optional
+            if (file) {
+                try {
+                    const entityId = cardCode ? cardCode : lead._id.toString();
 
-            try {
-                const entityId = cardCode ? cardCode : lead._id.toString();
+                    const uploaded = await UploadService.uploadImage('lead-images', entityId, file);
 
-                const uploaded = await uploadService.uploadImage('lead-images', entityId, file);
+                    if (uploaded?.isPdf) {
+                        throw new Error('PDF not allowed for Telegram bot lead upload');
+                    }
 
-                // uploadService image uchun keys qaytaradi deb kutyapmiz
-                const imagePayload = {
-                    leadId: lead._id,
-                    cardCode: cardCode ?? null,
-                    fileName: file.originalname,
-                    mimeType: file.mimetype,
-                    size: file.size,
-                    isPdf: false,
-                    keys: uploaded.keys || uploaded, // uploadService formatiga moslashuv
-                };
+                    const imagePayload = {
+                        leadId: lead._id,
+                        cardCode: cardCode ?? null,
+                        fileName: file.originalname,
+                        mimeType: file.mimetype,
+                        size: file.size,
+                        isPdf: false,
+                        keys: uploaded.keys || uploaded,
+                    };
 
-                savedImage = await LeadImage.create(imagePayload);
-            } catch (uploadErr) {
-                console.error('Telegram bot lead image upload failed:', uploadErr);
+                    savedImage = await LeadImage.create(imagePayload);
+                    imageUploadStatus = true;
+                } catch (uploadErr) {
+                    console.error('Telegram bot lead image upload failed:', uploadErr);
 
-                await writeLeadEvent({
-                    leadId: lead._id,
-                    reqUser: null,
-                    isSystem: true,
-                    type: 'event',
-                    action: 'telegram_bot_image_upload_failed',
-                    message: 'Lead created but image upload failed (Telegram bot)',
-                    changes: [],
-                });
+                    imageUploadStatus = false;
+                    imageUploadError = uploadErr?.message || 'Upload error';
 
-                return res.status(201).json({
-                    message: 'Lead created, but image upload failed',
-                    data: lead,
-                    imageUploadStatus: false,
-                    imageUploadError: uploadErr?.message || 'Upload error',
-                });
+                    await writeLeadEvent({
+                        leadId: lead._id,
+                        reqUser: null,
+                        isSystem: true,
+                        type: 'event',
+                        action: 'telegram_bot_image_upload_failed',
+                        message: 'Lead created but image upload failed (Telegram bot)',
+                        changes: [],
+                    });
+                }
             }
 
-            // ✅ socket emit
             const io = req.app.get('io');
             if (io) {
                 io.emit('new_leads', {
@@ -1323,32 +1468,39 @@ class b1HANA {
                 });
             }
 
-            // ✅ event history
             await writeLeadEvent({
                 leadId: lead._id,
                 reqUser: null,
                 isSystem: true,
                 type: 'event',
-                action: 'lead_created_from_telegram_bot',
-                message: 'Lead created with image (Telegram bot)',
+                action: 'lead_created',
+                message: file
+                    ? 'Lead created with image (Telegram bot)'
+                    : 'Lead created (Telegram bot)',
                 changes: [
                     { field: 'source', from: null, to: lead.source },
                     { field: 'status', from: null, to: lead.status },
                     { field: 'clientPhone', from: null, to: lead.clientPhone },
                     { field: 'operator', from: null, to: lead.operator },
-                    { field: 'image', from: null, to: savedImage?._id?.toString() || null },
+                    ...(savedImage
+                        ? [{ field: 'image', from: null, to: savedImage?._id?.toString() || null }]
+                        : []),
                 ],
             });
 
             return res.status(201).json({
-                message: 'Lead created successfully (Telegram bot) with image',
+                message: file
+                    ? 'Lead created successfully (Telegram bot) with image'
+                    : 'Lead created successfully (Telegram bot)',
+                action: actionType,
                 data: {
                     lead,
                     image: savedImage,
                 },
+                ...(file ? { imageUploadStatus, imageUploadError } : {}),
             });
         } catch (e) {
-            console.error('Error creating lead from Telegram bot with image:', e);
+            console.error('Error creating/updating lead from Telegram bot with image:', e);
             next(e);
         }
     };
