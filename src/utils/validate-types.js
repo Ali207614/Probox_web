@@ -90,12 +90,9 @@ exports.validateFields = (updateData, schema, allowedFields) => {
         const path = schema?.path?.(field);
         const pathType = path?.instance;
 
-        // Fallback: agar schema Date deb bermasa ham, value date-string bo'lsa parse qilamiz
         const parsed = (typeof value === 'string') ? parseUzDateTime(value) : null;
         const looksLikeUzDateString = typeof value === 'string' && parsed !== null;
 
-        // 1) Agar schema Date bo'lsa — qat'iy tekshiramiz
-        // 2) Agar schema type topilmasa, lekin value date-string bo'lsa — Date qilib yuboramiz
         if (pathType === 'Date' || looksLikeUzDateString) {
             if (value instanceof Date) {
                 validData[field] = value;

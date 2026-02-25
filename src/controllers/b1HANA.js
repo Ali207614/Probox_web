@@ -31,7 +31,8 @@ const {
 const LeadLimitUsageModel = require('../models/lead-limit-usage');
 
 const LeadImage = require('../models/lead-image-model');
-const UploadService = require('../minio');
+const UploadServiceClass = require('../minio');
+const uploadService = new UploadServiceClass();
 
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
@@ -1297,7 +1298,7 @@ class b1HANA {
                     try {
                         const entityId = lead.cardCode ? lead.cardCode : lead._id.toString();
 
-                        const uploaded = await UploadService.uploadImage('lead-images', entityId, file);
+                        const uploaded = await uploadService.uploadImage('lead-images', entityId, file);
 
                         if (uploaded?.isPdf) {
                             throw new Error('PDF not allowed for Telegram bot lead upload');
@@ -1427,7 +1428,7 @@ class b1HANA {
                 try {
                     const entityId = cardCode ? cardCode : lead._id.toString();
 
-                    const uploaded = await UploadService.uploadImage('lead-images', entityId, file);
+                    const uploaded = await uploadService.uploadImage('lead-images', entityId, file);
 
                     if (uploaded?.isPdf) {
                         throw new Error('PDF not allowed for Telegram bot lead upload');
