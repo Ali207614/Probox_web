@@ -68,34 +68,28 @@ function getTodayStartUtcForTz(now = new Date(), timeZone = TZ) {
     return new Date(utcMidnightOfTodayKey.getTime() - offsetMs);
 }
 
-/**
- * Daily recurring recall logikasi:
- * - recallDate ichidagi vaqt (HH:mm) har kuni ishlaydi
- * - bugun allaqachon bump bo'lgan bo'lsa, qayta bump qilmaydi
- */
+
 function canBumpForRecall(lead, now) {
     if (!lead?.recallDate) return false;
 
     const recallDate = new Date(lead.recallDate);
     if (Number.isNaN(recallDate.getTime())) return false;
 
-    // recallDate ichidagi vaqt (TZ bo'yicha)
-    const recallHM = getTzHourMinute(recallDate, TZ);
-    const nowHM = getTzHourMinute(now, TZ);
+    // 1) recallDate kelmagan bo'lsa - umuman bump qilmaymiz
+    // (ertaga yoki undan keyingi kunga qo'yilgan bo'lsa)
+    if (now < recallDate) {
+        return false;
+    }
 
-    const recallMinutes = recallHM.hour * 60 + recallHM.minute;
-    const nowMinutes = nowHM.hour * 60 + nowHM.minute;
-
-    // Bugungi vaqt hali kelmagan bo'lsa bump qilmaymiz
-    if (nowMinutes < recallMinutes) return false;
-
-    // Bugun allaqachon bump bo'lgan bo'lsa qayta qilmaymiz
+    // 2) Bugun allaqachon bump bo'lgan bo'lsa, ikkinchi marta bump qilmaymiz
     if (lead.recallBumpedAt) {
         const rb = new Date(lead.recallBumpedAt);
         if (!Number.isNaN(rb.getTime())) {
             const rbDay = getTzDateKey(rb, TZ);
             const nowDay = getTzDateKey(now, TZ);
-            if (rbDay === nowDay) return false;
+            if (rbDay === nowDay) {
+                return false;
+            }
         }
     }
 

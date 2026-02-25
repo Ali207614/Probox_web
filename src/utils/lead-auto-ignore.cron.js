@@ -41,12 +41,12 @@ function startLeadAutoIgnoreCron() {
         // ✅ BUGUN 00:00 (Asia/Tashkent) dan boshlab
         const startToday = startOfTodayTashkent(now);
 
-        // ✅ faqat bugungi leadlar + 1 soatdan oshganlar
-        const filter = {
-          status: 'Active',
-          statusChangedAt: null,
-          createdAt: { $gte: startToday, $lte: oneHourAgo },
-        };
+          const filter = {
+              status: 'Active',
+              statusChangedAt: null,
+              createdAt: { $gte: startToday, $lte: oneHourAgo },
+              source: { $ne: 'Organika' }, // Organika emas
+          };
 
         const targets = await LeadModel.find(filter)
           .select(
