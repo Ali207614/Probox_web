@@ -434,8 +434,7 @@ class b1SL {
             const maximumLimit = Number(body.maximumLimit || 0);
             const annualMaxLimit = Math.min(maximumLimit * 12, 30000000); // ✅ snapshot finalLimit (UZS)
 
-            const finalPercentage = total > 0 ? body.finalPercentage: 0; // ✅ snapshot percentage
-
+            const finalPercentage = total > 0 ? Number(body.finalPercentage || 0) : 0;
             // only for usedType=finalLimit (lead.finalLimit)
             const remainingAnnual = annualMaxLimit - financedAmount;
             const lastLimitMonthly = remainingAnnual / 12;
