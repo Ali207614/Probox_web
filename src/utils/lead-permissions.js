@@ -1,4 +1,4 @@
-const {validateFields} = require("./validate-types");
+const { validateFields } = require("./validate-types");
 const LeadModel = require("../models/lead-model");
 const moment = require("moment-timezone");
 const DataRepositories = require("../repositories/dataRepositories");
@@ -46,6 +46,31 @@ const permissions = {
 
     ],
     Seller: [
+        'meetingConfirmed',
+        'meetingConfirmedDate',
+        'saleType',
+        'jshshir',
+        'passportId',
+        'branch2',
+        'seller',
+        'source2',
+        'region',
+        'district',
+        'address',
+        'comment',
+        'clientPhone2',
+        'rejectionReason2',
+        'rejectionReason',
+        'clientPhone',
+        'neighborhood',
+        'street',
+        'house',
+        'address2',
+        'status',
+        'clientName',
+        'clientFullName',
+    ],
+    SellerM: [
         'meetingConfirmed',
         'meetingConfirmedDate',
         'saleType',
