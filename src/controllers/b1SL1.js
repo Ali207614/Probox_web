@@ -367,7 +367,7 @@ class b1SL {
             if (!req.user?.U_branch) {
                 return res.status(400).json({
                     status: false,
-                    message: 'Siz Sotuvchi emassiz',
+                    message: "Filial ma'lumotlari topilmadi. Iltimos, savdo nuqtasini tekshiring.",
                 });
             }
 

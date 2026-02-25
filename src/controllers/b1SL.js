@@ -281,7 +281,7 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
             if(!req.user.U_branch){
                 return res.status(400).json({
                     status: false,
-                    message: "Siz Sotuvchi emassiz"
+                    message: "Filial ma'lumotlari topilmadi"
                 });
             }
             const leadId = req.body.leadId;
