@@ -621,7 +621,7 @@ class b1SL {
                 snapshot: {
                     finalLimit: annualMaxLimit,
                     internalLimit: body.internalLimit != null ? Number(body.internalLimit) : null,
-                    percentage: Number(finalPercentage.toFixed(2)),
+                    percentage: Number((finalPercentage || 0).toFixed(2)),
                     currency: 'UZS',
                 },
                 raw: response.data,
