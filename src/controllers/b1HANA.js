@@ -2263,6 +2263,10 @@ class b1HANA {
                 return res.status(404).json({ message: 'Lead not found' });
             }
 
+            if(existingLead.status === 'Closed'){
+                return res.status(400).json({ message: "Lead yopilgan !" });
+            }
+
             if (!permissions[U_role]) {
                 return res.status(403).json({
                     message: `Role ${U_role} is not allowed to update leads`,
