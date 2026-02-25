@@ -2437,7 +2437,7 @@ class b1HANA {
                     : undefined;
 
             const isStatusChanging =
-                nextStatus != null && nextStatus !== '' && nextStatus !== prevStatus;
+                nextStatus != null && nextStatus !== '';
 
 // ✅ Final statuslar
             const HARD_LOCKED_STATUSES = new Set(['Purchased', 'NoPurchase']); // hech kim o'zgartira olmaydi
@@ -2621,6 +2621,7 @@ class b1HANA {
                     });
                 }
             }
+
             if (isStatusChanging) {
                 validData.statusChangedAt = now;
                 validData['pbx.prev_status'] = prevStatus || null;
