@@ -346,7 +346,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 clientPhone, // local 9 digits
                 source,
                 uniqueId: uniqueCandidate >= MIN_COUNT_EXCEL ? String(row[6]) : null,
-                time: parsedTime,
+                time: new Date(),
                 leadTime: row[3],
                 operator: operator?.SlpCode || null,
             });

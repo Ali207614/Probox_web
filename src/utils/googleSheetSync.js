@@ -238,7 +238,7 @@ async function main(io) {
                 clientName,
                 clientPhone, // local 9 digits
                 source,
-                time: parsedTime,
+                time: new Date(),
                 leadTime: row[3],
                 weekday,
                 cardCode: null,
