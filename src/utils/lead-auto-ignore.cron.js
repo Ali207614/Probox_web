@@ -43,9 +43,8 @@ function startLeadAutoIgnoreCron() {
 
           const filter = {
               status: 'Active',
-              statusChangedAt: null,
-              createdAt: { $gte: startToday, $lte: oneHourAgo },
-              source: { $ne: 'Organika' }, // Organika emas
+              createdAt: { $lte: oneHourAgo },
+              source: { $ne: 'Organika' },
           };
 
         const targets = await LeadModel.find(filter)
