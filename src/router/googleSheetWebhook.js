@@ -215,7 +215,7 @@ function buildPhoneCandidates(raw) {
 }
 
 function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex, looseRegex, source }) {
-    const filter = {
+    return {
         status: { $in: ALLOWED_STATUSES },
         $or: [
             { clientPhone: { $in: phoneCandidates } },
@@ -223,9 +223,6 @@ function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex, looseRegex
             ...(looseRegex ? [{ clientPhone: { $regex: looseRegex } }] : []),
         ],
     };
-
-    if (source) filter.source = source;
-    return filter;
 }
 
 
@@ -254,28 +251,21 @@ router.post('/webhook', basicAuth, async (req, res) => {
         const [lastLead] = await LeadModel.aggregate([
             {
                 $match: {
-                    $or: [
-                        { n: { $type: 'int' } },
-                        { n: { $type: 'long' } },
-                        { n: { $type: 'double' } },
-                        { n: { $type: 'string', $regex: /^\d+$/ } },
-                    ],
+                    uniqueId: { $type: 'string', $regex: /^\d+$/ },
                 },
             },
             {
                 $addFields: {
-                    nNumeric: {
-                        $cond: [{ $eq: [{ $type: '$n' }, 'string'] }, { $toInt: '$n' }, '$n'],
-                    },
+                    uniqueIdNumeric: { $toLong: '$uniqueId' },
                 },
             },
-            { $sort: { nNumeric: -1 } },
+            { $sort: { uniqueIdNumeric: -1 } },
             { $limit: 1 },
         ]);
 
-        const nValue = lastLead?.nNumeric || 0;
-        const nextStart = nValue > 200 ? nValue - 200 : 2;
-        const nextEnd = nextStart + 400;
+        const nValue = lastLead?.uniqueIdNumeric || 0;
+        const nextStart = nValue > 200 ? nValue - 200 : 1;
+        const nextEnd = nextStart + 300;
 
         console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
 
