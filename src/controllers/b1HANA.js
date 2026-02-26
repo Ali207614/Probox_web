@@ -4503,16 +4503,6 @@ class b1HANA {
                 const sec = (Date.now() - startedAt) / 1000;
                 const mb = bytes / (1024 * 1024);
                 const speed = sec > 0 ? (mb / sec) : 0;
-
-                if (label === "end") {
-                    console.log(
-                        `downloaded ${mb.toFixed(2)} MB in ${sec.toFixed(2)} s (${speed.toFixed(2)} MB/s) uuid=${uuid}`
-                    );
-                } else {
-                    console.log(
-                        `stream ${label}: after ${sec.toFixed(2)} s, got ${mb.toFixed(2)} MB (${speed.toFixed(2)} MB/s) uuid=${uuid} err=${err?.code || ""} ${err?.message || ""}`
-                    );
-                }
             };
 
             r.data.on("end", () => done("end"));
@@ -4526,7 +4516,6 @@ class b1HANA {
         } catch (err) {
             if (err?.name === "CanceledError" || err?.code === "ERR_CANCELED") return;
 
-            console.log("getChatRecording error:", err?.code, err?.message);
             next(err);
         } finally {
             req.off("close", onClose);

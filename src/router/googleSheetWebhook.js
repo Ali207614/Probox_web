@@ -240,7 +240,7 @@ function buildLoosePhoneRegexFromLocal9(local9) {
 router.post('/webhook', basicAuth, async (req, res) => {
     try {
         const { sheetName } = req.body;
-
+        console.log('🔧 ALLOWED_STATUSES:', JSON.stringify(ALLOWED_STATUSES));
         if (sheetName !== 'Asosiy') {
             return res.status(200).json({ message: `Ignored — sheet "${sheetName}" is not Asosiy.` });
         }
