@@ -43,6 +43,7 @@ function startLeadAutoIgnoreCron() {
 
           const filter = {
               status: 'Active',
+              statusChangedAt: null,
               createdAt: { $lte: oneHourAgo },
               source: { $ne: 'Organika' },
           };
