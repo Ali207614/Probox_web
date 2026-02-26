@@ -267,7 +267,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
         const nextStart = nValue > 200 ? nValue - 200 : 1;
         const nextEnd = nextStart + 300;
 
-        console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd}`);
+        console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd} webhook`);
 
         /**
          * 2) Read Google Sheets

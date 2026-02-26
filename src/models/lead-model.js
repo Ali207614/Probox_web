@@ -113,6 +113,8 @@ const LeadSchema = new Schema(
         consideringBumped: { type: Boolean, default: false, index: true },
         consideringBumpedAt: { type: Date, default: null },
         consideringBumpedReason: { type: String, default: null },
+        bumpNotifiedAt:  { type: Date, default: null, index: true },
+        bumpEscalatedAt: { type: Date, default: null, index: true },
         // Lead status mapping (EN -> UZ)
 // Active          -> Yange lead
 // Blocked         -> Bloklangan
@@ -189,6 +191,21 @@ LeadSchema.index(
         },
     }
 );
+
+ LeadSchema.index({
+ status: 1,
+  consideringBumped: 1,
+   consideringBumpedAt: 1,
+   bumpNotifiedAt: 1,
+});
+
+LeadSchema.index({
+    status: 1,
+    consideringBumped: 1,
+    bumpNotifiedAt: 1,
+    bumpEscalatedAt: 1,
+});
+
 
 
 module.exports = model('Lead', LeadSchema);

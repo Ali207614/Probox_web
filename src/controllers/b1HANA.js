@@ -2465,6 +2465,8 @@ class b1HANA {
                 validData.consideringBumped = false;
                 validData.consideringBumpedAt = null;
                 validData.recallBumpedAt = null;
+                validData.bumpNotifiedAt = null
+                validData.bumpEscalatedAt = null
 
                 // Purchased / NoPurchase bo'lsa statusni o'zgartirmaymiz
                 if (!prevStatusHardLocked) {
@@ -2481,7 +2483,8 @@ class b1HANA {
                 validData.consideringBumped = false;
                 validData.consideringBumpedAt = null;
                 validData.recallBumpedAt = null;
-
+                validData.bumpNotifiedAt = null
+                validData.bumpEscalatedAt = null
                 // Purchased / NoPurchase bo'lsa statusni o'zgartirmaymiz
                 if (!prevStatusHardLocked) {
                     validData.status = 'Closed';
@@ -2634,6 +2637,8 @@ class b1HANA {
                 validData.consideringBumped = false;
                 validData.consideringBumpedAt = null;
                 validData.recallBumpedAt = null;
+                validData.bumpNotifiedAt = null
+                validData.bumpEscalatedAt = null
                 const keepRecallStatuses = new Set([
                     'FollowUp',
                     'WillVisitStore',

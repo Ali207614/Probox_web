@@ -1,15 +1,31 @@
+
 const { Schema, model } = require('mongoose');
 
-const UserSchema = new Schema(
+const userSchema = new Schema(
     {
-        CardCode: { type: String, required: false },
-        CardName: { type: String, required: false },
-        lat: { type: String, required: false },
-        long: { type: String, required: false },
+        fullName: { type: String },
+        chat_id: { type: Number, required: true, unique: true },
+        language: { type: String, default: 'uz' },
+        user_step: { type: Number, default: 0 },
+        back: [{ type: Schema.Types.Mixed, default: [] }],
+        select: { type: Schema.Types.Mixed, default: {} },
+        phone: { type: String },
+        admin: { type: Boolean, default: false },
+        status: { type: Boolean, default: false },
+        lastMessageId: { type: Number },
+
+        slpCode: { type: Number, default: null },
+        slpName: { type: String, default: null },
+        slpRole: { type: String, default: null },
+        slpBranch: { type: String, default: null },
     },
-    {
-        timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
-    }
+        { timestamps: true },
 );
 
-module.exports = model('User', UserSchema);
+userSchema.index({ phone: 1 }, { sparse: true });
+userSchema.index({ slpCode: 1 }, { sparse: true });
+userSchema.index({ language: 1 });
+userSchema.index({ user_step: 1 });
+
+
+module.exports = model('User', userSchema);

@@ -30,9 +30,6 @@ function startLeadBumpCron() {
                     { statuses: ['Missed', 'Ignored'], hours: 1, reason: 'MissedIgnored' },
                 ];
 
-
-
-
                 for (const rule of RULES) {
                     const cutoff = new Date(now.getTime() - rule.hours * 60 * 60 * 1000);
 

@@ -214,6 +214,8 @@ async function handleOnlinePbxPayload(payload , io) {
                 newTime: now,
                 consideringBumped: false,
                 consideringBumpedAt: null,
+                bumpNotifiedAt: null,
+                bumpEscalatedAt: null,
                 // pbx meta
                 'pbx.last_uuid': incomingUuid,
                 'pbx.last_event': payload?.event ?? null,
