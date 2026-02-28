@@ -72,7 +72,7 @@ startExpireLeadLimitsCron();
 startLeadBumpCron()
 startLeadAutoIgnoreCron()
 startLeadRecallBumpCron()
-//startLeadBumpNotifyCron()
+startLeadBumpNotifyCron()
 // === SERVER ===
 const port = PORT || 3019;
 server.listen(port, () => {

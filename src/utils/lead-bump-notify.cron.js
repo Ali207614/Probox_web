@@ -301,9 +301,9 @@ function startLeadBumpNotifyCron() {
                 const notified = await processNotifyStage(now);
 
                 // ✅ escalate yoqmoqchi bo'lsangiz uncomment qiling:
-                // const escalated = await processEscalateStage(now);
-                const escalated = 0;
-
+                const escalated = await processEscalateStage(now);
+                // const escalated = 0;
+                //
                 console.log(
                     `[CRON:bump-notify] done | now=${now.toISOString()} notified=${notified} escalated=${escalated}`
                 );
