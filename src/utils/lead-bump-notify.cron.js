@@ -23,7 +23,7 @@ const QA_MENTION_NAME = process.env.QA_MENTION_NAME || 'Aloqa markazi';
 
 // Batch size (xohlasangiz env bilan boshqaring)
 const NOTIFY_BATCH_SIZE = Number(process.env.BUMP_NOTIFY_BATCH_SIZE || 30);
-const ESCALATE_BATCH_SIZE = Number(process.env.BUMP_ESCALATE_BATCH_SIZE || 100);
+const ESCALATE_BATCH_SIZE = Number(process.env.BUMP_ESCALATE_BATCH_SIZE || 30);
 
 // ✅ Faqat shu sanadan boshlab yaratilgan leadlar ishlanadi
 const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE || '2025-02-01T00:00:00+05:00');
