@@ -8,6 +8,9 @@ const TZ = 'Asia/Tashkent';
 const RECALL_STATUSES = ['FollowUp', 'WillVisitStore', 'WillSendPassport'];
 const CRON_INTERVAL = '*/5 * * * *';
 
+// ✅ Faqat shu sanadan boshlab yaratilgan leadlar ishlanadi
+const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE || '2025-02-01T00:00:00+05:00');
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 /**
@@ -40,6 +43,9 @@ function shouldBump(lead, now) {
     // recallDate vaqti hali kelmagan
     if (now < recallDate) return false;
 
+    // ✅ Fevraldan oldingi leadlarni o'tkazib yuborish
+    if (recallDate < BUMP_MIN_DATE) return false;
+
     // Bu recallDate uchun allaqachon bump qilingan
     if (lead.recallBumpedAt) {
         const bumpedAt = new Date(lead.recallBumpedAt);
@@ -52,7 +58,8 @@ function shouldBump(lead, now) {
 }
 
 /**
- * DB query uchun: recallDate <= now VA (recallBumpedAt yo'q YOKI recallBumpedAt < recallDate)
+ * DB query uchun: recallDate <= now VA recallDate >= BUMP_MIN_DATE
+ * VA (recallBumpedAt yo'q YOKI recallBumpedAt < recallDate)
  * bo'lgan leadlarni topish.
  *
  * Nota: recallBumpedAt < recallDate sharti — recallDate o'zgarganda qayta bump qilish imkonini beradi.
@@ -60,7 +67,7 @@ function shouldBump(lead, now) {
 function buildFilter(now) {
     return {
         status: { $in: RECALL_STATUSES },
-        recallDate: { $ne: null, $lte: now },
+        recallDate: { $ne: null, $gte: BUMP_MIN_DATE, $lte: now }, // ✅ fevraldan boshlab
         $or: [
             { recallBumpedAt: { $exists: false } },
             { recallBumpedAt: null },
@@ -151,7 +158,7 @@ function startLeadRecallBumpCron() {
                     {
                         _id: { $in: ids },
                         status: { $in: RECALL_STATUSES },
-                        recallDate: { $ne: null, $lte: now },
+                        recallDate: { $ne: null, $gte: BUMP_MIN_DATE, $lte: now }, // ✅ fevraldan boshlab
                         $or: [
                             { recallBumpedAt: { $exists: false } },
                             { recallBumpedAt: null },

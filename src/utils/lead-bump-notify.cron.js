@@ -7,7 +7,7 @@ const User = require('../models/user-model'); // slpCode -> chat_id
 const bot = require('../bot');
 
 const TZ = 'Asia/Tashkent';
-const CRON_INTERVAL = '*/1 * * * *'; // har 1 daqiqada tekshiradi
+const CRON_INTERVAL = '*/2 * * * *'; // har 1 daqiqada tekshiradi
 
 const NOTIFY_DELAY_MS = 10 * 60 * 1000; // 10 daqiqa — operatorga eslatma
 const ESCALATE_DELAY_MS = 10 * 60 * 1000; // yana 10 daqiqa — escalation
@@ -17,9 +17,16 @@ const TARGET_STATUSES = ['FollowUp', 'Considering', 'WillVisitStore', 'WillSendP
 const QA_GROUP_CHAT_ID = process.env.QA_GROUP_CHAT_ID || null;
 const LEAD_LINK_BASE = process.env.LEAD_LINK_BASE || 'https://yourdomain.com/leads';
 
+// ─── Escalation mention (guruhda tag qilinadigan odam) ──────────────────────
+const QA_MENTION_USER_ID = process.env.QA_MENTION_USER_ID || null;
+const QA_MENTION_NAME = process.env.QA_MENTION_NAME || 'Aloqa markazi';
+
 // Batch size (xohlasangiz env bilan boshqaring)
 const NOTIFY_BATCH_SIZE = Number(process.env.BUMP_NOTIFY_BATCH_SIZE || 30);
 const ESCALATE_BATCH_SIZE = Number(process.env.BUMP_ESCALATE_BATCH_SIZE || 100);
+
+// ✅ Faqat shu sanadan boshlab yaratilgan leadlar ishlanadi
+const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE || '2025-02-01T00:00:00+05:00');
 
 // Status label
 const STATUS_LABELS = {
@@ -35,6 +42,18 @@ function buildLeadLink(leadId) {
     return `${LEAD_LINK_BASE}/${leadId}`;
 }
 
+/**
+ * Guruhda mention qilish uchun HTML tag yasaydi.
+ * Agar QA_MENTION_USER_ID berilgan bo'lsa — tg://user?id=... formatida,
+ * aks holda oddiy text.
+ */
+function buildMentionTag() {
+    if (QA_MENTION_USER_ID) {
+        return `<a href="tg://user?id=${QA_MENTION_USER_ID}">${QA_MENTION_NAME}</a>`;
+    }
+    return QA_MENTION_NAME;
+}
+
 async function sendTelegramMessage(chatId, text) {
     if (!chatId) return false;
     try {
@@ -47,9 +66,9 @@ async function sendTelegramMessage(chatId, text) {
 }
 
 /**
- * ✅ Faqat ulangan operatorlar (slpCode + chat_id bor) ro‘yxatini olamiz
- * - slpCode hozircha hamma joyda bo‘lmasligi mumkin, shuning uchun
- *   leadlarni ham faqat shu slpCode’lar bo‘yicha olamiz (aylanib qolmaydi)
+ * ✅ Faqat ulangan operatorlar (slpCode + chat_id bor) ro'yxatini olamiz
+ * - slpCode hozircha hamma joyda bo'lmasligi mumkin, shuning uchun
+ *   leadlarni ham faqat shu slpCode'lar bo'yicha olamiz (aylanib qolmaydi)
  */
 const OPS_CACHE_TTL_MS = Number(process.env.OPS_CACHE_TTL_MS || 5 * 60 * 1000); // 5 min
 let OPS_CACHE = { at: 0, slpCodes: [], opMap: new Map() };
@@ -121,8 +140,8 @@ async function processNotifyStage(now) {
     const filter = {
         status: { $in: TARGET_STATUSES },
         consideringBumped: true,
-        consideringBumpedAt: { $ne: null, $lte: cutoff },
-        operator: { $in: slpCodes }, // ✅ faqat bor slpCode’lar
+        consideringBumpedAt: { $ne: null, $gte: BUMP_MIN_DATE, $lte: cutoff },
+        operator: { $in: slpCodes }, // ✅ faqat bor slpCode'lar
         $or: [{ bumpNotifiedAt: { $exists: false } }, { bumpNotifiedAt: null }],
     };
 
@@ -141,7 +160,7 @@ async function processNotifyStage(now) {
     for (const lead of leads) {
         const operatorUser = opMap.get(Number(lead.operator)) || null;
 
-        // operator map’da bo‘lmasa (race condition bo‘lishi mumkin) -> skip, update yo‘q
+        // operator map'da bo'lmasa (race condition bo'lishi mumkin) -> skip, update yo'q
         if (!operatorUser?.chat_id) continue;
 
         const statusLabel = STATUS_LABELS[lead.status] || lead.status;
@@ -162,7 +181,7 @@ async function processNotifyStage(now) {
         chatEvents.push(buildNotifyChatEvent(lead, now, 'notify'));
     }
 
-    // ✅ faqat jo‘natilgan/ishlangan leadlar update bo‘ladi
+    // ✅ faqat jo'natilgan/ishlangan leadlar update bo'ladi
     if (idsToUpdate.length) {
         await LeadModel.updateMany(
             {
@@ -190,6 +209,7 @@ async function processEscalateStage(now) {
     const filter = {
         status: { $in: TARGET_STATUSES },
         consideringBumped: true,
+        consideringBumpedAt: { $gte: BUMP_MIN_DATE }, // ✅ faqat fevraldan boshlab
         operator: { $in: slpCodes },
         bumpNotifiedAt: { $ne: null, $lte: cutoff },
         $or: [{ bumpEscalatedAt: { $exists: false } }, { bumpEscalatedAt: null }],
@@ -207,6 +227,9 @@ async function processEscalateStage(now) {
     const chatEvents = [];
     const idsToUpdate = [];
 
+    // ✅ Mention tag — guruhda "Aloqa markazi" ni belgilab jo'natish uchun
+    const mentionTag = buildMentionTag();
+
     for (const lead of leads) {
         const operatorUser = opMap.get(Number(lead.operator)) || null;
         const operatorName = operatorUser?.fullName || `SlpCode: ${lead.operator}`;
@@ -215,9 +238,10 @@ async function processEscalateStage(now) {
         const link = buildLeadLink(lead._id);
         const clientInfo = lead.clientName || lead.clientPhone || lead.n || "Noma'lum";
 
+        // ✅ mentionTag qo'shildi — guruhda "Aloqa markazi" ni tag qiladi
         const escalationText =
             `🚨 <b>Escalation!</b>\n\n` +
-            `<b>${operatorName}</b> — <b>${statusLabel}</b> uchun kelgan leadga qayta aloqaga chiqmadi.\n\n` +
+            `${mentionTag}, <b>${operatorName}</b> — <b>${statusLabel}</b> uchun kelgan leadga qayta aloqaga chiqmadi.\n\n` +
             `👤 Mijoz: <b>${clientInfo}</b>\n` +
             `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n` +
             `⏱ Bump vaqti: ${
@@ -233,7 +257,7 @@ async function processEscalateStage(now) {
             if (sent) escalated++;
         }
 
-        // 2) Operatorga ikkinchi ogohlantirish (agar chat_id bo‘lsa)
+        // 2) Operatorga ikkinchi ogohlantirish (agar chat_id bo'lsa)
         if (operatorUser?.chat_id) {
             const warningText =
                 `🚨 <b>Ogohlantirish!</b>\n\n` +
@@ -276,7 +300,7 @@ function startLeadBumpNotifyCron() {
             try {
                 const notified = await processNotifyStage(now);
 
-                // ✅ escalate yoqmoqchi bo‘lsangiz uncomment qiling:
+                // ✅ escalate yoqmoqchi bo'lsangiz uncomment qiling:
                 // const escalated = await processEscalateStage(now);
                 const escalated = 0;
 

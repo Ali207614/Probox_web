@@ -4,17 +4,9 @@ const cron = require('node-cron');
 const LeadModel = require('../models/lead-model');
 const LeadChatModel = require('../models/lead-chat-model'); // ✅ history shu yerga
 
-// ✅ history uchun "qachondan beri" hisoblash (debugga ham foydali)
-function getSinceDate(lead) {
-    return (
-        lead.statusChangedAt ||
-        lead.newTime ||
-        lead.time ||
-        lead.createdAt ||
-        lead.updatedAt ||
-        null
-    );
-}
+// ✅ Faqat shu sanadan boshlab yaratilgan leadlar ishlanadi
+const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE || '2025-02-01T00:00:00+05:00');
+
 
 function startLeadBumpCron() {
     cron.schedule(
@@ -34,8 +26,10 @@ function startLeadBumpCron() {
                     const cutoff = new Date(now.getTime() - rule.hours * 60 * 60 * 1000);
 
                     // ✅ filter: statusChangedAt bo'lsa shuni oladi, bo'lmasa newTime/time
+                    // ✅ createdAt >= BUMP_MIN_DATE — faqat fevraldan keyingi leadlar
                     const filter = {
                         status: { $in: rule.statuses },
+                        createdAt: { $gte: BUMP_MIN_DATE }, // ✅ fevraldan boshlab
                         $expr: {
                             $lt: [
                                 {
@@ -140,7 +134,3 @@ function startLeadBumpCron() {
 }
 
 module.exports = { startLeadBumpCron };
-
-// Qayta aloqa
-// Do'konga boradi
-// Passport yuboradi

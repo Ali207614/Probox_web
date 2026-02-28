@@ -4,6 +4,8 @@ const cron = require('node-cron');
 const LeadModel = require('../models/lead-model');
 const LeadChatModel = require('../models/lead-chat-model');
 
+const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE || '2025-02-01T00:00:00+05:00');
+
 function getSinceDate(lead) {
   return lead.createdAt || lead.time || lead.newTime || lead.updatedAt || null;
 }
