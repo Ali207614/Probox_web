@@ -435,7 +435,6 @@ async function processClosedEscalation(now) {
 
     const filter = {
         status: CLOSED_STATUS,
-        operator: { $in: slpCodes },
         ...baseTimeMatch,
         $or: [{ closedEscalatedAt: { $exists: false } }, { closedEscalatedAt: null }],
     };
@@ -503,10 +502,6 @@ async function processClosedEscalation(now) {
         await LeadModel.updateMany(
             {
                 _id: { $in: idsToUpdate },
-                status: CLOSED_STATUS,
-                operator: { $in: slpCodes },
-                ...baseTimeMatch,
-                $or: [{ closedEscalatedAt: { $exists: false } }, { closedEscalatedAt: null }],
             },
             { $set: { closedEscalatedAt: now, updatedAt: now } },
         );
