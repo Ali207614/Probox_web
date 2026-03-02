@@ -14,6 +14,11 @@ const ESCALATE_DELAY_MS = 10 * 60 * 1000; // yana 10 daqiqa — escalation
 
 const TARGET_STATUSES = ['FollowUp', 'Considering', 'WillVisitStore', 'WillSendPassport'];
 
+// ─── NoPurchase sozlamalari ─────────────────────────────────────────────────
+const NO_PURCHASE_STATUS = 'NoPurchase';
+const NO_PURCHASE_DELAY_MS = Number(process.env.NO_PURCHASE_DELAY_MS || 10 * 60 * 1000); // 10 daqiqa
+const NO_PURCHASE_BATCH_SIZE = Number(process.env.NO_PURCHASE_BATCH_SIZE || 30);
+
 const QA_GROUP_CHAT_ID = process.env.QA_GROUP_CHAT_ID || null;
 const LEAD_LINK_BASE = process.env.LEAD_LINK_BASE || 'https://yourdomain.com/leads';
 
@@ -38,6 +43,7 @@ const STATUS_LABELS = {
     Considering: "O'ylab ko'radi",
     WillVisitStore: "Do'konga boradi",
     WillSendPassport: 'Passport yuboradi',
+    NoPurchase: "Xarid bo'lmadi",
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -106,7 +112,17 @@ async function getActiveOperatorsCached(force = false) {
 // ─── History ────────────────────────────────────────────────────────────────
 
 function buildNotifyChatEvent(lead, now, stage) {
-    const stageLabel = stage === 'escalate' ? "Bo'lim boshlig'iga escalation" : 'Operatorga eslatma';
+    const stageLabel = stage === 'escalate'
+        ? "Bo'lim boshlig'iga escalation"
+        : stage === 'no_purchase_escalate'
+            ? "Nazoratchiga escalation (Xarid bo'lmadi)"
+            : 'Operatorga eslatma';
+
+    const fieldName = stage === 'no_purchase_escalate'
+        ? 'noPurchaseEscalatedAt'
+        : stage === 'escalate'
+            ? 'bumpEscalatedAt'
+            : 'bumpNotifiedAt';
 
     return {
         leadId: lead._id,
@@ -117,7 +133,7 @@ function buildNotifyChatEvent(lead, now, stage) {
         message: `Tizim: ${stageLabel} jo'natildi — operator ${NOTIFY_DELAY_MS / 60000} daqiqa ichida aloqaga chiqmadi.`,
         changes: [
             {
-                field: stage === 'escalate' ? 'bumpEscalatedAt' : 'bumpNotifiedAt',
+                field: fieldName,
                 from: null,
                 to: now,
             },
@@ -299,6 +315,86 @@ async function processEscalateStage(now) {
     return escalated;
 }
 
+// ─── NoPurchase: Faqat nazoratchiga escalation ──────────────────────────────
+
+async function processNoPurchaseEscalation(now) {
+    if (!QA_GROUP_CHAT_ID) return 0;
+
+    const { slpCodes, opMap } = await getActiveOperatorsCached();
+    if (!slpCodes.length) return 0;
+
+    const cutoff = new Date(now.getTime() - NO_PURCHASE_DELAY_MS);
+
+    const filter = {
+        status: NO_PURCHASE_STATUS,
+        consideringBumped: true,
+        consideringBumpedAt: { $ne: null, $gte: BUMP_MIN_DATE, $lte: cutoff },
+        operator: { $in: slpCodes },
+        $or: [
+            { noPurchaseEscalatedAt: { $exists: false } },
+            { noPurchaseEscalatedAt: null },
+        ],
+    };
+
+    const leads = await LeadModel.find(filter)
+        .sort({ consideringBumpedAt: -1, _id: -1 })
+        .limit(NO_PURCHASE_BATCH_SIZE)
+        .select('_id n status operator clientName clientPhone consideringBumpedAt')
+        .lean();
+
+    if (!leads.length) return 0;
+
+    let escalated = 0;
+    const chatEvents = [];
+    const idsToUpdate = [];
+    const mentionTag = buildMentionTag();
+
+    for (const lead of leads) {
+        const operatorUser = opMap.get(Number(lead.operator)) || null;
+        const operatorName = operatorUser?.fullName || `SlpCode: ${lead.operator}`;
+
+        const link = buildLeadLink(lead._id);
+        const clientInfo = lead.clientName || lead.clientPhone || lead.n || "Noma'lum";
+
+        const text =
+            `🚨 <b>Xarid bo'lmadi — Nazorat!</b>\n\n` +
+            `${mentionTag}, <b>${operatorName}</b> — lead <b>"Xarid bo'lmadi"</b> statusiga o'tkazildi va ${NO_PURCHASE_DELAY_MS / 60000} daqiqa ichida ishlanmadi.\n\n` +
+            `👤 Mijoz: <b>${clientInfo}</b>\n` +
+            `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n` +
+            `⏱ Bump vaqti: ${
+                lead.consideringBumpedAt
+                    ? new Date(lead.consideringBumpedAt).toLocaleString('uz-UZ', { timeZone: TZ })
+                    : '—'
+            }\n\n` +
+            `Iltimos, sababini aniqlang!`;
+
+        const sent = await sendTelegramMessage(QA_GROUP_CHAT_ID, text);
+        if (sent) {
+            escalated++;
+            idsToUpdate.push(lead._id);
+            chatEvents.push(buildNotifyChatEvent(lead, now, 'no_purchase_escalate'));
+        }
+    }
+
+    if (idsToUpdate.length) {
+        await LeadModel.updateMany(
+            {
+                _id: { $in: idsToUpdate },
+                status: NO_PURCHASE_STATUS,
+                consideringBumped: true,
+                $or: [
+                    { noPurchaseEscalatedAt: { $exists: false } },
+                    { noPurchaseEscalatedAt: null },
+                ],
+            },
+            { $set: { noPurchaseEscalatedAt: now, updatedAt: now } }
+        );
+    }
+
+    await insertHistory(chatEvents);
+    return escalated;
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 function startLeadBumpNotifyCron() {
@@ -315,9 +411,10 @@ function startLeadBumpNotifyCron() {
             try {
                 const notified = await processNotifyStage(now);
                 const escalated = await processEscalateStage(now);
+                const noPurchase = await processNoPurchaseEscalation(now);
 
                 console.log(
-                    `[CRON:bump-notify] done | now=${now.toISOString()} notified=${notified} escalated=${escalated}`
+                    `[CRON:bump-notify] done | now=${now.toISOString()} notified=${notified} escalated=${escalated} noPurchase=${noPurchase}`
                 );
             } catch (err) {
                 console.error('[CRON:bump-notify] error:', err?.message || err);

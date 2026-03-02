@@ -115,6 +115,11 @@ const LeadSchema = new Schema(
         consideringBumpedReason: { type: String, default: null },
         bumpNotifiedAt:  { type: Date, default: null, index: true },
         bumpEscalatedAt: { type: Date, default: null, index: true },
+
+        sellerBumpNotifiedAt: { type: Date, default: null, index: true },
+        sellerBumpEscalatedAt: { type: Date, default: null, index: true },
+        sellerBumpNoSellerAt: { type: Date, default: null, index: true },
+        noPurchaseEscalatedAt: { type: Date, default: null, index: true },
         // Lead status mapping (EN -> UZ)
 // Active          -> Yange lead
 // Blocked         -> Bloklangan
