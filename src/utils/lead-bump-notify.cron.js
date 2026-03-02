@@ -417,22 +417,53 @@ async function processClosedEscalation(now) {
 
     const cutoff = new Date(now.getTime() - CLOSED_DELAY_MS);
 
-    const filter = {
-        status: CLOSED_STATUS,
-        consideringBumped: true,
-        consideringBumpedAt: { $ne: null, $gte: BUMP_MIN_DATE, $lte: cutoff },
-        operator: { $in: slpCodes },
+    // newTime bo'lsa shu bo'yicha, bo'lmasa time bo'yicha cutoff tekshiriladi
+    const baseTimeMatch = {
         $or: [
-            { closedEscalatedAt: { $exists: false } },
-            { closedEscalatedAt: null },
+            // ✅ newTime mavjud va cutoffdan oldin/ teng
+            { newTime: { $ne: null, $exists: true, $gte: BUMP_MIN_DATE, $lte: cutoff } },
+
+            // ✅ newTime yo'q yoki null => time cutoffdan oldin/ teng
+            {
+                $and: [
+                    { $or: [{ newTime: { $exists: false } }, { newTime: null }] },
+                    { time: { $ne: null, $exists: true, $gte: BUMP_MIN_DATE, $lte: cutoff } },
+                ],
+            },
         ],
     };
 
-    const leads = await LeadModel.find(filter)
-        .sort({ consideringBumpedAt: -1, _id: -1 })
-        .limit(CLOSED_BATCH_SIZE)
-        .select('_id n status operator clientName clientPhone consideringBumpedAt')
-        .lean();
+    const filter = {
+        status: CLOSED_STATUS,
+        operator: { $in: slpCodes },
+        ...baseTimeMatch,
+        $or: [{ closedEscalatedAt: { $exists: false } }, { closedEscalatedAt: null }],
+    };
+
+    // ✅ sort ham "newTime ?? time" bo'yicha bo'lsin (baseTime)
+    const leads = await LeadModel.aggregate([
+        { $match: filter },
+        {
+            $addFields: {
+                baseTime: { $ifNull: ['$newTime', '$time'] },
+            },
+        },
+        { $sort: { baseTime: -1, _id: -1 } },
+        { $limit: CLOSED_BATCH_SIZE },
+        {
+            $project: {
+                _id: 1,
+                n: 1,
+                status: 1,
+                operator: 1,
+                clientName: 1,
+                clientPhone: 1,
+                newTime: 1,
+                time: 1,
+                baseTime: 1,
+            },
+        },
+    ]);
 
     if (!leads.length) return 0;
 
@@ -448,15 +479,15 @@ async function processClosedEscalation(now) {
         const link = buildLeadLink(lead._id);
         const clientInfo = lead.clientName || lead.clientPhone || lead.n || "Noma'lum";
 
+        const baseTime = lead.baseTime || lead.newTime || lead.time;
+
         const text =
             `🚨 <b>Yopilgan lead — Nazorat!</b>\n\n` +
             `${mentionTag}, <b>${operatorName}</b> — lead <b>"Yopilgan"</b> statusiga o'tkazildi va ${CLOSED_DELAY_MS / 60000} daqiqa ichida ishlanmadi.\n\n` +
             `👤 Mijoz: <b>${clientInfo}</b>\n` +
             `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n` +
-            `⏱ Bump vaqti: ${
-                lead.consideringBumpedAt
-                    ? new Date(lead.consideringBumpedAt).toLocaleString('uz-UZ', { timeZone: TZ })
-                    : '—'
+            `⏱ Tayanch vaqt: ${
+                baseTime ? new Date(baseTime).toLocaleString('uz-UZ', { timeZone: TZ }) : '—'
             }\n\n` +
             `Iltimos, sababini aniqlang!`;
 
@@ -473,13 +504,11 @@ async function processClosedEscalation(now) {
             {
                 _id: { $in: idsToUpdate },
                 status: CLOSED_STATUS,
-                consideringBumped: true,
-                $or: [
-                    { closedEscalatedAt: { $exists: false } },
-                    { closedEscalatedAt: null },
-                ],
+                operator: { $in: slpCodes },
+                ...baseTimeMatch,
+                $or: [{ closedEscalatedAt: { $exists: false } }, { closedEscalatedAt: null }],
             },
-            { $set: { closedEscalatedAt: now, updatedAt: now } }
+            { $set: { closedEscalatedAt: now, updatedAt: now } },
         );
     }
 
