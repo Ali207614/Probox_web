@@ -435,8 +435,10 @@ async function processClosedEscalation(now) {
 
     const filter = {
         status: CLOSED_STATUS,
-        ...baseTimeMatch,
-        $or: [{ closedEscalatedAt: { $exists: false } }, { closedEscalatedAt: null }],
+        $and: [
+            baseTimeMatch,
+            { $or: [{ closedEscalatedAt: { $exists: false } }, { closedEscalatedAt: null }] },
+        ],
     };
 
     // ✅ sort ham "newTime ?? time" bo'yicha bo'lsin (baseTime)
