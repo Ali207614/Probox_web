@@ -26,7 +26,7 @@ const NOTIFY_BATCH_SIZE = Number(process.env.BUMP_NOTIFY_BATCH_SIZE || 30);
 const ESCALATE_BATCH_SIZE = Number(process.env.BUMP_ESCALATE_BATCH_SIZE || 30);
 
 // ✅ Faqat shu sanadan boshlab yaratilgan leadlar ishlanadi
-const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE || '2025-02-01T00:00:00+05:00');
+const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE_NOTIFY || '2026-03-01T00:00:00+05:00');
 
 // ─── Ish vaqti cheklovi ─────────────────────────────────────────────────────
 const WORK_HOUR_START = Number(process.env.WORK_HOUR_START || 9);  // 09:00

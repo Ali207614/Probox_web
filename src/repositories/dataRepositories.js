@@ -1069,8 +1069,7 @@ WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
     }
 
     getInstallmentPaymentsByPerson(cardCode) {
-        return `
-WITH base_bp AS (
+            return `WITH base_bp AS (
   SELECT
     NULLIF(TRIM(BP."U_jshshir"), '') AS "U_jshshir",
     NULLIF(TRIM(BP."Cellular"), '')  AS "Cellular"
@@ -1093,10 +1092,21 @@ bp_codes AS (
   WHERE B."U_jshshir" IS NULL
     AND B."Cellular" IS NOT NULL
     AND TRIM(BP3."Cellular") = B."Cellular"
+),
+
+inv1_agg AS (
+  SELECT
+    I1."DocEntry",
+    COUNT(*) AS "LineCount",
+    COUNT(DISTINCT I1."ItemCode") AS "ItemCount",
+    COALESCE(SUM(I1."Quantity"), 0) AS "TotalQty"
+  FROM ${this.db}.INV1 I1
+  GROUP BY I1."DocEntry"
 )
 
 SELECT
   T0."DocEntry",
+  T0."DocNum",
   T0."CardCode",
   T1."DueDate",
   T1."InsTotal",
@@ -1112,11 +1122,19 @@ SELECT
 
   COALESCE(SUM(T2."SumApplied"), 0) AS "SumApplied",
   MAX(T3."DocDate")  AS "DocDate",
-  MAX(T3."Canceled") AS "Canceled"
+  MAX(T3."Canceled") AS "Canceled",
+
+  -- ✅ INV1 dan tovar statistikasi
+  MAX(IAG."LineCount") AS "LineCount",
+  MAX(IAG."ItemCount") AS "ItemCount",
+  MAX(IAG."TotalQty")  AS "TotalQty"
 
 FROM ${this.db}.INV6 T1
 INNER JOIN ${this.db}.OINV T0
   ON T0."DocEntry" = T1."DocEntry"
+
+LEFT JOIN inv1_agg IAG
+  ON IAG."DocEntry" = T0."DocEntry"
 
 LEFT JOIN ${this.db}.RCT2 T2
   ON T2."DocEntry" = T0."DocEntry"
@@ -1143,12 +1161,12 @@ GROUP BY
   T0."CardCode",
   T1."InstlmntID",
   T1."DueDate",
-  T1."InsTotal"
+  T1."InsTotal",
+  T0."DocNum"
 
 ORDER BY
   T0."DocEntry",
-  T1."InstlmntID"
-  `;
+  T1."InstlmntID";`
     }
 
     getDistribution({ startDate, endDate, }) {

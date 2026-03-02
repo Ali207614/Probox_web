@@ -270,22 +270,109 @@ class b1HANA {
 
     getScore = async (req, res, next) => {
         try {
+            const { CardCode } = req.query;
 
-            const { CardCode } = req.query
-
-            if(!CardCode){
-                return res.status(400).json({
-                    message: 'CardCode is required'
-                });
+            if (!CardCode) {
+                return res.status(400).json({ message: 'CardCode is required' });
             }
+
             const score = await this.calculateLeadPaymentScore(CardCode);
 
-            res.json({
-                score
+            // ---------- helpers ----------
+            function toNum(v) {
+                if (v === null || v === undefined) return 0;
+                const n = Number(String(v).replace(',', '.'));
+                return Number.isFinite(n) ? n : 0;
+            }
+
+            function toInt(v) {
+                const n = parseInt(String(v ?? '0'), 10);
+                return Number.isFinite(n) ? n : 0;
+            }
+
+            function toDate(v) {
+                if (!v) return null;
+                const d = new Date(v);
+                return isNaN(d.getTime()) ? null : d;
+            }
+
+            function formatDate(d) {
+                if (!d) return null;
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+
+            // ---------- group by DocEntry ----------
+            const groupedMap = new Map();
+
+            for (const r of score.rows ?? []) {
+                const key = toInt(r.DocEntry);
+                if (!groupedMap.has(key)) groupedMap.set(key, []);
+                groupedMap.get(key).push(r);
+            }
+
+            const groupedRows = Array.from(groupedMap.values()).map((rows) => {
+                rows.sort((a, b) => toInt(a.InstlmntID) - toInt(b.InstlmntID));
+                const first = rows[0];
+
+                // months
+                const months = rows.length;
+
+                // last due date
+                let lastDue = null;
+                for (const r of rows) {
+                    const d = toDate(r.DueDate);
+                    if (d && (!lastDue || d > lastDue)) lastDue = d;
+                }
+
+                // totals (bir xil bo'ladi, shuning uchun first dan olamiz)
+                const totalToPay = toNum(first.Total);
+                const totalPaid = toNum(first.TotalPaid);
+                const remaining = totalToPay - totalPaid;
+
+                // products info (DocEntry bo'yicha inv1_agg bir xil bo'ladi)
+                const lineCount = toInt(first.LineCount);
+                const itemCount = toInt(first.ItemCount);
+                const totalQty = toNum(first.TotalQty);
+
+                return {
+                    DocEntry: toInt(first.DocEntry),
+                    DocNum: toInt(first.DocNum),
+                    CardCode: first.CardCode,
+
+                    months, // ✅ nechi oyga olgani
+                    lastDueDate: formatDate(lastDue), // ✅ eng oxirgi DueDate
+
+                    totalToPay, // ✅ to'lashi kerak bo'lgan pul
+                    totalPaid,  // ✅ to'lagan pul
+                    remaining,  // ✅ qolgan qarz
+
+                    // ✅ nechta mahsulot borligi
+                    LineCount: lineCount, // nechta qator
+                    ItemCount: itemCount, // nechta turdagi mahsulot
+                    TotalQty: totalQty,   // jami dona
+                    status: totalPaid === totalToPay ? 'Closed' : "Processing",
+                    // xohlasangiz: oyma-oy detail qolsin
+                    installments: rows.map((r) => ({
+                        InstlmntID: toInt(r.InstlmntID),
+                        DueDate: r.DueDate,
+                        InsTotal: toNum(r.InsTotal),
+                        SumApplied: toNum(r.SumApplied),
+                        paymentDocDate: r.DocDate,
+                        paymentCanceled: r.Canceled,
+                    })),
+                };
             });
-            return
-        }
-        catch (e) {
+
+            return res.json({
+                score: {
+                    ...score,
+                    rows: groupedRows, // ✅ endi rows grouped
+                },
+            });
+        } catch (e) {
             next(e);
         }
     };
@@ -2005,7 +2092,12 @@ class b1HANA {
                 totalPaid: 0,
                 overdueDebt: 0,
                 maxDelay: 0,
-                avgPaymentDelay: 0
+                avgPaymentDelay: 0,
+                internalScore:0,
+                trustLabel:"xavfli",
+                limit:0,
+                monthlyLimit: Math.floor(0 / 12),
+                rows
             };
         }
 
@@ -2171,7 +2263,8 @@ class b1HANA {
             internalScore,
             trustLabel,   // "xavfli" | "xavfsiz"
             limit,
-            monthlyLimit: Math.floor(limit / 12)
+            monthlyLimit: Math.floor(limit / 12),
+            rows
         };
     };
 
