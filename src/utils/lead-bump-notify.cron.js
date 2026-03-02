@@ -19,6 +19,10 @@ const NO_PURCHASE_STATUS = 'NoPurchase';
 const NO_PURCHASE_DELAY_MS = Number(process.env.NO_PURCHASE_DELAY_MS || 10 * 60 * 1000); // 10 daqiqa
 const NO_PURCHASE_BATCH_SIZE = Number(process.env.NO_PURCHASE_BATCH_SIZE || 30);
 
+const CLOSED_STATUS = 'Closed';
+const CLOSED_DELAY_MS = Number(process.env.CLOSED_DELAY_MS || 10 * 60 * 1000);
+const CLOSED_BATCH_SIZE = Number(process.env.CLOSED_BATCH_SIZE || 30);
+
 const QA_GROUP_CHAT_ID = process.env.QA_GROUP_CHAT_ID || null;
 const LEAD_LINK_BASE = process.env.LEAD_LINK_BASE || 'https://yourdomain.com/leads';
 
@@ -44,6 +48,7 @@ const STATUS_LABELS = {
     WillVisitStore: "Do'konga boradi",
     WillSendPassport: 'Passport yuboradi',
     NoPurchase: "Xarid bo'lmadi",
+    Closed: 'Yopilgan',
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -116,13 +121,17 @@ function buildNotifyChatEvent(lead, now, stage) {
         ? "Bo'lim boshlig'iga escalation"
         : stage === 'no_purchase_escalate'
             ? "Nazoratchiga escalation (Xarid bo'lmadi)"
-            : 'Operatorga eslatma';
+            : stage === 'closed_escalate'
+                ? "Nazoratchiga escalation (Yopilgan)"
+                : 'Operatorga eslatma';
 
     const fieldName = stage === 'no_purchase_escalate'
         ? 'noPurchaseEscalatedAt'
-        : stage === 'escalate'
-            ? 'bumpEscalatedAt'
-            : 'bumpNotifiedAt';
+        : stage === 'closed_escalate'
+            ? 'closedEscalatedAt'
+            : stage === 'escalate'
+                ? 'bumpEscalatedAt'
+                : 'bumpNotifiedAt';
 
     return {
         leadId: lead._id,
@@ -397,6 +406,87 @@ async function processNoPurchaseEscalation(now) {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
+
+// ─── Closed: Faqat nazoratchiga escalation ──────────────────────────────────
+
+async function processClosedEscalation(now) {
+    if (!QA_GROUP_CHAT_ID) return 0;
+
+    const { slpCodes, opMap } = await getActiveOperatorsCached();
+    if (!slpCodes.length) return 0;
+
+    const cutoff = new Date(now.getTime() - CLOSED_DELAY_MS);
+
+    const filter = {
+        status: CLOSED_STATUS,
+        consideringBumped: true,
+        consideringBumpedAt: { $ne: null, $gte: BUMP_MIN_DATE, $lte: cutoff },
+        operator: { $in: slpCodes },
+        $or: [
+            { closedEscalatedAt: { $exists: false } },
+            { closedEscalatedAt: null },
+        ],
+    };
+
+    const leads = await LeadModel.find(filter)
+        .sort({ consideringBumpedAt: -1, _id: -1 })
+        .limit(CLOSED_BATCH_SIZE)
+        .select('_id n status operator clientName clientPhone consideringBumpedAt')
+        .lean();
+
+    if (!leads.length) return 0;
+
+    let escalated = 0;
+    const chatEvents = [];
+    const idsToUpdate = [];
+    const mentionTag = buildMentionTag();
+
+    for (const lead of leads) {
+        const operatorUser = opMap.get(Number(lead.operator)) || null;
+        const operatorName = operatorUser?.fullName || `SlpCode: ${lead.operator}`;
+
+        const link = buildLeadLink(lead._id);
+        const clientInfo = lead.clientName || lead.clientPhone || lead.n || "Noma'lum";
+
+        const text =
+            `🚨 <b>Yopilgan lead — Nazorat!</b>\n\n` +
+            `${mentionTag}, <b>${operatorName}</b> — lead <b>"Yopilgan"</b> statusiga o'tkazildi va ${CLOSED_DELAY_MS / 60000} daqiqa ichida ishlanmadi.\n\n` +
+            `👤 Mijoz: <b>${clientInfo}</b>\n` +
+            `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n` +
+            `⏱ Bump vaqti: ${
+                lead.consideringBumpedAt
+                    ? new Date(lead.consideringBumpedAt).toLocaleString('uz-UZ', { timeZone: TZ })
+                    : '—'
+            }\n\n` +
+            `Iltimos, sababini aniqlang!`;
+
+        const sent = await sendTelegramMessage(QA_GROUP_CHAT_ID, text);
+        if (sent) {
+            escalated++;
+            idsToUpdate.push(lead._id);
+            chatEvents.push(buildNotifyChatEvent(lead, now, 'closed_escalate'));
+        }
+    }
+
+    if (idsToUpdate.length) {
+        await LeadModel.updateMany(
+            {
+                _id: { $in: idsToUpdate },
+                status: CLOSED_STATUS,
+                consideringBumped: true,
+                $or: [
+                    { closedEscalatedAt: { $exists: false } },
+                    { closedEscalatedAt: null },
+                ],
+            },
+            { $set: { closedEscalatedAt: now, updatedAt: now } }
+        );
+    }
+
+    await insertHistory(chatEvents);
+    return escalated;
+}
+
 function startLeadBumpNotifyCron() {
     cron.schedule(
         CRON_INTERVAL,
@@ -412,9 +502,10 @@ function startLeadBumpNotifyCron() {
                 const notified = await processNotifyStage(now);
                 const escalated = await processEscalateStage(now);
                 const noPurchase = await processNoPurchaseEscalation(now);
+                const closed = await processClosedEscalation(now);
 
                 console.log(
-                    `[CRON:bump-notify] done | now=${now.toISOString()} notified=${notified} escalated=${escalated} noPurchase=${noPurchase}`
+                    `[CRON:bump-notify] done | now=${now.toISOString()} notified=${notified} escalated=${escalated} noPurchase=${noPurchase} closed=${closed}`
                 );
             } catch (err) {
                 console.error('[CRON:bump-notify] error:', err?.message || err);

@@ -120,6 +120,8 @@ const LeadSchema = new Schema(
         sellerBumpEscalatedAt: { type: Date, default: null, index: true },
         sellerBumpNoSellerAt: { type: Date, default: null, index: true },
         noPurchaseEscalatedAt: { type: Date, default: null, index: true },
+        closedEscalatedAt: { type: Date, default: null, index: true },
+
         // Lead status mapping (EN -> UZ)
 // Active          -> Yange lead
 // Blocked         -> Bloklangan
