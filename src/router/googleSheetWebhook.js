@@ -14,8 +14,41 @@ const LeadChat = require('../models/lead-chat-model');
 const DataRepositories = require('../repositories/dataRepositories');
 const b1Controller = require('../controllers/b1HANA');
 const { ALLOWED_STATUSES } = require('../config');
+const bot = require("../bot");
 
 const router = express.Router();
+
+const PERSONAL_CHAT_ID = Number(process.env.PERSONAL_CHAT_ID || process.env.PERSONAL_CHATID || 0);
+
+function chunkText(text, size = 3500) {
+    const s = String(text ?? '');
+    const out = [];
+    for (let i = 0; i < s.length; i += size) out.push(s.slice(i, i + size));
+    return out;
+}
+
+async function tgLog(text, extra = null) {
+    if (!PERSONAL_CHAT_ID) return;
+    try {
+        let msg = `🧩 <b>WEBHOOK</b>\n${String(text ?? '')}`;
+        if (extra !== null && extra !== undefined) {
+            let payload = '';
+            try {
+                payload = JSON.stringify(extra, null, 2);
+            } catch {
+                payload = String(extra);
+            }
+            msg += `\n\n<pre>${payload}</pre>`;
+        }
+
+        const parts = chunkText(msg);
+        for (const p of parts) {
+            await bot.sendMessage(PERSONAL_CHAT_ID, p, { parse_mode: 'HTML' });
+        }
+    } catch (err) {
+        console.error('[TG_LOG] send failed:', err?.message || err);
+    }
+}
 
 /**
  * =========================
@@ -238,27 +271,28 @@ function buildLoosePhoneRegexFromLocal9(local9) {
  * =========================
  */
 router.post('/webhook', basicAuth, async (req, res) => {
+    const startedAt = Date.now();
+
     try {
         const { sheetName } = req.body;
-        console.log('🔧 ALLOWED_STATUSES:', JSON.stringify(ALLOWED_STATUSES));
+
+        await tgLog('✅ Webhook request keldi', {
+            sheetName,
+            bodyKeys: Object.keys(req.body || {}),
+            ip: req.ip,
+            ua: req.headers['user-agent'],
+        });
+
         if (sheetName !== 'Asosiy') {
+            await tgLog(`ℹ️ Ignored — sheet "${sheetName}" is not Asosiy`);
             return res.status(200).json({ message: `Ignored — sheet "${sheetName}" is not Asosiy.` });
         }
 
-        /**
-         * 1) Find last lead "n" (numeric)
-         */
+        // 1) lastLead uniqueId topish
+        await tgLog('1) Mongo: lastLead uniqueId qidirilyapti...');
         const [lastLead] = await LeadModel.aggregate([
-            {
-                $match: {
-                    uniqueId: { $type: 'string', $regex: /^\d+$/ },
-                },
-            },
-            {
-                $addFields: {
-                    uniqueIdNumeric: { $toLong: '$uniqueId' },
-                },
-            },
+            { $match: { uniqueId: { $type: 'string', $regex: /^\d+$/ } } },
+            { $addFields: { uniqueIdNumeric: { $toLong: '$uniqueId' } } },
             { $sort: { uniqueIdNumeric: -1 } },
             { $limit: 1 },
         ]);
@@ -267,11 +301,10 @@ router.post('/webhook', basicAuth, async (req, res) => {
         const nextStart = nValue > 200 ? nValue - 200 : 1;
         const nextEnd = nextStart + 300;
 
-        console.log(`🔍 Checking new rows from ${nextStart} to ${nextEnd} webhook`);
+        await tgLog('✅ lastLead topildi', { nValue, nextStart, nextEnd });
 
-        /**
-         * 2) Read Google Sheets
-         */
+        // 2) Google sheets o‘qish
+        await tgLog('2) Google Sheets: auth + values.get...');
         const auth = new GoogleAuth({
             keyFile: path.resolve(SA_KEY_PATH),
             scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
@@ -286,17 +319,26 @@ router.post('/webhook', basicAuth, async (req, res) => {
         });
 
         const rows = response.data.values || [];
+        await tgLog('✅ Sheets data olindi', { range, rowsCount: rows.length });
+
         if (!rows.length) {
-            console.log('⚠️ No new rows found.');
+            await tgLog('⚠️ No new rows found (rows.length=0)');
             return res.status(200).json({ message: 'No new rows detected.' });
         }
 
-
+        // 3) operatorlar (SAP)
+        await tgLog('3) SAP: operators olinmoqda...');
         const query = DataRepositories.getSalesPersons({ include: ['Operator1'] });
         const operators = await b1Controller.execute(query);
+        await tgLog('✅ Operators olindi', { operatorsCount: operators?.length || 0 });
+
+        // 4) bugungi balans
+        await tgLog('4) Mongo: operatorBalance hisoblanmoqda...');
         const operatorBalance = await getOperatorBalance(operators);
+        await tgLog('✅ operatorBalance tayyor', { sample: Object.entries(operatorBalance).slice(0, 10) });
 
-
+        // 5) rows -> leads
+        await tgLog('5) Rows parse: leads tayyorlanmoqda...');
         const leads = [];
 
         for (let i = 0; i < rows.length; i++) {
@@ -308,13 +350,11 @@ router.post('/webhook', basicAuth, async (req, res) => {
             const source = String(row[2] || '').trim();
 
             let operator = null;
-
             if (source !== 'Organika') {
                 const availableOperators = operators.filter((item) => {
                     const days = parseWorkDays(get(item, 'U_workDay', ''));
                     return days.includes(weekday);
                 });
-
                 operator = pickLeastLoadedOperator(availableOperators, operatorBalance);
             }
 
@@ -333,7 +373,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
             leads.push({
                 n: rowNumber,
                 clientName,
-                clientPhone, // local 9 digits
+                clientPhone,
                 source,
                 uniqueId: uniqueCandidate >= MIN_COUNT_EXCEL ? String(row[6]) : null,
                 time: new Date(),
@@ -342,14 +382,15 @@ router.post('/webhook', basicAuth, async (req, res) => {
             });
         }
 
+        await tgLog('✅ Leads parsed', { leadsCount: leads.length });
+
         if (!leads.length) {
-            console.log('⚠️ No valid leads after normalization.');
+            await tgLog('⚠️ No valid leads after normalization (leads.length=0)');
             return res.status(200).json({ message: 'No valid leads.' });
         }
 
-        /**
-         * 5) SAP: match phone -> CardCode/CardName
-         */
+        // 6) SAP: phone -> CardCode/CardName match
+        await tgLog('6) SAP: phone -> CardCode match...');
         const phones = leads.map((l) => l.clientPhone).filter(Boolean);
         const existingMap = new Map();
 
@@ -362,6 +403,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
       `;
 
             const existingRecords = await b1Controller.execute(sapQuery);
+            await tgLog('✅ SAP existingRecords olindi', { count: existingRecords?.length || 0 });
 
             for (const r of existingRecords) {
                 const phone = digitsOnly(r.Phone1 || r.Phone2 || '');
@@ -369,22 +411,22 @@ router.post('/webhook', basicAuth, async (req, res) => {
             }
         }
 
+        let matched = 0;
         for (const lead of leads) {
             const cleanPhone = digitsOnly(lead.clientPhone);
             const found = existingMap.get(cleanPhone);
-
             if (found) {
+                matched++;
                 lead.cardCode = found.CardCode;
                 lead.cardName = found.CardName;
             }
         }
+        await tgLog('✅ CardCode matched', { matched });
 
-        /**
-         * 6) Insert leads with dedup (phone-based)
-         */
+        // 7) Mongo insert + dedup
+        await tgLog('7) Mongo: insert + dedup boshlandi...');
         const inserted = [];
         const eventDocs = [];
-
         const sinceDedup = new Date(Date.now() - DEDUP_WINDOW_MS);
 
         for (const lead of leads) {
@@ -392,17 +434,14 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 const normalizedPhone = normalizePhone(lead.clientPhone);
                 if (!normalizedPhone) continue;
 
-                const { candidates: phoneCandidates, legacyRegex ,local9} =
-                    buildPhoneCandidates(normalizedPhone);
-
+                const { candidates: phoneCandidates, legacyRegex, local9 } = buildPhoneCandidates(normalizedPhone);
                 const looseRegex = buildLoosePhoneRegexFromLocal9(local9);
 
                 const dedupFilter = buildDedupFilter({
                     sinceDedup,
                     phoneCandidates,
                     legacyRegex,
-                    looseRegex
-                    // source: lead.source, // agar dedup source bo‘yicha ham bo‘lsin desangiz oching
+                    looseRegex,
                 });
 
                 const existing = await LeadModel.findOne(dedupFilter).select('_id').lean();
@@ -410,16 +449,10 @@ router.post('/webhook', basicAuth, async (req, res) => {
                 if (existing) {
                     await LeadModel.updateOne(
                         { _id: existing._id },
-                        {
-                            $set: {
-                                newTime: lead.time,          // parsedTime
-                            },
-                        },
+                        { $set: { newTime: lead.time } },
                     );
-
                     continue;
                 }
-
 
                 lead.createdAt = new Date();
                 const createdLead = await LeadModel.create(lead);
@@ -432,11 +465,9 @@ router.post('/webhook', basicAuth, async (req, res) => {
                     leadId: createdLead._id,
                     type: 'event',
                     action: 'lead_created',
-
                     createdBy,
                     createdByRole,
                     isSystem: false,
-
                     message: `Lead created (${createdLead.source})`,
                     changes: [
                         { field: 'source', from: null, to: createdLead.source ?? null },
@@ -449,29 +480,51 @@ router.post('/webhook', basicAuth, async (req, res) => {
                     operatorTo: createdLead.operator ?? null,
                 });
             } catch (err) {
-                if (err?.code === 11000) console.warn('Duplicate skipped:', lead.n);
-                else throw err;
+                if (err?.code === 11000) {
+                    console.warn('Duplicate skipped:', lead.n);
+                } else {
+                    await tgLog('❌ Lead insert error', { err: err?.message || err, lead });
+                    throw err;
+                }
             }
         }
 
+        await tgLog('✅ Insert finished', { insertedCount: inserted.length, eventDocsCount: eventDocs.length });
+
         if (eventDocs.length) {
             await LeadChat.insertMany(eventDocs);
+            await tgLog('✅ LeadChat insertMany done', { count: eventDocs.length });
         }
 
-        /**
-         * 7) socket emit
-         */
+        // 8) socket emit
         const io = req.app.get('io');
         if (io && inserted.length > 0) {
-            io.emit('new_leads', inserted); // array
+            io.emit('new_leads', inserted);
+            await tgLog('✅ Socket emitted: new_leads', { inserted: inserted.length });
         }
 
-        console.log(`📥 ${inserted.length} new rows inserted successfully.`);
+        const ms = Date.now() - startedAt;
+        await tgLog(`🎉 DONE: Inserted ${inserted.length} leads`, { durationMs: ms });
+
         return res.status(200).json({ message: `Inserted ${inserted.length} new rows.` });
     } catch (error) {
+        await tgLog('🔥 WEBHOOK ERROR', { message: error?.message || String(error), stack: error?.stack });
         console.error('❌ Webhook error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 });
+
+
+async function sendTelegramMessage(chatId, text) {
+    if (!chatId) return false;
+    try {
+        await bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
+        return true;
+    } catch (err) {
+        console.error(`[CRON:bump-notify] TG send error (chat_id=${chatId}):`, err?.message || err);
+        return false;
+    }
+}
+
 
 module.exports = router;
