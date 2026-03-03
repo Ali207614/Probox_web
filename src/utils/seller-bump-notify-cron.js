@@ -101,7 +101,7 @@ function buildChatEvent(lead, now, stage) {
     const labels = {
         notify: 'Sellerga eslatma',
         escalate: "Bo'lim boshlig'iga escalation",
-        no_seller: 'Seller biriktirilmagan — guruhga yuborildi',
+        no_seller: 'Sotuvchi biriktirilmagan — guruhga yuborildi',
     };
 
     const delayLabel =
@@ -170,7 +170,7 @@ async function processNoSellerStage(now) {
     const leads = await LeadModel.find(filter)
         .sort({ updatedAt: -1, _id: -1 })
         .limit(NO_SELLER_BATCH_SIZE)
-        .select('_id n status operator clientName clientPhone updatedAt')
+        .select('_id n status operator clientName clientPhone updatedAt time newTime')
         .lean();
 
     if (!leads.length) return 0;
@@ -184,10 +184,15 @@ async function processNoSellerStage(now) {
         const link = buildLeadLink(lead._id);
         const clientInfo = lead.clientName || lead.clientPhone || lead.n || "Noma'lum";
 
+        const timeStr = lead.time ? new Date(lead.time).toLocaleString('uz-UZ', { timeZone: TZ }) : '—';
+        const newTimeStr = lead.newTime ? new Date(lead.newTime).toLocaleString('uz-UZ', { timeZone: TZ }) : '—';
+
         const text =
-            `⚠️ <b>Seller biriktirilmagan!</b>\n\n` +
+            `⚠️ <b>Sotuvchi biriktirilmagan!</b>\n\n` +
             `${mentionTag}, <b>${STATUS_LABEL}</b> statusidagi leadga ${SELLER_NOTIFY_DELAY_MS / 3600000} soat davomida seller biriktirilmagan.\n\n` +
             `👤 Mijoz: <b>${clientInfo}</b>\n` +
+            `🕒 Time: <b>${timeStr}</b>\n` +
+            `🕘 NewTime: <b>${newTimeStr}</b>\n` +
             `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n\n` +
             `Iltimos, seller biriktiring!`;
 
