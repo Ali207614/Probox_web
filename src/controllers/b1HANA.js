@@ -895,7 +895,8 @@ class b1HANA {
                 passportVisit,
                 callCount2,
                 callCount,
-                rejectionReason
+                rejectionReason,
+                consideringBumped
             } = req.query;
 
             const filter = {};
@@ -1013,6 +1014,7 @@ class b1HANA {
             parseYesNoUnmarked(aliment, 'aliment');
             parseYesNoUnmarked(finalLimit, 'finalLimit', true);
             parseYesNoUnmarked(meetingHappened, 'meetingHappened');
+            parseYesNoUnmarked(consideringBumped, 'consideringBumped');
 
             if(isBlocked){
                 if(isBlocked === 'yes'){
