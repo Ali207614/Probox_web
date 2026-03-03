@@ -170,7 +170,7 @@ async function handleOnlinePbxPayload(payload , io) {
         const shouldCountEnd = isCallEnd && incomingUuid && incomingUuid !== prevCountedUuid;
 
         // outbound call_end & no talk => NoAnswer
-        const isNoAnswerOutboundEnd = isOutbound && isCallEnd && !hasTalk;
+        const isNoAnswerOutboundEnd = isCallEnd && !hasTalk;
         const shouldMoveToNoAnswer = isNoAnswerOutboundEnd;
 
         // ✅ NEW: call_end + talk bo'lsa — status restore (Missed/NoAnswer bo'lmasa)
