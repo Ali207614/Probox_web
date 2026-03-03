@@ -5,7 +5,7 @@ const LeadModel = require('../models/lead-model');
 const LeadChatModel = require('../models/lead-chat-model'); // ✅ history shu yerga
 
 // ✅ Faqat shu sanadan boshlab yaratilgan leadlar ishlanadi
-const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE || '2025-02-01T00:00:00+05:00');
+const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE || '2026-02-01T00:00:00+05:00');
 
 
 function startLeadBumpCron() {
