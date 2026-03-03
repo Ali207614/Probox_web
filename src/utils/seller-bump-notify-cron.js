@@ -232,18 +232,32 @@ async function processNotifyStage(now) {
 
     const filter = {
         status: TARGET_STATUS,
-        updatedAt: { $gte: BUMP_MIN_DATE, $lte: cutoff },
         seller: { $ne: null, $nin: [''] },
-        $or: [
-            { sellerBumpNotifiedAt: { $exists: false } },
-            { sellerBumpNotifiedAt: null },
-        ],
+        $or: [{ sellerBumpNotifiedAt: { $exists: false } }, { sellerBumpNotifiedAt: null }],
+
+        // ✅ statusga o‘tgan vaqt (statusChangedAt) bo‘yicha ishlaydi
+        $expr: {
+            $and: [
+                {
+                    $gte: [
+                        { $ifNull: ['$statusChangedAt', { $ifNull: ['$newTime', '$time'] }] },
+                        BUMP_MIN_DATE,
+                    ],
+                },
+                {
+                    $lte: [
+                        { $ifNull: ['$statusChangedAt', { $ifNull: ['$newTime', '$time'] }] },
+                        cutoff,
+                    ],
+                },
+            ],
+        },
     };
 
     const leads = await LeadModel.find(filter)
-        .sort({ updatedAt: -1, _id: -1 })
+        .sort({ _id: -1 })
         .limit(NOTIFY_BATCH_SIZE)
-        .select('_id n status seller operator clientName clientPhone updatedAt')
+        .select('_id n status seller operator clientName clientPhone time newTime statusChangedAt')
         .lean();
 
     if (!leads.length) return 0;
@@ -254,18 +268,18 @@ async function processNotifyStage(now) {
 
     for (const lead of leads) {
         const sellerUser = sellerMap.get(String(lead.seller)) || null;
-
-        if (!sellerUser?.chat_id) {
-            // Seller bor lekin chat_id yo'q — skip (yoki keyingi iteratsiyada no_seller emas)
-            continue;
-        }
+        if (!sellerUser?.chat_id) continue;
 
         const link = buildLeadLink(lead._id);
         const clientInfo = lead.clientName || lead.clientPhone || lead.n || "Noma'lum";
 
+        const baseAt = lead.statusChangedAt || lead.newTime || lead.time || null;
+        const baseAtStr = baseAt ? new Date(baseAt).toLocaleString('uz-UZ', { timeZone: TZ }) : '—';
+
         const text =
             `⚠️ <b>Eslatma!</b>\n\n` +
-            `<b>${STATUS_LABEL}</b> statusidagi lead ${SELLER_NOTIFY_DELAY_MS / 3600000} soat ichida ishlanmadi.\n\n` +
+            `<b>${STATUS_LABEL}</b> statusiga o‘tganiga ${SELLER_NOTIFY_DELAY_MS / 3600000} soat bo‘ldi.\n` +
+            `🕒 Status vaqti: <b>${baseAtStr}</b>\n\n` +
             `👤 Mijoz: <b>${clientInfo}</b>\n` +
             `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n\n` +
             `Iltimos, tezroq aloqaga chiqing!`;
@@ -284,10 +298,7 @@ async function processNotifyStage(now) {
                 _id: { $in: idsToUpdate },
                 status: TARGET_STATUS,
                 seller: { $ne: null, $nin: [''] },
-                $or: [
-                    { sellerBumpNotifiedAt: { $exists: false } },
-                    { sellerBumpNotifiedAt: null },
-                ],
+                $or: [{ sellerBumpNotifiedAt: { $exists: false } }, { sellerBumpNotifiedAt: null }],
             },
             { $set: { sellerBumpNotifiedAt: now, updatedAt: now } }
         );
@@ -306,19 +317,23 @@ async function processEscalateStage(now) {
 
     const filter = {
         status: TARGET_STATUS,
-        updatedAt: { $gte: BUMP_MIN_DATE },
         seller: { $ne: null, $nin: [''] },
         sellerBumpNotifiedAt: { $ne: null, $lte: cutoff },
-        $or: [
-            { sellerBumpEscalatedAt: { $exists: false } },
-            { sellerBumpEscalatedAt: null },
-        ],
+        $or: [{ sellerBumpEscalatedAt: { $exists: false } }, { sellerBumpEscalatedAt: null }],
+
+        // ✅ faqat BUMP_MIN_DATE dan keyin statusga o‘tgan leadlar
+        $expr: {
+            $gte: [
+                { $ifNull: ['$statusChangedAt', { $ifNull: ['$newTime', '$time'] }] },
+                BUMP_MIN_DATE,
+            ],
+        },
     };
 
     const leads = await LeadModel.find(filter)
         .sort({ sellerBumpNotifiedAt: -1, _id: -1 })
         .limit(ESCALATE_BATCH_SIZE)
-        .select('_id n status seller operator clientName clientPhone updatedAt sellerBumpNotifiedAt')
+        .select('_id n status seller operator clientName clientPhone time newTime statusChangedAt sellerBumpNotifiedAt')
         .lean();
 
     if (!leads.length) return 0;
@@ -336,17 +351,15 @@ async function processEscalateStage(now) {
         const clientInfo = lead.clientName || lead.clientPhone || lead.n || "Noma'lum";
         const totalHours = (SELLER_NOTIFY_DELAY_MS + SELLER_ESCALATE_DELAY_MS) / 3600000;
 
-        // 1) Guruhga escalation
+        const statusAt = lead.statusChangedAt || lead.newTime || lead.time || null;
+        const statusAtStr = statusAt ? new Date(statusAt).toLocaleString('uz-UZ', { timeZone: TZ }) : '—';
+
         const escalationText =
             `🚨 <b>Escalation!</b>\n\n` +
             `${mentionTag}, <b>${sellerName}</b> — <b>${STATUS_LABEL}</b> leadga ${totalHours} soat ichida ishlanmadi.\n\n` +
             `👤 Mijoz: <b>${clientInfo}</b>\n` +
             `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n` +
-            `⏱ Statuga o'tgan vaqt: ${
-                lead.updatedAt
-                    ? new Date(lead.updatedAt).toLocaleString('uz-UZ', { timeZone: TZ })
-                    : '—'
-            }\n\n` +
+            `🕒 Status vaqti: <b>${statusAtStr}</b>\n\n` +
             `Iltimos, chora ko'ring!`;
 
         let sentToGroup = false;
@@ -355,7 +368,6 @@ async function processEscalateStage(now) {
             if (sentToGroup) escalated++;
         }
 
-        // 2) Sellerga ogohlantirish
         if (sellerUser?.chat_id) {
             const warningText =
                 `🚨 <b>Ogohlantirish!</b>\n\n` +
@@ -379,10 +391,7 @@ async function processEscalateStage(now) {
                 _id: { $in: idsToUpdate },
                 status: TARGET_STATUS,
                 seller: { $ne: null, $nin: [''] },
-                $or: [
-                    { sellerBumpEscalatedAt: { $exists: false } },
-                    { sellerBumpEscalatedAt: null },
-                ],
+                $or: [{ sellerBumpEscalatedAt: { $exists: false } }, { sellerBumpEscalatedAt: null }],
             },
             { $set: { sellerBumpEscalatedAt: now, updatedAt: now } }
         );
