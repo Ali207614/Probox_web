@@ -462,6 +462,8 @@ async function processClosedEscalation(now) {
                 newTime: 1,
                 time: 1,
                 baseTime: 1,
+                rejectionReason: 1,
+                rejectionReason2: 1,
             },
         },
     ]);
@@ -481,16 +483,23 @@ async function processClosedEscalation(now) {
         const clientInfo = lead.clientName || lead.clientPhone || lead.n || "Noma'lum";
 
         const baseTime = lead.baseTime || lead.newTime || lead.time;
+        const reason =
+            (lead.rejectionReason2 && String(lead.rejectionReason2).trim()) ||
+            (lead.rejectionReason && String(lead.rejectionReason).trim()) ||
+            '';
 
+        const reasonLine = reason ? `🧾 Sabab: <b>${reason}</b>\n` : '';
         const text =
             `🚨 <b>Yopilgan lead — Nazorat!</b>\n\n` +
-            `${mentionTag}, <b>${operatorName}</b> — lead <b>"Yopilgan"</b> statusiga o'tkazildi va ${CLOSED_DELAY_MS / 60000} daqiqa ichida ishlanmadi.\n\n` +
+            `${mentionTag}, <b>${operatorName}</b> — lead <b>"Yopilgan"</b> statusiga o'tkazildi\n\n` +
             `👤 Mijoz: <b>${clientInfo}</b>\n` +
             `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n` +
             `⏱ Tayanch vaqt: ${
                 baseTime ? new Date(baseTime).toLocaleString('uz-UZ', { timeZone: TZ }) : '—'
-            }\n\n` +
-            `Iltimos, sababini aniqlang!`;
+            }\n` +
+            reasonLine + // ✅ faqat bitta sabab chiqadi
+            `\nIltimos, sababini aniqlang!`;
+
 
         const sent = await sendTelegramMessage(QA_GROUP_CHAT_ID, text);
         if (sent) {
