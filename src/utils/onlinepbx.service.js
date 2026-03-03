@@ -324,7 +324,6 @@ async function handleOnlinePbxPayload(payload , io) {
         }
 
         const isInbound = direction === 'inbound';
-        const isNewLead = !isExistingLead;
 
         const leadHasOperator =
             leadBefore?.operator != null &&
@@ -332,10 +331,10 @@ async function handleOnlinePbxPayload(payload , io) {
             Number(leadBefore?.operator) !== 0;
 
         const shouldSetInboundOperatorForNewLead =
-            isInbound  && isCallEnd && hasTalk && slpCode != null;
+            isInbound  && hasTalk && slpCode != null;
 
         const shouldSetOutboundOperatorForNewLead =
-            isOutbound && isNewLead && shouldIncCallAttempt && slpCode != null;
+            isOutbound  && slpCode != null;
 
         if (!leadHasOperator) {
             if (shouldSetInboundOperatorForNewLead || shouldSetOutboundOperatorForNewLead) {
