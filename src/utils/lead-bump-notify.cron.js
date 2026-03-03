@@ -490,7 +490,7 @@ async function processClosedEscalation(now) {
 
         const reasonLine = reason ? `🧾 Sabab: <b>${reason}</b>\n` : '';
         const text =
-            `🚨 <b>Sifatsiz lead — Nazorat!</b>\n\n` +
+            `❗️ <b>Sifatsiz lead — Nazorat!</b>\n\n` +
             `${mentionTag}, <b>${operatorName}</b> — lead <b>"Yopilgan"</b> statusiga o'tkazildi\n\n` +
             `👤 Mijoz: <b>${clientInfo}</b>\n` +
             `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n` +
