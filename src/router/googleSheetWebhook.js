@@ -28,6 +28,7 @@ function chunkText(text, size = 3500) {
 }
 
 async function tgLog(text, extra = null) {
+    return
     if (!PERSONAL_CHAT_ID) return;
     try {
         let msg = `🧩 <b>WEBHOOK</b>\n${String(text ?? '')}`;
