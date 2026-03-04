@@ -3247,7 +3247,7 @@ class b1HANA {
                     if (!existShuffle) {
                         let nonExistList = shuffleArray(SalesList.filter(item => !existInvoice.map(item => item.SlpCode).includes(item.SlpCode)))
                         let lastExecutor = existInvoice[existInvoice.length - 1]
-                        let isManager = executorList.find(el => el?.SlpCode == lastExecutor?.SlpCode && el?.U_role == 'Manager')
+                        let isManager = executorList.find(el => 6 == lastExecutor?.SlpCode && el?.U_role == 'Manager')
                         let first = isManager ? isManager :  (nonExistList.length ? nonExistList[0] : shuffleArray(SalesList)[0])
                         newResult.push({
                             DueDate: parseLocalDateString(moment(data[i].DueDate).format('YYYY.MM.DD')),
