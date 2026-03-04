@@ -7,7 +7,7 @@ const User = require('../models/user-model');
 const bot = require('../bot');
 
 const TZ = 'Asia/Tashkent';
-const CRON_INTERVAL = '*/5 * * * *';
+const CRON_INTERVAL = '*/30 * * * *';
 
 // 1 soat
 const SCORING_NOTIFY_DELAY_MS = Number(process.env.SCORING_NOTIFY_DELAY_MS || 60 * 60 * 1000);
