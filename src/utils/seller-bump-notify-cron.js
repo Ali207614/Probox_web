@@ -281,8 +281,7 @@ async function processNotifyStage(now) {
             `<b>${STATUS_LABEL}</b> statusiga o‘tganiga ${SELLER_NOTIFY_DELAY_MS / 3600000} soat bo‘ldi.\n` +
             `🕒 Status vaqti: <b>${baseAtStr}</b>\n\n` +
             `👤 Mijoz: <b>${clientInfo}</b>\n` +
-            `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n\n` +
-            `Iltimos, tezroq aloqaga chiqing!`;
+            `📋 Lead: <a href="${link}">${lead.n || lead._id}</a>\n\n`;
 
         const ok = await sendTelegramMessage(sellerUser.chat_id, text);
         if (ok) {
