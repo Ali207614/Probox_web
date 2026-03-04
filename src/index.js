@@ -22,6 +22,7 @@ const {startLeadRecallBumpCron} = require("./utils/lead-recall-bump.cron");
 const {startLeadBumpNotifyCron} = require("./utils/lead-bump-notify.cron");
 const {startSellerBumpNotifyCron} = require("./utils/seller-bump-notify-cron");
 const {startScoringBumpNotifyCron} = require("./utils/scoring-bump-notify.cron");
+const {startNoAnswerAutoIgnoreCron} = require("./utils/no-answer-auto-ignore.cron");
 //require('./utils/cronBusinessPartners');
 app.use(express.urlencoded({ extended: false }));
 // === SOCKET.IO ===
@@ -77,6 +78,7 @@ startLeadRecallBumpCron()
 startLeadBumpNotifyCron()
 startSellerBumpNotifyCron()
 startScoringBumpNotifyCron()
+startNoAnswerAutoIgnoreCron()
 // === SERVER ===
 const port = PORT || 3019;
 server.listen(port, () => {

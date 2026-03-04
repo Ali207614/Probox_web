@@ -170,7 +170,7 @@ async function handleOnlinePbxPayload(payload , io) {
         const shouldCountEnd = isCallEnd && incomingUuid && incomingUuid !== prevCountedUuid;
 
         // outbound call_end & no talk => NoAnswer
-        const isNoAnswerOutboundEnd = isCallEnd && !hasTalk;
+        const isNoAnswerOutboundEnd = isCallEnd && !hasTalk && isOutbound;
         const shouldMoveToNoAnswer = isNoAnswerOutboundEnd;
 
         // ✅ NEW: call_end + talk bo'lsa — status restore (Missed/NoAnswer bo'lmasa)
@@ -261,7 +261,7 @@ async function handleOnlinePbxPayload(payload , io) {
         }
 
         // NoAnswer status
-        if (shouldMoveToNoAnswer && (leadBefore?.status === 'Active' || leadBefore?.status === 'Ignored')) {
+        if (shouldMoveToNoAnswer) {
             update.$set.status = 'NoAnswer';
             delete update.$setOnInsert.status;
         }

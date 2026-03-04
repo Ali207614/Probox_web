@@ -46,6 +46,7 @@ const LeadSchema = new Schema(
         callTime: { type: Date, description: 'Qo‘ng‘iroq vaqti(Operator1 ozgarmaydi faqat view)' },
         answered: { type: Boolean, description: 'Javob berildimi? (Operator1 true/false ozgaradi)' },
         callCount: { type: Number, default: 0, description: 'Qo‘ng‘iroqlar soni (Operator1 ozgaradi )' },
+        noAnswerCountCron: { type: Number, default: 0, description: 'Qo‘ng‘iroqlar soni (Operator1 ozgaradi )' },
         noAnswerCount: { type: Number, default: 0, description: 'Qo‘ng‘iroqlar soni (Operator1 ozgaradi )' },
         interested: { type: Boolean, description: 'Qiziqish bildirildimi? (Operator1 true/false ozgaradi)' },
         rejectionReason: { type: String, description: 'Rad etish sababi (Operator1  ozgaradi)' },
