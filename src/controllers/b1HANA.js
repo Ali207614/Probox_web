@@ -47,7 +47,9 @@ const pbxClient = createOnlinePbx({
     authKey: process.env.PBX_AUTH_KEY,
     apiHost: process.env.PBX_API_HOST || 'https://api2.onlinepbx.ru',
 });
+
 let lastScoringIndex = -1;
+
 let RATE_CACHE = {
     at: 0,
     value: null,     // number

@@ -23,6 +23,9 @@ const {startLeadBumpNotifyCron} = require("./utils/lead-bump-notify.cron");
 const {startSellerBumpNotifyCron} = require("./utils/seller-bump-notify-cron");
 const {startScoringBumpNotifyCron} = require("./utils/scoring-bump-notify.cron");
 const {startNoAnswerAutoIgnoreCron} = require("./utils/no-answer-auto-ignore.cron");
+const {pbxClient} = require("./integrations/pbx");
+const TRUNK_NAME = process.env.PBX_TRUNK_NAME || 'f6813980348e52891f64fa3ce451de69';
+
 //require('./utils/cronBusinessPartners');
 app.use(express.urlencoded({ extended: false }));
 // === SOCKET.IO ===
@@ -75,10 +78,14 @@ startExpireLeadLimitsCron();
 startLeadBumpCron()
 startLeadAutoIgnoreCron()
 startLeadRecallBumpCron()
-startLeadBumpNotifyCron()
 startSellerBumpNotifyCron()
 startScoringBumpNotifyCron()
 startNoAnswerAutoIgnoreCron()
+
+startLeadBumpNotifyCron({
+    pbxClient,
+    trunkName: TRUNK_NAME,
+});
 // === SERVER ===
 const port = PORT || 3019;
 server.listen(port, () => {

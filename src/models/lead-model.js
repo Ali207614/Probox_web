@@ -123,6 +123,13 @@ const LeadSchema = new Schema(
         noPurchaseEscalatedAt: { type: Date, default: null, index: true },
         closedEscalatedAt: { type: Date, default: null, index: true },
 
+        closedGeminiAt: { type: Date, default: null },
+        closedGeminiUuid: { type: String, default: null },   // qaysi recording uuid analiz qilingan
+        closedGeminiText: { type: String, default: null },   // Gemini xulosasi (TGga qo'yiladigan)
+        closedGeminiVerdict: { type: String, enum: ['MOS', 'MOS_EMAS', null], default: null }, // ixtiyoriy
+        closedGeminiQuality: { type: String, enum: ['SIFATSIZ', 'SIFATLI', null], default: null }, // ixtiyoriy
+        closedGeminiError: { type: String, default: null },  // xatolik bo'lsa yozib qo'yish
+
         // Lead status mapping (EN -> UZ)
 // Active          -> Yange lead
 // Blocked         -> Bloklangan
