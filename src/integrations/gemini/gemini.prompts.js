@@ -121,6 +121,7 @@ Qoidalar (juda muhim):
 - Agar audio’da tug‘ilgan yil/sana aytilsa: yoshni yuqoridagi sana bo‘yicha hisoblab tekshiring.
 - Agar faqat tug‘ilgan yil aytilsa (oy-kun yo‘q): ehtimoliy yosh diapazonini yozing va "aniq emas" deb qayd eting.
 - Javob 4 qismdan iborat bo'lsin:
+
   1) "MOS" yoki "MOS EMAS"
   2) 1-2 ta qisqa dalil (audio mazmunidan)
   3) Tavsiya: "SIFATSIZ (to'g'ri yopilgan)" yoki "SIFATLI (qayta ishlash kerak)"
