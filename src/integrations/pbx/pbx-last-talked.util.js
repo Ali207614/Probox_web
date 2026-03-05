@@ -86,6 +86,4 @@ async function getLastTalkedCallUuidForLead({ pbxClient, trunkName, lead }) {
 
 module.exports = {
     getLastTalkedCallUuidForLead,
-    buildLeadPhoneVariants,
-    buildLeadPbxRange,
 };

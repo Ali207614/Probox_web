@@ -424,6 +424,7 @@ async function processClosedEscalation(now, { pbxClient, trunkName }) {
                     trunkName,
                     leadId: lead._id,
                     reason,
+                    now, // ✅ muhim: dinamik sana va window fallback uchun
                 });
             } catch (e) {
                 geminiLine = `🤖 GEMINI: analiz xatolik (${escapeHtml(e?.message || 'unknown')})`;
