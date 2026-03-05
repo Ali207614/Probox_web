@@ -101,7 +101,7 @@ async function getGeminiClosedAnalysisLine({ pbxClient, trunkName, leadId, reaso
         { $set: { closedGeminiAt: new Date(), closedGeminiUuid: lastUuid, closedGeminiText: finalText } }
     );
 
-    return `🤖 <b>GEMINI:</b> ${escapeHtml(finalText)}`;
+    return `🤖 <b>GEMINI:</b> \n${escapeHtml(finalText)}`;
 }
 
 module.exports = {
