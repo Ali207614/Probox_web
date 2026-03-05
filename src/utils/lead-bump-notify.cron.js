@@ -438,9 +438,7 @@ async function processClosedEscalation(now, { pbxClient, trunkName }) {
                 reasonLine +
                 `\n${geminiLine}\n\n` +
                 `Iltimos, sababini aniqlang!`;
-            console.log('[CRON:bump-notify] gemini line:', geminiLine);
-            console.log('[CRON:bump-notify] text:', text);
-            return
+
             const sent = await sendTelegramMessage(QA_GROUP_CHAT_ID, text);
             if (sent) {
                 escalated++;
