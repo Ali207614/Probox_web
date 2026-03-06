@@ -13,14 +13,23 @@ const multer = require('multer');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_IMAGE_COUNT = 10;
+const ALLOWED_IMAGE_MIME_TYPES = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+];
+
 const imageUpload = multer({
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: 10 * 1024 * 1024, // 10 MB (xohlasangiz o'zgartirasiz)
+        fileSize: MAX_IMAGE_SIZE,
+        files: MAX_IMAGE_COUNT,
     },
     fileFilter: (req, file, cb) => {
-        const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-        if (!allowed.includes(file.mimetype)) {
+        if (!ALLOWED_IMAGE_MIME_TYPES.includes(file.mimetype)) {
             return cb(new Error('Faqat rasm yuklash mumkin (jpg, jpeg, png, webp)'));
         }
         cb(null, true);
@@ -88,7 +97,7 @@ router.get('/leads/:id', authMiddleware, leadController.leadOne)
 router.post(
     '/leads/telegram-bot',
     telegramBotBasicAuth,
-    imageUpload.single('file'),
+    imageUpload.array('files', 10),
     b1HANA.createLeadFromTelegramBotWithImage
 );
 
