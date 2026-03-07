@@ -19,7 +19,7 @@ function startLeadBumpCron() {
 
                 const RULES = [
                     { statuses: ['Considering'], hours: 8, reason: 'Considering' },
-                    { statuses: ['Missed', 'Ignored'], hours: 1, reason: 'MissedIgnored' },
+                    { statuses: ['Missed', 'Ignored', 'NoAnswer' ], hours: 1, reason: 'MissedIgnored' },
                 ];
 
                 for (const rule of RULES) {
