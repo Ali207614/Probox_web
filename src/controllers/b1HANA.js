@@ -4820,7 +4820,6 @@ class b1HANA {
             next(err);
         }
     };
-
 }
 
 module.exports = new b1HANA();

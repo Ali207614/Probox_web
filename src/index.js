@@ -10,7 +10,7 @@ const ErrorMiddleware = require('./middlewares/error-middleware');
 const { main } = require('../src/utils/googleSheetSync');
 const googleSheetRouter = require('../src/router/googleSheetWebhook');
 const router = require('../src/router/index');
-const { PORT, DB_URL, conn_params, CLIENT_URL } = require('./config');
+const { PORT, DB_URL, conn_params } = require('./config');
 const leadImageRoute = require('../src/router/leadImageRoute');
 const path = require('path');
 const app = express();
@@ -80,7 +80,7 @@ startLeadAutoIgnoreCron()
 startLeadRecallBumpCron()
 startSellerBumpNotifyCron()
 startScoringBumpNotifyCron()
-startNoAnswerAutoIgnoreCron()
+//startNoAnswerAutoIgnoreCron()
 
 startLeadBumpNotifyCron({
     pbxClient,

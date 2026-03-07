@@ -4,39 +4,113 @@ const Lead = require('../models/lead-model');
 const dbService = require('../services/dbService');
 const DataRepositories = require('../repositories/dataRepositories');
 
-const BATCH_SIZE = 10;          // har run 20 ta
+const BATCH_SIZE = 10;
 const SOURCE_NAME = 'Qayta sotuv';
 
+// Round-robin scoring index (in-memory)
+let lastScoringIndex = -1;
+
+// Socket.io instance — server.js dan setIo() orqali o'rnatiladi
+let ioInstance = null;
+
+/**
+ * Socket.io instance ni tashqaridan ulash uchun
+ * @param {import('socket.io').Server} io
+ */
+function setIo(io) {
+    ioInstance = io;
+}
+
+/**
+ * Scoring operatorlar ro'yxatini SAP/HANA dan olish
+ * @returns {Promise<Array>}
+ */
+async function loadScoringOperators() {
+    try {
+        const sql = DataRepositories.getSalesPersons({ include: ['Scoring'] });
+        const data = await dbService.execute(sql);
+        return Array.isArray(data) ? data : [];
+    } catch (err) {
+        console.error('[CRON] Failed to load scoring operators:', err.message);
+        return [];
+    }
+}
+
+/**
+ * Round-robin bilan navbatdagi scoring operatorni tanlash
+ * @param {Array} operators
+ * @returns {number|null} SlpCode
+ */
+function nextScoringOperator(operators) {
+    if (!operators.length) return null;
+    lastScoringIndex = (lastScoringIndex + 1) % operators.length;
+    return operators[lastScoringIndex]?.SlpCode || null;
+}
+
+/**
+ * Yangi yaratilgan leadlarga scoring_lead eventini emit qilish
+ * @param {Array<string>} uniqueIds
+ */
+async function emitScoringLeads(uniqueIds) {
+    if (!ioInstance || !uniqueIds.length) return;
+
+    try {
+        const newLeads = await Lead.find({
+            uniqueId: { $in: uniqueIds },
+            scoring: { $ne: null },
+        }).lean();
+
+        for (const lead of newLeads) {
+            ioInstance.emit('scoring_lead', {
+                n: lead.n,
+                _id: lead._id,
+                source: lead.source,
+                clientName: lead.clientName,
+                time: lead.time,
+                clientPhone: lead.clientPhone,
+                SlpCode: lead.scoring,
+            });
+        }
+
+        console.log(`[CRON] Emitted scoring_lead for ${newLeads.length} leads`);
+    } catch (err) {
+        console.error('[CRON] Failed to emit scoring leads:', err.message);
+    }
+}
+
+// ─── CRON JOB: Har minutda ishga tushadi ───────────────────────────────────────
 cron.schedule(
-    '* * * * *', // har minut
+    '* * * * *',
     async () => {
         try {
             console.log('[CRON] High limit lead job started');
-            const res = await Lead.deleteMany({ source: 'Qayta sotuv' });
-            console.log('Deleted:', res.deletedCount);
 
-            // 1) Kandidatlar (SAP/HANA)
+            // 1) Kandidatlarni SAP/HANA dan olish
             const sql = DataRepositories.getAllHighLimitCandidatesByCardCode();
             const rows = await dbService.execute(sql);
-
-            console.log(rows.length)
-
             const total = Array.isArray(rows) ? rows.length : 0;
-            console.log(total, '[CRON] Candidates found');
+
+            console.log(`[CRON] Candidates found: ${total}`);
 
             if (!total) {
                 console.log('[CRON] No candidates');
                 return;
             }
 
-            return
+            // 2) Scoring operatorlarni oldindan yuklash
+            const scoringOperators = await loadScoringOperators();
 
-            // 2) Shu oy uchun dedupe
+            if (!scoringOperators.length) {
+                console.warn('[CRON] No scoring operators available, leads will be created without scoring');
+            }
+
+            // 3) Shu oy uchun dedupe
+            //    uniqueId = AUTO_LIMIT_{cardCode}_{YYYY_MM}
+            //    Yangi oy boshlanganda YYYY_MM o'zgaradi → shu cardCode qayta yaratiladi
             const currentYm = moment().format('YYYY_MM');
             const monthStart = moment().startOf('month').toDate();
             const monthEnd = moment().endOf('month').toDate();
 
-            // Shu oy ichida AUTO_LIMIT_*_{YYYY_MM} uniqueId bilan yaratilgan leadlar cardCode’lari
             const recentLeads = await Lead.find(
                 {
                     source: SOURCE_NAME,
@@ -47,16 +121,19 @@ cron.schedule(
                 { cardCode: 1 }
             ).lean();
 
-            const alreadyThisMonth = new Set(recentLeads.map((x) => String(x.cardCode)));
+            const alreadyThisMonth = new Set(
+                recentLeads.map((x) => String(x.cardCode))
+            );
 
-            // 3) Batch tanlash (20 ta), rows ichidagi duplicate cardCode’larni ham chiqarib tashlaymiz
+            console.log(`[CRON] Already created this month: ${alreadyThisMonth.size}`);
+
+            // 4) Batch tanlash — duplicate cardCode'larni chiqarib tashlash
             const toCreate = [];
             const seenInThisRun = new Set();
 
             for (const r of rows) {
                 const cardCode = String(r?.CardCode || '').trim();
                 if (!cardCode) continue;
-
                 if (alreadyThisMonth.has(cardCode)) continue;
                 if (seenInThisRun.has(cardCode)) continue;
 
@@ -67,14 +144,19 @@ cron.schedule(
             }
 
             if (!toCreate.length) {
-                console.log(`✅ No unique new leads found for ${currentYm}.`);
+                console.log(`[CRON] No unique new leads for ${currentYm}`);
                 return;
             }
 
-            // 4) Bulk upsert (insert-only)
+            // 5) Bulk upsert — har bir leadga scoring tayinlab
+            const createdUniqueIds = [];
+
             const ops = toCreate.map((r) => {
                 const cardCode = String(r.CardCode || '').trim();
-                const uniqueId = `AUTO_LIMIT_${cardCode}_${currentYm}`; // ✅ oylik uniqueId
+                const uniqueId = `AUTO_LIMIT_${cardCode}_${currentYm}`;
+                const scoring = nextScoringOperator(scoringOperators);
+
+                createdUniqueIds.push(uniqueId);
 
                 return {
                     updateOne: {
@@ -86,19 +168,16 @@ cron.schedule(
                                 cardCode,
                                 cardName: r.CardName ?? null,
                                 clientName: r.CardName ?? null,
-                                clientPhone: String( r.Phone1 || '').trim() || null,
+                                clientPhone: String(r.Phone1 || '').trim() || null,
                                 clientPhone2: String(r.Phone2 || '').trim() || null,
                                 address: null,
                                 address2: r.address2 ?? null,
-                                finalLimit:null,
-                                finalPercentage:null,
+                                finalLimit: null,
+                                finalPercentage: null,
                                 jshshir: String(r.jshshir || '').trim() || null,
                                 limit: Number(r.limit) || 0,
-
                                 paymentScore: String(r.score ?? ''),
-
                                 passportId: r.Cellular || null,
-
                                 totalContracts: String(r.totalContracts ?? ''),
                                 openContracts: String(r.openContracts ?? ''),
                                 totalAmount: String(r.totalAmount ?? ''),
@@ -106,11 +185,9 @@ cron.schedule(
                                 overdueDebt: String(r.overdueDebt ?? ''),
                                 maxDelay: String(r.maxDelay ?? ''),
                                 avgPaymentDelay: String(r.avgPaymentDelay ?? ''),
-
                                 time: new Date(),
                                 status: 'Active',
-
-                                // defaultlar
+                                scoring,
                                 seen: null,
                                 called: false,
                                 answered: false,
@@ -127,9 +204,6 @@ cron.schedule(
             });
 
             const result = await Lead.bulkWrite(ops, { ordered: false });
-
-            // bulkWrite natijalari:
-            // insertedCount odatda bo‘lmaydi, lekin upsertedCount bor
             const created = Number(result?.upsertedCount || 0);
 
             console.log('[CRON] bulkWrite result:', {
@@ -137,6 +211,11 @@ cron.schedule(
                 modified: result?.modifiedCount,
                 upserted: result?.upsertedCount,
             });
+
+            // 6) Yangi yaratilgan leadlarga scoring_lead emit
+            if (created > 0) {
+                await emitScoringLeads(createdUniqueIds);
+            }
 
             console.log(
                 `[CRON] Done. created=${created}, batch=${toCreate.length}, candidates=${total}`
@@ -147,3 +226,5 @@ cron.schedule(
     },
     { timezone: 'Asia/Tashkent' }
 );
+
+module.exports = { setIo };
