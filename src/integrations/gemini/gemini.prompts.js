@@ -1,3 +1,78 @@
+function formatDateInTz(date = new Date(), timeZone = 'Asia/Tashkent') {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date);
+
+    const y = parts.find(p => p.type === 'year')?.value;
+    const m = parts.find(p => p.type === 'month')?.value;
+    const d = parts.find(p => p.type === 'day')?.value;
+    return `${y}-${m}-${d}`;
+}
+
+function safeOneLine(text, max = 220) {
+    return String(text || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, max);
+}
+
+function summarizeHistoryForPrompt(items = []) {
+    const out = [];
+    const list = Array.isArray(items) ? items : [];
+
+    for (const it of list) {
+        const t = it.createdAt ? new Date(it.createdAt).toISOString() : '';
+        const type = it.type || '';
+        const action = it.action || '';
+
+        let changesLine = '';
+        if (Array.isArray(it.changes) && it.changes.length) {
+            const important = it.changes
+                .filter(c => c?.field)
+                .slice(0, 4)
+                .map(c => {
+                    const f = c.field;
+                    const from = safeOneLine(c.from, 50);
+                    const to = safeOneLine(c.to, 50);
+                    return `${f}:${from}→${to}`;
+                })
+                .join(', ');
+            if (important) changesLine = ` | changes: ${important}`;
+        }
+
+        let pbxLine = '';
+        if (it.pbx?.uuid) {
+            const outcome = it.pbx?.outcome || 'unknown';
+            const dur = it.pbx?.dialog_duration != null ? ` dur:${it.pbx.dialog_duration}` : '';
+            pbxLine = ` | pbx:${it.pbx.uuid} (${outcome})${dur}`;
+        }
+
+        const msg = safeOneLine(it.message, 220);
+
+        const isImportantEvent =
+            type === 'event' &&
+            (action === 'status_changed' ||
+                action === 'operator_changed' ||
+                action === 'field_changed' ||
+                action.startsWith('call_') ||
+                action === 'auto_closed');
+
+        const isChat = type === 'chat';
+
+        if (isImportantEvent || isChat) {
+            out.push(`- ${t} ${type}/${action}: ${msg}${changesLine}${pbxLine}`);
+        }
+
+        if (out.length >= 18) break;
+    }
+
+    return out.length ? out.join('\n') : '(history yo‘q)';
+}
+
+
 function buildClosedDiagnosisPrompt({
                                         lead,
                                         reason,
@@ -98,5 +173,6 @@ Audio asosida baholang.`
 
 
 module.exports = {
-    buildClosedDiagnosisPrompt
+    buildClosedDiagnosisPrompt,
+    formatDateInTz
 };
