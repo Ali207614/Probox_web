@@ -129,6 +129,30 @@ const LeadSchema = new Schema(
         closedGeminiVerdict: { type: String, enum: ['MOS', 'MOS_EMAS', null], default: null }, // ixtiyoriy
         closedGeminiQuality: { type: String, enum: ['SIFATSIZ', 'SIFATLI', null], default: null }, // ixtiyoriy
         closedGeminiError: { type: String, default: null },  // xatolik bo'lsa yozib qo'yish
+        generalRating: {
+            type: Number,
+            min: [1, "Baho 1 dan kam bo'lmasligi kerak"],
+            max: [10, "Baho 10 dan oshmasligi kerak"],
+            default: null,
+            description: "Mijozning umumiy xizmat sifatiga bergan bahosi (1-10)"
+        },
+        sellerRating: {
+            type: Number,
+            min: [1, "Baho 1 dan kam bo'lmasligi kerak"],
+            max: [10, "Baho 10 dan oshmasligi kerak"],
+            default: null,
+            description: "Mijozning sotuvchiga (seller) bergan bahosi (1-10)"
+        },
+        ratingComment: {
+            type: String,
+            default: null,
+            description: "Mijozning baholash vaqtidagi izohi"
+        },
+        ratedAt: {
+            type: Date,
+            default: null,
+            description: "Baho berilgan vaqt"
+        },
 
         // Lead status mapping (EN -> UZ)
 // Active          -> Yange lead

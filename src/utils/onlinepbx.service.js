@@ -135,7 +135,7 @@ async function handleOnlinePbxPayload(payload , io) {
             .lean();
 
         const isExistingLead = !!leadBefore;
-        const isQaytaSotuv = (leadBefore?.source) === 'Qayta sotuv';
+        const isMehrliQongiroq = (leadBefore?.source) === 'Mehrli Qongiroq';
         // 4) SAP BP
         const sapRecord = await b1Sl.findOrCreateBusinessPartner(canonicalPhone);
         const cardCode = sapRecord?.cardCode || null;
@@ -250,7 +250,7 @@ async function handleOnlinePbxPayload(payload , io) {
             update.$set['pbx.last_counted_uuid'] = incomingUuid;
         }
 
-        if (isQaytaSotuv) {
+        if (isMehrliQongiroq) {
             if (isCallEnd && hasTalk) {
                 update.$set.status = 'Closed';
                 delete update.$setOnInsert.status;
@@ -271,7 +271,7 @@ async function handleOnlinePbxPayload(payload , io) {
                 leadBefore?.status === 'Active' ||
                 (leadBefore?.pbx?.prev_status === 'Active' && leadBefore?.status === 'Ignored');
 
-            if (shouldMoveToNoAnswer && isActiveStatus) {
+            if (shouldMoveToNoAnswer && (isActiveStatus || isMissedBase)) {
                 update.$set.status = 'NoAnswer';
                 delete update.$setOnInsert.status;
             }
@@ -285,10 +285,15 @@ async function handleOnlinePbxPayload(payload , io) {
                 if (isExistingLead) {
                     const curStatus = leadBefore?.status;
 
-                    if (curStatus === 'Missed' || curStatus === 'NoAnswer' || curStatus === 'Active') {
+                    if ((curStatus === 'Missed' || curStatus === 'NoAnswer') && leadBefore?.pbx?.prev_status === 'Active') {
                         update.$set.status = 'Ignored';
                         delete update.$setOnInsert.status;
                     }
+                    else{
+                        update.$set.status = leadBefore?.pbx?.prev_status || 'Ignored';
+                        delete update.$setOnInsert.status;
+                    }
+
                 } else {
                     update.$set.status = 'Ignored';
                     delete update.$setOnInsert.status;

@@ -2885,6 +2885,152 @@ class b1HANA {
         }
     };
 
+    getLeadRating = async (req, res, next) => {
+        try {
+            const { id } = req.params;
+
+            // 1. Leadni bazadan olish
+            const lead = await LeadModel.findById(id)
+                .select('generalRating sellerRating ratingComment ratedAt seller status')
+                .lean();
+
+            if (!lead) {
+                return res.status(404).json({ message: 'Lead topilmadi' });
+            }
+
+            let sellerFullName = null;
+
+            // 2. Agar lead'da seller kodi bo'lsa, ismini topamiz
+            if (lead.seller) {
+                // Tizimingizdagi query parametriga qarab bunga o'zgartirish kiritishingiz mumkin.
+                // Masalan: { code: lead.seller } yoki boshqacha
+                const sellerQuery = DataRepositories.getSalesPersons({
+                    SlpCode: lead.seller
+                });
+
+                const sellerData = await this.execute(sellerQuery);
+
+                if (sellerData && sellerData.length > 0) {
+                    sellerFullName = sellerData[0].SlpName;
+                } else {
+                    // Agar bazadan topilmasa, fallback sifatida kodning o'zini yoki xabar qaytaramiz
+                    sellerFullName = lead.seller;
+                    console.warn(`Sotuvchi ism topilmadi, kodi: ${lead.seller}`);
+                }
+            }
+
+            // 3. Natijani qaytarish
+            return res.status(200).json({
+                message: "Reyting ma'lumotlari muvaffaqiyatli olindi",
+                data: {
+                    ...lead,
+                    sellerName: sellerFullName // Yangi maydon sifatida ismini qo'shib beramiz
+                },
+            });
+        } catch (err) {
+            console.error('Error fetching lead rating:', err);
+            next(err);
+        }
+    };
+
+    rateLead = async (req, res, next) => {
+        try {
+            const { id } = req.params;
+            const { generalRating, sellerRating, ratingComment } = req.body;
+
+            const existingLead = await LeadModel.findById(id);
+            if (!existingLead) {
+                return res.status(404).json({ message: 'Lead topilmadi' });
+            }
+
+            // Validatsiyalar (1 dan 10 gacha)
+            if (generalRating !== undefined && (generalRating < 1 || generalRating > 10)) {
+                return res.status(400).json({ message: "Umumiy baho 1 dan 10 gacha bo'lishi kerak." });
+            }
+            if (sellerRating !== undefined && (sellerRating < 1 || sellerRating > 10)) {
+                return res.status(400).json({ message: "Sotuvchi bahosi 1 dan 10 gacha bo'lishi kerak." });
+            }
+
+            // Sotuvchi bo'lmasa, sellerRating qo'yishga ruxsat yo'q
+            if (sellerRating !== undefined && !existingLead.seller) {
+                return res.status(400).json({
+                    message: "Bu lead'ga sotuvchi biriktirilmagan, baho berib bo'lmaydi."
+                });
+            }
+
+            const changes = [];
+
+            if (generalRating !== undefined && existingLead.generalRating !== generalRating) {
+                changes.push({ field: 'generalRating', old: existingLead.generalRating, new: generalRating });
+                existingLead.generalRating = generalRating;
+            }
+            if (sellerRating !== undefined && existingLead.sellerRating !== sellerRating) {
+                changes.push({ field: 'sellerRating', old: existingLead.sellerRating, new: sellerRating });
+                existingLead.sellerRating = sellerRating;
+            }
+            if (ratingComment !== undefined && existingLead.ratingComment !== ratingComment) {
+                changes.push({ field: 'ratingComment', old: existingLead.ratingComment, new: ratingComment });
+                existingLead.ratingComment = ratingComment;
+            }
+
+            // Agar o'zgarish bo'lsa, saqlaymiz va tarixga yozamiz
+            if (changes.length > 0) {
+                existingLead.ratedAt = new Date();
+
+                await existingLead.save();
+
+                // 6. Tarixga (LeadChat) yozib qo'yamiz
+                await writeLeadEvent({
+                    leadId: existingLead._id,
+                    // Agar so'rovni mijoz o'zi (authsiz) yuborayotgan bo'lsa, reqUser mavjud bo'lmasligi mumkin.
+                    // Shunday holatda isSystem: true va reqUser: null (yoki id: 0) qilib yuborishingiz kerak.
+                    reqUser: req.user || { id: 0, U_role: 'System' },
+                    isSystem: !req.user, // User bo'lmasa system hisoblanadi
+
+                    type: 'event',
+                    action: 'rating_added', // ✅ Schema'dagi yangi enum qiymati bilan bir xil
+                    message: "Mijoz tomonidan xizmat va/yoki sotuvchiga baho berildi",
+
+                    changes: changes, // qaysi reytinglar (general, seller) nechiga o'zgargani
+
+                    statusFrom: existingLead.status,
+                    statusTo: existingLead.status,
+                });
+            }
+
+            // --- SELLER ISMINI TOPISH ---
+            let sellerFullName = null;
+            if (existingLead.seller) {
+                const sellerQuery = DataRepositories.getSalesPersons({
+                    SlpCode: existingLead.seller
+                });
+                const sellerData = await this.execute(sellerQuery);
+
+                if (sellerData && sellerData.length > 0) {
+                    sellerFullName = sellerData[0].SlpName;
+                } else {
+                    sellerFullName = existingLead.seller;
+                }
+            }
+
+            return res.status(200).json({
+                message: "Baho muvaffaqiyatli saqlandi",
+                data: {
+                    generalRating: existingLead.generalRating,
+                    sellerRating: existingLead.sellerRating,
+                    ratingComment: existingLead.ratingComment,
+                    ratedAt: existingLead.ratedAt,
+                    sellerCode: existingLead.seller,
+                    sellerName: sellerFullName // To'liq ism
+                }
+            });
+
+        } catch (err) {
+            console.error('Error rating lead:', err);
+            next(err);
+        }
+    };
+
     findAllBranch = async(req, res, next) => {
         try {
             const page = parseInt(req.query.page) || 1;
