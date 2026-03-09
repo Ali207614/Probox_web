@@ -25,13 +25,13 @@ function setIo(io) {
  * Scoring operatorlar ro'yxatini SAP/HANA dan olish
  * @returns {Promise<Array>}
  */
-async function loadScoringOperators() {
+async function loadOperators() {
     try {
-        const sql = DataRepositories.getSalesPersons({ include: ['Scoring'] });
+        const sql = DataRepositories.getSalesPersons({ include: ['Operator1'] });
         const data = await dbService.execute(sql);
         return Array.isArray(data) ? data : [];
     } catch (err) {
-        console.error('[CRON] Failed to load scoring operators:', err.message);
+        console.error('[CRON] Failed to load operators:', err.message);
         return [];
     }
 }
@@ -57,7 +57,7 @@ async function emitScoringLeads(uniqueIds) {
     try {
         const newLeads = await Lead.find({
             uniqueId: { $in: uniqueIds },
-            scoring: { $ne: null },
+            operator: { $ne: null },
         }).lean();
 
         for (const lead of newLeads) {
@@ -80,7 +80,7 @@ async function emitScoringLeads(uniqueIds) {
 
 // ─── CRON JOB: Har minutda ishga tushadi ───────────────────────────────────────
 cron.schedule(
-    '* * * * *',
+    '0 10 * * *',
     async () => {
         try {
             console.log('[CRON] High limit lead job started');
@@ -98,7 +98,7 @@ cron.schedule(
             }
 
             // 2) Scoring operatorlarni oldindan yuklash
-            const scoringOperators = await loadScoringOperators();
+            const scoringOperators = await loadOperators();
 
             if (!scoringOperators.length) {
                 console.warn('[CRON] No scoring operators available, leads will be created without scoring');
@@ -154,7 +154,7 @@ cron.schedule(
             const ops = toCreate.map((r) => {
                 const cardCode = String(r.CardCode || '').trim();
                 const uniqueId = `AUTO_LIMIT_${cardCode}_${currentYm}`;
-                const scoring = nextScoringOperator(scoringOperators);
+                const operator = nextScoringOperator(scoringOperators);
 
                 createdUniqueIds.push(uniqueId);
 
@@ -187,7 +187,7 @@ cron.schedule(
                                 avgPaymentDelay: String(r.avgPaymentDelay ?? ''),
                                 time: new Date(),
                                 status: 'Active',
-                                scoring,
+                                operator,
                                 seen: null,
                                 called: false,
                                 answered: false,

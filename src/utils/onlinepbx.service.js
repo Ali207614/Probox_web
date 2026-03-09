@@ -129,12 +129,13 @@ async function handleOnlinePbxPayload(payload , io) {
                     'operator',
                     'noAnswerCount',
                     'callCount',
+                    'source',
                 ].join(' ')
             )
             .lean();
 
         const isExistingLead = !!leadBefore;
-
+        const isQaytaSotuv = (leadBefore?.source) === 'Qayta sotuv';
         // 4) SAP BP
         const sapRecord = await b1Sl.findOrCreateBusinessPartner(canonicalPhone);
         const cardCode = sapRecord?.cardCode || null;
@@ -249,48 +250,49 @@ async function handleOnlinePbxPayload(payload , io) {
             update.$set['pbx.last_counted_uuid'] = incomingUuid;
         }
 
-        if (shouldCountEnd && isNoAnswerOutboundEnd) {
-            const prevNoAnswer = Number(leadBefore?.noAnswerCount ?? 0);
-            const nextNoAnswer = prevNoAnswer + 1;
-
-            if (nextNoAnswer >= 6) {
+        if (isQaytaSotuv) {
+            if (isCallEnd && hasTalk) {
                 update.$set.status = 'Closed';
-                update.$set.rejectionReason = "Umuman aloqaga chiqib bo`lmadi";
                 delete update.$setOnInsert.status;
             }
-        }
+        } else {
+            if (shouldCountEnd && isNoAnswerOutboundEnd) {
+                const prevNoAnswer = Number(leadBefore?.noAnswerCount ?? 0);
+                const nextNoAnswer = prevNoAnswer + 1;
 
-        // NoAnswer status
-        const isActiveStatus =
-            leadBefore?.status === 'Active' ||
-            (leadBefore?.pbx?.prev_status === 'Active' && leadBefore?.status === 'Ignored');
-
-        if (shouldMoveToNoAnswer && isActiveStatus) {
-            update.$set.status = 'NoAnswer';
-            delete update.$setOnInsert.status;
-        }
-
-        // Missed status (deriveLeadFields() bo'yicha)
-        if (isMissedBase) {
-            update.$set.status = 'Missed';
-            delete update.$setOnInsert.status;
-        }
-
-
-        if (isCallEnd && hasTalk) {
-            if (isExistingLead) {
-                const curStatus = leadBefore?.status;
-                 if (curStatus === 'Missed' || curStatus === 'NoAnswer') {
-                    update.$set.status = 'Ignored';
+                if (nextNoAnswer >= 6) {
+                    update.$set.status = 'Closed';
+                    update.$set.rejectionReason = "Umuman aloqaga chiqib bo`lmadi";
                     delete update.$setOnInsert.status;
-                 }
-                else if(curStatus === 'Active'){
+                }
+            }
+
+            const isActiveStatus =
+                leadBefore?.status === 'Active' ||
+                (leadBefore?.pbx?.prev_status === 'Active' && leadBefore?.status === 'Ignored');
+
+            if (shouldMoveToNoAnswer && isActiveStatus) {
+                update.$set.status = 'NoAnswer';
+                delete update.$setOnInsert.status;
+            }
+
+            if (isMissedBase) {
+                update.$set.status = 'Missed';
+                delete update.$setOnInsert.status;
+            }
+
+            if (isCallEnd && hasTalk) {
+                if (isExistingLead) {
+                    const curStatus = leadBefore?.status;
+
+                    if (curStatus === 'Missed' || curStatus === 'NoAnswer' || curStatus === 'Active') {
+                        update.$set.status = 'Ignored';
+                        delete update.$setOnInsert.status;
+                    }
+                } else {
                     update.$set.status = 'Ignored';
                     delete update.$setOnInsert.status;
                 }
-            } else {
-                update.$set.status = 'Ignored';
-                delete update.$setOnInsert.status;
             }
         }
 

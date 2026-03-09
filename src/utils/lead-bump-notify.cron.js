@@ -34,7 +34,7 @@ const NO_PURCHASE_DELAY_MS = Number(process.env.NO_PURCHASE_DELAY_MS || 10 * 60 
 const NO_PURCHASE_BATCH_SIZE = Number(process.env.NO_PURCHASE_BATCH_SIZE || 30);
 
 const CLOSED_DELAY_MS = Number(process.env.CLOSED_DELAY_MS || 10 * 60 * 1000);
-const CLOSED_BATCH_SIZE = Number(process.env.CLOSED_BATCH_SIZE || 5);
+const CLOSED_BATCH_SIZE = Number(process.env.CLOSED_BATCH_SIZE || 3);
 
 const NOTIFY_BATCH_SIZE = Number(process.env.BUMP_NOTIFY_BATCH_SIZE || 30);
 const ESCALATE_BATCH_SIZE = Number(process.env.BUMP_ESCALATE_BATCH_SIZE || 30);

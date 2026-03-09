@@ -2,7 +2,7 @@
 
 const TZ = 'Asia/Tashkent';
 
-const CRON_INTERVAL = '*/2 * * * *';
+const CRON_INTERVAL = '*/3 * * * *';
 
 const TARGET_STATUSES = ['FollowUp', 'Considering', 'WillVisitStore', 'WillSendPassport'];
 
