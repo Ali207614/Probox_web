@@ -95,3 +95,8 @@ ${historyBlock}
 Audio asosida baholang.`
     );
 }
+
+
+module.exports = {
+    buildClosedDiagnosisPrompt
+};
