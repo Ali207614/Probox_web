@@ -155,6 +155,7 @@ const LeadSchema = new Schema(
             description: "Baho berilgan vaqt"
         },
         isRatingSmsSent: { type: Boolean, default: false, index: true },
+        isMissedSmsSent: { type: Boolean, default: false, index: true },
         // Lead status mapping (EN -> UZ)
 // Active          -> Yange lead
 // Blocked         -> Bloklangan

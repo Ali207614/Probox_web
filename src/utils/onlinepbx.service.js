@@ -1,6 +1,7 @@
 'use strict';
 
 const LeadModel = require('../models/lead-model');
+const LeadChatModel = require('../models/lead-chat-model');
 const {
     pickClientPhoneFromWebhook,
     pickOperatorExtFromPayload,
@@ -279,6 +280,41 @@ async function handleOnlinePbxPayload(payload , io) {
             if (isMissedBase) {
                 update.$set.status = 'Missed';
                 delete update.$setOnInsert.status;
+            }
+
+            if (isMissed && !lead.isMissedSmsSent) {
+
+                const clientName = lead.clientName || lead.cardName || null;
+
+                // Funksiyani chaqiramiz (kutib turmaymiz, orqa fonda ishlaydi)
+                sendMissedCallSms(canonicalPhone, clientName, String(lead._id))
+                    .then(async (success) => {
+                        if (success) {
+                            console.log(`[PBX] Missed call SMS muvaffaqiyatli jo'natildi -> ${canonicalPhone}`);
+
+                            try {
+                                // 1. Lead'ga SMS ketdi deb belgilab qo'yamiz
+                                await LeadModel.updateOne(
+                                    { _id: lead._id },
+                                    { $set: { isMissedSmsSent: true } }
+                                );
+
+                                // 2. Tarixga (LeadChat) yozib qo'yamiz
+                                await LeadChatModel.create({
+                                    leadId: lead._id,
+                                    type: 'event',
+                                    isSystem: true,
+                                    action: 'sms_sent', // Schema'dagi mavjud enum qiymatiga qarab o'zgartirishingiz mumkin
+                                    createdBy: 0,
+                                    message: `Tizim: Mijozga "Javobsiz qo'ng'iroq (Missed call)" SMS xabari jo'natildi.`,
+                                    createdAt: new Date(),
+                                    updatedAt: new Date()
+                                });
+                            } catch (dbError) {
+                                console.error('[PBX] Missed SMS holatini bazaga saqlashda xatolik:', dbError);
+                            }
+                        }
+                    });
             }
 
             if (isCallEnd && hasTalk) {
