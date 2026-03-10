@@ -92,6 +92,10 @@ router.get('/rate', authMiddleware, b1HANA.getRate)
 
 router.get('/leads', authMiddleware, b1HANA.leads)
 
+router.get('/lead-rating/:id', b1HANA.getLeadRating);
+
+router.post('/lead-rating/:id', b1HANA.rateLead);
+
 router.get('/leads/:id', authMiddleware, leadController.leadOne)
 
 router.post(

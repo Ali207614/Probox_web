@@ -2943,6 +2943,10 @@ class b1HANA {
                 return res.status(404).json({ message: 'Lead topilmadi' });
             }
 
+            if (existingLead.ratedAt) {
+                return res.status(400).json({ message: 'Siz allaqachon baho bergansiz. Rahmat!' });
+            }
+
             // Validatsiyalar (1 dan 10 gacha)
             if (generalRating !== undefined && (generalRating < 1 || generalRating > 10)) {
                 return res.status(400).json({ message: "Umumiy baho 1 dan 10 gacha bo'lishi kerak." });
