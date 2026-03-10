@@ -24,6 +24,7 @@ const {startSellerBumpNotifyCron} = require("./utils/seller-bump-notify-cron");
 const {startScoringBumpNotifyCron} = require("./utils/scoring-bump-notify.cron");
 const {startNoAnswerAutoIgnoreCron} = require("./utils/no-answer-auto-ignore.cron");
 const {pbxClient} = require("./integrations/pbx");
+const {startRatingSmsCron} = require("./utils/rating-sms.cron");
 const TRUNK_NAME = process.env.PBX_TRUNK_NAME || 'f6813980348e52891f64fa3ce451de69';
 
 //require('./utils/cronBusinessPartners');
@@ -80,7 +81,7 @@ startLeadAutoIgnoreCron()
 startLeadRecallBumpCron()
 startSellerBumpNotifyCron()
 startScoringBumpNotifyCron()
-
+startRatingSmsCron()
 
 startLeadBumpNotifyCron({
     pbxClient,
