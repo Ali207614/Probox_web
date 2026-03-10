@@ -13,6 +13,7 @@ const { generateShortId } = require('../utils/createLead');
 const b1Sl = require('../controllers/b1SL');
 const { ALLOWED_STATUSES } = require('../config');
 const { writeCallEventFromPBX } = require('./lead-chat-events.util');
+const {sendMissedCallSms} = require("../services/sms.service");
 
 
 const COMPANY_GATEWAY = '781134774';
@@ -282,7 +283,7 @@ async function handleOnlinePbxPayload(payload , io) {
                 delete update.$setOnInsert.status;
             }
 
-            if (isMissed && !lead.isMissedSmsSent) {
+            if (isMissedBase && !lead.isMissedSmsSent) {
 
                 const clientName = lead.clientName || lead.cardName || null;
 
