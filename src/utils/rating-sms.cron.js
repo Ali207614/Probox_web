@@ -62,7 +62,6 @@ async function processRatingSms() {
 
     const filter = {
         _id: { $in: testIds },
-        isRatingSmsSent: false,
         clientPhone: { $exists: true, $ne: null, $ne: '' }
     };
     // =========================================================================
