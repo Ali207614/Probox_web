@@ -29,6 +29,8 @@ const {
     writeLeadEvent,
 } = require('../utils/lead-chat-events.util');
 const LeadLimitUsageModel = require('../models/lead-limit-usage');
+const User = require('../models/user-model');
+const bot = require('../bot');
 
 const LeadImage = require('../models/lead-image-model');
 const UploadServiceClass = require('../minio');
@@ -2949,6 +2951,8 @@ class b1HANA {
         }
     };
 
+
+
     rateLead = async (req, res, next) => {
         try {
             const { id } = req.params;
@@ -2971,7 +2975,6 @@ class b1HANA {
                 return res.status(400).json({ message: "Sotuvchi bahosi 1 dan 10 gacha bo'lishi kerak." });
             }
 
-
             const changes = [];
 
             if (generalRating !== undefined && existingLead.generalRating !== generalRating) {
@@ -2991,43 +2994,90 @@ class b1HANA {
                 return res.status(400).json({ message: "Izoh uzunligi 500 ta belgidan oshmasligi kerak." });
             }
 
+            // --- SELLER ISMI VA TELEGRAM ID'SINI TOPISH ---
+            let sellerFullName = existingLead.seller; // default holat
+            let sellerChatId = null;
+
+            if (existingLead.seller) {
+                // 1. Avval User modelidan qidiramiz (tg chat_id'sini olish uchun)
+                // Sizning bazangizdagi 'slpCode' yoki mos keladigan maydon bo'yicha qidiring
+                const sellerUser = await User.findOne({ slpCode: existingLead.seller }).lean();
+
+                if (sellerUser) {
+                    sellerFullName = sellerUser.fullName || existingLead.seller;
+                    sellerChatId = sellerUser.chat_id; // Sotuvchining shaxsiy Telegram ID si
+                } else {
+                    // 2. Agar topilmasa SAP dan izlaymiz (ismni olish uchun)
+                    const sellerQuery = DataRepositories.getSalesPersons({
+                        SlpCode: existingLead.seller
+                    });
+                    const sellerData = await this.execute(sellerQuery);
+
+                    if (sellerData && sellerData.length > 0) {
+                        sellerFullName = sellerData[0].SlpName;
+                    }
+                }
+            }
+
             // Agar o'zgarish bo'lsa, saqlaymiz va tarixga yozamiz
             if (changes.length > 0) {
                 existingLead.ratedAt = new Date();
-
                 await existingLead.save();
 
-                // 6. Tarixga (LeadChat) yozib qo'yamiz
+                // Tarixga yozish
                 await writeLeadEvent({
                     leadId: existingLead._id,
-                    // Agar so'rovni mijoz o'zi (authsiz) yuborayotgan bo'lsa, reqUser mavjud bo'lmasligi mumkin.
-                    // Shunday holatda isSystem: true va reqUser: null (yoki id: 0) qilib yuborishingiz kerak.
                     reqUser: req.user || { id: 0, U_role: 'System' },
-                    isSystem: !req.user, // User bo'lmasa system hisoblanadi
-
+                    isSystem: !req.user,
                     type: 'event',
-                    action: 'rating_added', // ✅ Schema'dagi yangi enum qiymati bilan bir xil
+                    action: 'rating_added',
                     message: "Mijoz tomonidan xizmat va/yoki sotuvchiga baho berildi",
-
-                    changes: changes, // qaysi reytinglar (general, seller) nechiga o'zgargani
-
+                    changes: changes,
                     statusFrom: existingLead.status,
                     statusTo: existingLead.status,
                 });
-            }
 
-            // --- SELLER ISMINI TOPISH ---
-            let sellerFullName = null;
-            if (existingLead.seller) {
-                const sellerQuery = DataRepositories.getSalesPersons({
-                    SlpCode: existingLead.seller
-                });
-                const sellerData = await this.execute(sellerQuery);
+                // --- TELEGRAMGA XABAR YUBORISH ---
+                try {
+                    // Guruh ID sini olish
+                    const SELLER_GROUP_CHAT_ID = process.env.SELLER_GROUP_CHAT_ID;
 
-                if (sellerData && sellerData.length > 0) {
-                    sellerFullName = sellerData[0].SlpName;
-                } else {
-                    sellerFullName = existingLead.seller;
+                    // Matn tayyorlash
+                    const clientInfo = existingLead.clientName || existingLead.clientPhone || existingLead.n || "Noma'lum";
+                    const leadLink = `https://crm.probox.uz/lead/${existingLead._id}`; // o'zingizni URL ni qo'ying
+
+                    // Emoji bezaklar
+                    const genEmoji = generalRating >= 8 ? '🟢' : generalRating >= 5 ? '🟡' : '🔴';
+                    const selEmoji = sellerRating >= 8 ? '🟢' : sellerRating >= 5 ? '🟡' : '🔴';
+
+                    const tgMessage =
+                        `⭐ <b>Yangi Baho Keldi!</b>\n\n` +
+                        `👤 Mijoz: <b>${clientInfo}</b>\n` +
+                        `💼 Sotuvchi: <b>${sellerFullName}</b>\n\n` +
+                        `🏢 Xizmat sifati: <b>${generalRating || '-'}</b>/10 ${genEmoji}\n` +
+                        `👨‍💼 Sotuvchi ishi: <b>${sellerRating || '-'}</b>/10 ${selEmoji}\n\n` +
+                        `💬 Izoh: <i>${ratingComment ? ratingComment : "Yo'q"}</i>\n\n` +
+                        `📋 Lead: <a href="${leadLink}">${existingLead.n || existingLead._id}</a>`;
+
+                    const opts = { parse_mode: 'HTML' };
+
+                    // 1. Sotuvchining shaxsiy telegramiga yuborish (agar botga kirgan bo'lsa)
+                    if (sellerChatId) {
+                        await bot.sendMessage(sellerChatId, tgMessage, opts).catch(e => {
+                            console.error(`Sotuvchiga yuborishda xato (ChatID: ${sellerChatId}):`, e.message);
+                        });
+                    }
+
+                    // 2. Sotuvchilar guruhiga yuborish
+                    if (SELLER_GROUP_CHAT_ID) {
+                        await bot.sendMessage(SELLER_GROUP_CHAT_ID, tgMessage, opts).catch(e => {
+                            console.error(`Guruhga yuborishda xato (ChatID: ${SELLER_GROUP_CHAT_ID}):`, e.message);
+                        });
+                    }
+
+                } catch (tgError) {
+                    console.error('Telegramga reyting xabarini yuborishda xatolik:', tgError);
+                    // TG error bo'lsa ham req o'tib ketishi kerak, return qilib yubormaymiz.
                 }
             }
 
@@ -3039,7 +3089,7 @@ class b1HANA {
                     ratingComment: existingLead.ratingComment,
                     ratedAt: existingLead.ratedAt,
                     sellerCode: existingLead.seller,
-                    sellerName: sellerFullName // To'liq ism
+                    sellerName: sellerFullName
                 }
             });
 
