@@ -57,7 +57,8 @@ async function processRatingSms() {
     const testIds = [
         '6914163f6ce698946c044743',
         '6913955c6ce698946c0401ce',
-        '690ae2c2ed859c7e5bb4b14b'
+        '690ae2c2ed859c7e5bb4b14b',
+        '6914163f6ce698946c0446a9'
     ];
 
     const filter = {
@@ -167,7 +168,7 @@ function startRatingSmsCron() {
     // 🛠 TEST UCHUN CRON: Har 1 minutda ishlaydi (Hozir yoniq)
     // =========================================================================
   //  const cronExpression = '* * * * *';
-    const cronExpression = '*/2 * * * *';
+    const cronExpression = '*/5 * * * *';
 
     // =========================================================================
     // 🚀 PROD UCHUN CRON: Har soat boshida ishlaydi (Test tugagach shuni ochasiz)
