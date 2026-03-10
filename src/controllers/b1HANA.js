@@ -2971,12 +2971,6 @@ class b1HANA {
                 return res.status(400).json({ message: "Sotuvchi bahosi 1 dan 10 gacha bo'lishi kerak." });
             }
 
-            // Sotuvchi bo'lmasa, sellerRating qo'yishga ruxsat yo'q
-            if (sellerRating !== undefined && !existingLead.seller) {
-                return res.status(400).json({
-                    message: "Bu lead'ga sotuvchi biriktirilmagan, baho berib bo'lmaydi."
-                });
-            }
 
             const changes = [];
 
