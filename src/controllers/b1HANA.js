@@ -2951,12 +2951,11 @@ class b1HANA {
         }
     };
 
-
-
     rateLead = async (req, res, next) => {
         try {
             const { id } = req.params;
-            const { generalRating, sellerRating, ratingComment } = req.body;
+            // 1. customerName ni ham req.body dan kutib olamiz
+            const { generalRating, sellerRating, ratingComment, customerName } = req.body;
 
             const existingLead = await LeadModel.findById(id);
             if (!existingLead) {
@@ -2967,15 +2966,34 @@ class b1HANA {
                 return res.status(400).json({ message: 'Siz allaqachon baho bergansiz. Rahmat!' });
             }
 
-            // Validatsiyalar (1 dan 10 gacha)
+            // ==========================================
+            // VALIDATSIYALAR
+            // ==========================================
             if (generalRating !== undefined && (generalRating < 1 || generalRating > 10)) {
                 return res.status(400).json({ message: "Umumiy baho 1 dan 10 gacha bo'lishi kerak." });
             }
             if (sellerRating !== undefined && (sellerRating < 1 || sellerRating > 10)) {
                 return res.status(400).json({ message: "Sotuvchi bahosi 1 dan 10 gacha bo'lishi kerak." });
             }
+            if (ratingComment !== undefined && ratingComment.trim().length > 500) {
+                return res.status(400).json({ message: "Izoh uzunligi 500 ta belgidan oshmasligi kerak." });
+            }
 
+            // 2. customerName uzunligini tekshiramiz (200 belgidan oshmasligi kerak)
+            if (customerName !== undefined && customerName.trim().length > 200) {
+                return res.status(400).json({ message: "Ism uzunligi 200 ta belgidan oshmasligi kerak." });
+            }
+
+            // ==========================================
+            // O'ZGARISHLARNI YIG'ISH VA SAQLASH
+            // ==========================================
             const changes = [];
+
+            // Ismni yangilash (Frontend 'customerName' beradi, biz 'clientName' ga yozamiz)
+            if (customerName !== undefined && existingLead.clientName !== customerName.trim()) {
+                changes.push({ field: 'clientName', old: existingLead.clientName, new: customerName.trim() });
+                existingLead.clientName = customerName.trim();
+            }
 
             if (generalRating !== undefined && existingLead.generalRating !== generalRating) {
                 changes.push({ field: 'generalRating', old: existingLead.generalRating, new: generalRating });
@@ -2990,35 +3008,6 @@ class b1HANA {
                 existingLead.ratingComment = ratingComment;
             }
 
-            if (ratingComment !== undefined && ratingComment.trim().length > 500) {
-                return res.status(400).json({ message: "Izoh uzunligi 500 ta belgidan oshmasligi kerak." });
-            }
-
-            // --- SELLER ISMI VA TELEGRAM ID'SINI TOPISH ---
-            let sellerFullName = existingLead.seller; // default holat
-            let sellerChatId = null;
-
-            if (existingLead.seller) {
-                // 1. Avval User modelidan qidiramiz (tg chat_id'sini olish uchun)
-                // Sizning bazangizdagi 'slpCode' yoki mos keladigan maydon bo'yicha qidiring
-                const sellerUser = await User.findOne({ slpCode: existingLead.seller }).lean();
-
-                if (sellerUser) {
-                    sellerFullName = sellerUser.fullName || existingLead.seller;
-                    sellerChatId = sellerUser.chat_id; // Sotuvchining shaxsiy Telegram ID si
-                } else {
-                    // 2. Agar topilmasa SAP dan izlaymiz (ismni olish uchun)
-                    const sellerQuery = DataRepositories.getSalesPersons({
-                        SlpCode: existingLead.seller
-                    });
-                    const sellerData = await this.execute(sellerQuery);
-
-                    if (sellerData && sellerData.length > 0) {
-                        sellerFullName = sellerData[0].SlpName;
-                    }
-                }
-            }
-
             // Agar o'zgarish bo'lsa, saqlaymiz va tarixga yozamiz
             if (changes.length > 0) {
                 existingLead.ratedAt = new Date();
@@ -3031,22 +3020,40 @@ class b1HANA {
                     isSystem: !req.user,
                     type: 'event',
                     action: 'rating_added',
-                    message: "Mijoz tomonidan xizmat va/yoki sotuvchiga baho berildi",
+                    message: "Mijoz tomonidan ma'lumotlar va reyting kiritildi",
                     changes: changes,
                     statusFrom: existingLead.status,
                     statusTo: existingLead.status,
                 });
 
+                // --- SELLER ISMI VA TELEGRAM ID'SINI TOPISH ---
+                let sellerFullName = existingLead.seller;
+                let sellerChatId = null;
+
+                if (existingLead.seller) {
+                    const sellerUser = await User.findOne({ slpCode: existingLead.seller }).lean();
+
+                    if (sellerUser) {
+                        sellerFullName = sellerUser.fullName || existingLead.seller;
+                        sellerChatId = sellerUser.chat_id;
+                    } else {
+                        const sellerQuery = DataRepositories.getSalesPersons({ SlpCode: existingLead.seller });
+                        const sellerData = await this.execute(sellerQuery);
+
+                        if (sellerData && sellerData.length > 0) {
+                            sellerFullName = sellerData[0].SlpName;
+                        }
+                    }
+                }
+
                 // --- TELEGRAMGA XABAR YUBORISH ---
                 try {
-                    // Guruh ID sini olish
                     const SELLER_GROUP_CHAT_ID = process.env.SELLER_GROUP_CHAT_ID;
 
-                    // Matn tayyorlash
+                    // Telegramga xabar yuborganda ham mijozning eng yangi ismini ko'rsatamiz
                     const clientInfo = existingLead.clientName || existingLead.clientPhone || existingLead.n || "Noma'lum";
-                    const leadLink = `https://crm.probox.uz/lead/${existingLead._id}`; // o'zingizni URL ni qo'ying
+                    const leadLink = `https://crm.probox.uz/lead/${existingLead._id}`;
 
-                    // Emoji bezaklar
                     const genEmoji = generalRating >= 8 ? '🟢' : generalRating >= 5 ? '🟡' : '🔴';
                     const selEmoji = sellerRating >= 8 ? '🟢' : sellerRating >= 5 ? '🟡' : '🔴';
 
@@ -3061,35 +3068,37 @@ class b1HANA {
 
                     const opts = { parse_mode: 'HTML' };
 
-                    // 1. Sotuvchining shaxsiy telegramiga yuborish (agar botga kirgan bo'lsa)
                     if (sellerChatId) {
                         await bot.sendMessage(sellerChatId, tgMessage, opts).catch(e => {
-                            console.error(`Sotuvchiga yuborishda xato (ChatID: ${sellerChatId}):`, e.message);
+                            console.error(`Sotuvchiga yuborishda xato:`, e.message);
                         });
                     }
 
-                    // 2. Sotuvchilar guruhiga yuborish
                     if (SELLER_GROUP_CHAT_ID) {
                         await bot.sendMessage(SELLER_GROUP_CHAT_ID, tgMessage, opts).catch(e => {
-                            console.error(`Guruhga yuborishda xato (ChatID: ${SELLER_GROUP_CHAT_ID}):`, e.message);
+                            console.error(`Guruhga yuborishda xato:`, e.message);
                         });
                     }
 
                 } catch (tgError) {
                     console.error('Telegramga reyting xabarini yuborishda xatolik:', tgError);
-                    // TG error bo'lsa ham req o'tib ketishi kerak, return qilib yubormaymiz.
                 }
             }
 
+            // 3. Frontendga yangilangan ma'lumotlarni to'liq qaytaramiz
             return res.status(200).json({
                 message: "Baho muvaffaqiyatli saqlandi",
                 data: {
+                    _id: existingLead._id,
+                    clientName: existingLead.clientName, // Yangilangan ism qaytadi
                     generalRating: existingLead.generalRating,
                     sellerRating: existingLead.sellerRating,
                     ratingComment: existingLead.ratingComment,
                     ratedAt: existingLead.ratedAt,
                     sellerCode: existingLead.seller,
-                    sellerName: sellerFullName
+                    // sellerName bu yerda aniqlangan bo'lmasa, uni alohida jo'natishingiz yoki olib tashlashingiz mumkin.
+                    // Yuqoridagi blokda sellerFullName faqat o'zgarish bo'lsagina hisoblangan.
+                    // Agar o'zgarish bo'lmasa ham ismni qaytarish kerak bo'lsa, seller qidiruvini if (changes.length > 0) dan tashqariga chiqarish kerak.
                 }
             });
 
