@@ -2928,8 +2928,19 @@ class b1HANA {
             return res.status(200).json({
                 message: "Reyting ma'lumotlari muvaffaqiyatli olindi",
                 data: {
-                    ...lead,
-                    sellerName: sellerFullName // Yangi maydon sifatida ismini qo'shib beramiz
+                    _id: lead._id,
+                    clientName: lead.clientName || null,
+                    status: lead.status || null,
+                    seller: lead.seller || null,
+                    sellerName: sellerFullName || null,
+
+                    // Raqamli qiymatlar uchun ?? ishlatgan ma'qul, chunki 0 raqami kelsa uni ham o'tkazadi
+                    generalRating: lead.generalRating ?? null,
+                    sellerRating: lead.sellerRating ?? null,
+
+                    // Matn yoki sanalar uchun || ishlatsa bo'ladi
+                    ratingComment: lead.ratingComment || null,
+                    ratedAt: lead.ratedAt || null
                 },
             });
         } catch (err) {
