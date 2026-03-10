@@ -22,7 +22,7 @@ async function sendRatingSms(phone, leadId) {
             sms: {
                 originator: "PROBOX",
                 content: {
-                    text: `Hurmatli mijoz! Sizning fikringiz Probox uchun juda qadrlidir. Sotuvchini baholab, xizmatimizni yanada yaxshilashga yordam bering:\n\nhttps://work.probox.uz/rating/${leadId}`
+                    text: `Hurmatli mijoz! Sizning fikringiz Probox uchun juda qadrlidir. Sotuvchini baholab, xizmatimizni yanada yaxshilashga yordam bering:\n\t\n https://work.probox.uz/rating/${leadId}`
                 }
             }
         }
