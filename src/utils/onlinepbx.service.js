@@ -277,8 +277,7 @@ async function handleOnlinePbxPayload(payload , io) {
                 update.$set.status = 'NoAnswer';
                 delete update.$setOnInsert.status;
             }
-
-            console.log()
+            console.log(isMissedBase ," bu misseedd " ,  normalizedPhone)
             if (isMissedBase) {
                 update.$set.status = 'Missed';
                 delete update.$setOnInsert.status;
@@ -289,7 +288,7 @@ async function handleOnlinePbxPayload(payload , io) {
                 const clientName = leadBefore.clientName || leadBefore.cardName || null;
 
                 // Funksiyani chaqiramiz (kutib turmaymiz, orqa fonda ishlaydi)
-                sendMissedCallSms(canonicalPhone, clientName, String(lead._id))
+                sendMissedCallSms(canonicalPhone, clientName, String(leadBefore._id))
                     .then(async (success) => {
                         if (success) {
                             console.log(`[PBX] Missed call SMS muvaffaqiyatli jo'natildi -> ${canonicalPhone}`);
@@ -297,13 +296,13 @@ async function handleOnlinePbxPayload(payload , io) {
                             try {
                                 // 1. Lead'ga SMS ketdi deb belgilab qo'yamiz
                                 await LeadModel.updateOne(
-                                    { _id: lead._id },
+                                    { _id: leadBefore._id },
                                     { $set: { isMissedSmsSent: true } }
                                 );
 
                                 // 2. Tarixga (LeadChat) yozib qo'yamiz
                                 await LeadChatModel.create({
-                                    leadId: lead._id,
+                                    leadId: leadBefore._id,
                                     type: 'event',
                                     isSystem: true,
                                     action: 'sms_sent', // Schema'dagi mavjud enum qiymatiga qarab o'zgartirishingiz mumkin
