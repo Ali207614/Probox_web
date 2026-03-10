@@ -278,14 +278,15 @@ async function handleOnlinePbxPayload(payload , io) {
                 delete update.$setOnInsert.status;
             }
 
+            console.log()
             if (isMissedBase) {
                 update.$set.status = 'Missed';
                 delete update.$setOnInsert.status;
             }
 
-            if (isMissedBase && !lead.isMissedSmsSent) {
+            if (isMissedBase && !leadBefore.isMissedSmsSent) {
 
-                const clientName = lead.clientName || lead.cardName || null;
+                const clientName = leadBefore.clientName || leadBefore.cardName || null;
 
                 // Funksiyani chaqiramiz (kutib turmaymiz, orqa fonda ishlaydi)
                 sendMissedCallSms(canonicalPhone, clientName, String(lead._id))
