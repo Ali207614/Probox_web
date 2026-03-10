@@ -170,7 +170,7 @@ class LeadController {
                 status: lead?.status,
                 generalRating: lead?.generalRating || null,
                 sellerRating: lead?.sellerRating || null,
-                ratingComment: lead?.generalRating || null,
+                ratingComment: lead?.ratingComment || null,
                 noAnswerCount: lead?.noAnswerCount,
                 consideringBumped: lead?.consideringBumped,
                 recallDate:lead?.recallDate ? moment(lead.recallDate).format('YYYY.MM.DD HH:mm') : null,
