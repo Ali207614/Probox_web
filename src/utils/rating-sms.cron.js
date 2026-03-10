@@ -168,7 +168,7 @@ function startRatingSmsCron() {
     // 🛠 TEST UCHUN CRON: Har 1 minutda ishlaydi (Hozir yoniq)
     // =========================================================================
   //  const cronExpression = '* * * * *';
-    const cronExpression = '*/5 * * * *';
+    const cronExpression = '*/2 * * * *';
 
     // =========================================================================
     // 🚀 PROD UCHUN CRON: Har soat boshida ishlaydi (Test tugagach shuni ochasiz)
