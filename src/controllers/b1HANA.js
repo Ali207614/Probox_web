@@ -3052,7 +3052,7 @@ class b1HANA {
 
                     // Telegramga xabar yuborganda ham mijozning eng yangi ismini ko'rsatamiz
                     const clientInfo = existingLead.clientName || existingLead.clientPhone || existingLead.n || "Noma'lum";
-                    const leadLink = `https://crm.probox.uz/lead/${existingLead._id}`;
+                    const leadLink = `https://work.probox.uz/leads/${existingLead._id}`;
 
                     const genEmoji = generalRating >= 8 ? '🟢' : generalRating >= 5 ? '🟡' : '🔴';
                     const selEmoji = sellerRating >= 8 ? '🟢' : sellerRating >= 5 ? '🟡' : '🔴';

@@ -54,23 +54,22 @@ async function processRatingSms() {
     // =========================================================================
     // 🛠 1. TEST REJIMI UCHUN FILTER (Hozir ishlab turibdi)
     // =========================================================================
-    const testIds = [
-        '6914163f6ce698946c044743',
-        '690ae2c2ed859c7e5bb4b14b',
-        '6914163f6ce698946c0446a9'
-    ];
-
-    const filter = {
-        _id: { $in: testIds },
-        clientPhone: { $exists: true, $ne: null, $ne: '' }
-    };
+    // const testIds = [
+    //     '6914163f6ce698946c044743',
+    //     '690ae2c2ed859c7e5bb4b14b',
+    //     '6914163f6ce698946c0446a9'
+    // ];
+    //
+    // const filter = {
+    //     _id: { $in: testIds },
+    //     clientPhone: { $exists: true, $ne: null, $ne: '' }
+    // };
     // =========================================================================
 
 
     // =========================================================================
     // 🚀 2. PROD (JONLI) REJIM UCHUN FILTER (Test tugagach shuni ochasiz)
     // =========================================================================
-    /*
     const twoHoursAgo = new Date(now.getTime() - TWO_HOURS_MS);
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
@@ -84,7 +83,6 @@ async function processRatingSms() {
         },
         clientPhone: { $exists: true, $ne: null, $ne: '' }
     };
-    */
     // =========================================================================
 
 
@@ -166,8 +164,8 @@ function startRatingSmsCron() {
     // =========================================================================
     // 🛠 TEST UCHUN CRON: Har 1 minutda ishlaydi (Hozir yoniq)
     // =========================================================================
-  //  const cronExpression = '* * * * *';
-    const cronExpression = '*/5 * * * *';
+    const cronExpression = '* * * * *';
+    //const cronExpression = '*/5 * * * *';
 
     // =========================================================================
     // 🚀 PROD UCHUN CRON: Har soat boshida ishlaydi (Test tugagach shuni ochasiz)
