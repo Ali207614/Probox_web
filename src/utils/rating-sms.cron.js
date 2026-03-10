@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const axios = require('axios'); // Agar axios bo'lmasa, node-fetch ishlatsangiz ham bo'ladi
+const axios = require('axios');
 const LeadModel = require('../models/lead-model');
 const LeadChatModel = require('../models/lead-chat-model');
 
@@ -8,16 +8,11 @@ const SMS_API_URL = 'https://send.smsxabar.uz/broker-api/send';
 const SMS_USERNAME = process.env.SMS_USERNAME || 'SIZNING_LOGININGIZ';
 const SMS_PASSWORD = process.env.SMS_PASSWORD || 'SIZNING_PAROLINGIZ';
 
-// Auth tokenni tayyorlash (Basic Auth)
 const basicAuthToken = Buffer.from(`${SMS_USERNAME}:${SMS_PASSWORD}`).toString('base64');
-
-// Vaqt oraliqlari
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
-const BATCH_SIZE = 50; // Bir urinishda 50 ta SMS
-
+const BATCH_SIZE = 20;
 
 async function sendRatingSms(phone, leadId) {
-    // Telefon raqamni tozalash (faqat raqamlarni qoldirish, masalan +998 ni 998 ga aylantirish xizmat talabiga qarab)
     const cleanPhone = phone.replace(/\D/g, '');
 
     const payload = {
@@ -40,36 +35,63 @@ async function sendRatingSms(phone, leadId) {
                 'Content-Type': 'application/json'
             }
         });
-        return response.status === 200;
+
+        if (response.status === 200) {
+            return { success: true };
+        } else {
+            return { success: false, error: `Noma'lum xato. Status: ${response.status}` };
+        }
     } catch (error) {
-        console.error(`[CRON:rating-sms] SMS jo'natishda xatolik (Lead: ${leadId}):`, error?.response?.data || error.message);
-        return false;
+        const errMsg = error?.response?.data?.message || error?.response?.data || error.message;
+        console.error(`[CRON:rating-sms] SMS jo'natishda xatolik (Lead: ${leadId}):`, errMsg);
+        return { success: false, error: JSON.stringify(errMsg) };
     }
 }
 
-/**
- * Bazadan mijozlarni qidirish va SMS jo'natish mantiqi
- */
 async function processRatingSms() {
     const now = new Date();
-    const twoHoursAgo = new Date(now.getTime() - TWO_HOURS_MS);
 
-    // Faqat bugun ishlashi uchun: bugungi kunning boshlanishi
+    // =========================================================================
+    // 🛠 1. TEST REJIMI UCHUN FILTER (Hozir ishlab turibdi)
+    // =========================================================================
+    const testIds = [
+        '6914163f6ce698946c044743',
+        '6913955c6ce698946c0401ce',
+        '690ae2c2ed859c7e5bb4b14b'
+    ];
+
+    const filter = {
+        _id: { $in: testIds },
+        isRatingSmsSent: false,
+        clientPhone: { $exists: true, $ne: null, $ne: '' }
+    };
+    // =========================================================================
+
+
+    // =========================================================================
+    // 🚀 2. PROD (JONLI) REJIM UCHUN FILTER (Test tugagach shuni ochasiz)
+    // =========================================================================
+    /*
+    const twoHoursAgo = new Date(now.getTime() - TWO_HOURS_MS);
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
 
     const filter = {
-        status: 'Purchased', // Faqat xarid qilinganlar
-        isRatingSmsSent: false, // Hali SMS ketmagan bo'lsa
+        status: 'Purchased',
+        isRatingSmsSent: false,
         statusChangedAt: {
-            $lte: twoHoursAgo, // 2 soatdan oshgan bo'lishi kerak
-            $gte: startOfToday // Faqat bugungi kun uchun
+            $lte: twoHoursAgo,
+            $gte: startOfToday
         },
-        clientPhone: { $exists: true, $ne: null, $ne: '' } // Raqami borlar
+        clientPhone: { $exists: true, $ne: null, $ne: '' }
     };
+    */
+    // =========================================================================
 
+
+    // Bazadan qidirish
     const leads = await LeadModel.find(filter)
-        .sort({ statusChangedAt: 1 })
+        .sort({ statusChangedAt: 1 }) // Test payti buni ahamiyati yo'q, lekin prod uchun kerak
         .limit(BATCH_SIZE)
         .select('_id clientPhone statusChangedAt')
         .lean();
@@ -77,17 +99,16 @@ async function processRatingSms() {
     if (!leads.length) return 0;
 
     let sentCount = 0;
-    const idsToUpdate = [];
+    const idsToUpdateSuccess = [];
     const chatEvents = [];
 
     for (const lead of leads) {
-        const isSent = await sendRatingSms(lead.clientPhone, lead._id);
+        const result = await sendRatingSms(lead.clientPhone, lead._id);
 
-        if (isSent) {
+        if (result.success) {
             sentCount++;
-            idsToUpdate.push(lead._id);
+            idsToUpdateSuccess.push(lead._id);
 
-            // Tarixga yozib qo'yish (LeadChat)
             chatEvents.push({
                 leadId: lead._id,
                 type: 'event',
@@ -98,17 +119,39 @@ async function processRatingSms() {
                 createdAt: now,
                 updatedAt: now,
             });
+        } else {
+            await LeadModel.updateOne(
+                { _id: lead._id },
+                {
+                    $set: {
+                        isRatingSmsSent: true,
+                        ratingSmsError: `SMS Error: ${result.error}`,
+                        updatedAt: now
+                    }
+                }
+            );
+
+            chatEvents.push({
+                leadId: lead._id,
+                type: 'event',
+                isSystem: true,
+                action: 'field_changed',
+                createdBy: 0,
+                message: `Tizim xatosi: Reyting SMS jo'natib bo'lmadi.\nSabab: ${result.error}`,
+                createdAt: now,
+                updatedAt: now,
+            });
         }
     }
 
-    // Jo'natilganlarni bazada yangilash
-    if (idsToUpdate.length > 0) {
+    if (idsToUpdateSuccess.length > 0) {
         await LeadModel.updateMany(
-            { _id: { $in: idsToUpdate } },
+            { _id: { $in: idsToUpdateSuccess } },
             { $set: { isRatingSmsSent: true, updatedAt: now } }
         );
+    }
 
-        // Tarixlarni saqlash
+    if (chatEvents.length > 0) {
         try {
             await LeadChatModel.insertMany(chatEvents, { ordered: false });
         } catch (err) {
@@ -119,18 +162,28 @@ async function processRatingSms() {
     return sentCount;
 }
 
-/**
- * Cronjob'ni ishga tushirish (har 10 daqiqada tekshiradi)
- */
 function startRatingSmsCron() {
-    cron.schedule('0 * * * *', async () => {
+
+    // =========================================================================
+    // 🛠 TEST UCHUN CRON: Har 1 minutda ishlaydi (Hozir yoniq)
+    // =========================================================================
+  //  const cronExpression = '* * * * *';
+    const cronExpression = '*/5 * * * *';
+
+    // =========================================================================
+    // 🚀 PROD UCHUN CRON: Har soat boshida ishlaydi (Test tugagach shuni ochasiz)
+    // =========================================================================
+    // const cronExpression = '0 * * * *';
+
+    cron.schedule(cronExpression, async () => {
         try {
+            console.log(`[CRON:rating-sms] Jarayon boshlandi... (${new Date().toISOString()})`);
             const sent = await processRatingSms();
             if (sent > 0) {
-                console.log(`[CRON:rating-sms] ${sent} ta mijozga reyting SMS jo'natildi. (${new Date().toISOString()})`);
+                console.log(`[CRON:rating-sms] ✅ ${sent} ta mijozga reyting SMS jo'natildi.`);
             }
         } catch (error) {
-            console.error('[CRON:rating-sms] error:', error?.message || error);
+            console.error('[CRON:rating-sms] ❌ CRITICAL ERROR:', error?.stack || error);
         }
     }, {
         timezone: "Asia/Tashkent"

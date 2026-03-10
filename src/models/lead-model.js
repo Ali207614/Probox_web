@@ -129,6 +129,7 @@ const LeadSchema = new Schema(
         closedGeminiVerdict: { type: String, enum: ['MOS', 'MOS_EMAS', null], default: null }, // ixtiyoriy
         closedGeminiQuality: { type: String, enum: ['SIFATSIZ', 'SIFATLI', null], default: null }, // ixtiyoriy
         closedGeminiError: { type: String, default: null },  // xatolik bo'lsa yozib qo'yish
+        ratingSmsError: { type: String, default: null },  // xatolik bo'lsa yozib qo'yish
         generalRating: {
             type: Number,
             min: [1, "Baho 1 dan kam bo'lmasligi kerak"],

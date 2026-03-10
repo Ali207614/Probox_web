@@ -148,11 +148,25 @@ permissions.CEO = [
     ...permissions.Operator2,
     ...permissions.Seller,
     ...permissions.Scoring,
+    ...permissions.OperatorM,
     'isBlocked',
     'status',
     'purchase',
     'purchaseDate',
 ];
+
+permissions.Manager = [
+    ...permissions.Operator1,
+    ...permissions.Operator2,
+    ...permissions.Seller,
+    ...permissions.Scoring,
+    ...permissions.OperatorM,
+    'isBlocked',
+    'status',
+    'purchase',
+    'purchaseDate',
+];
+
 
 module.exports = permissions;
 

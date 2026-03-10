@@ -1169,7 +1169,7 @@ class b1HANA {
                 generalRating: item?.generalRating || null,
                 sellerRating: item?.sellerRating || null,
                 ratingComment: item?.ratingComment || null,
-
+                ratingSmsError: item?.ratingSmsError || null,
                 consideringBumped: ['Closed', 'Purchased'].includes(item.status)
                     ? false
                     : item?.consideringBumped,
