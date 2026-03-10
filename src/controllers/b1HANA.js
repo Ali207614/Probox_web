@@ -1165,6 +1165,11 @@ class b1HANA {
                 n: item.n,
                 id: item._id,
                 seen:item?.seen,
+
+                generalRating: item?.generalRating || null,
+                sellerRating: item?.sellerRating || null,
+                ratingComment: item?.ratingComment || null,
+
                 consideringBumped: ['Closed', 'Purchased'].includes(item.status)
                     ? false
                     : item?.consideringBumped,
@@ -2891,7 +2896,7 @@ class b1HANA {
 
             // 1. Leadni bazadan olish
             const lead = await LeadModel.findById(id)
-                .select('generalRating sellerRating ratingComment ratedAt seller status')
+                .select('generalRating sellerRating ratingComment ratedAt seller status clientName')
                 .lean();
 
             if (!lead) {
@@ -2975,6 +2980,10 @@ class b1HANA {
             if (ratingComment !== undefined && existingLead.ratingComment !== ratingComment) {
                 changes.push({ field: 'ratingComment', old: existingLead.ratingComment, new: ratingComment });
                 existingLead.ratingComment = ratingComment;
+            }
+
+            if (ratingComment !== undefined && ratingComment.trim().length > 500) {
+                return res.status(400).json({ message: "Izoh uzunligi 500 ta belgidan oshmasligi kerak." });
             }
 
             // Agar o'zgarish bo'lsa, saqlaymiz va tarixga yozamiz
