@@ -758,8 +758,7 @@ GROUP BY
 LIMIT ${limit} OFFSET ${offset};
         `;
     }
-
-    getSalesPersons({ exclude = [], include = []  , branch} = {}) {
+    getSalesPersons({ exclude = [], include = [], branch, SlpCode } = {}) {
         let whereClause = `WHERE T0."U_role" IS NOT NULL`;
 
         if (include.length > 0) {
@@ -768,23 +767,28 @@ LIMIT ${limit} OFFSET ${offset};
             whereClause += ` AND T0."U_role" NOT IN (${exclude.map(r => `'${r}'`).join(', ')})`;
         }
 
-        if(branch) {
+        if (branch) {
             whereClause += ` AND T0."U_branch" = '${branch}'`;
         }
 
+        // 📌 Yana bitta shart qo'shamiz: Agar SlpCode kelsa, faqat o'shani qidiradi
+        if (SlpCode !== undefined && SlpCode !== null) {
+            whereClause += ` AND T0."SlpCode" = ${SlpCode}`; // Agar SAP B1 da SlpCode string bo'lsa, '${SlpCode}' qilib oling
+        }
+
         return `
-            SELECT
-                T0."SlpCode",
-                T0."SlpName",
-                T0."U_login",
-                T0."U_role",
-                T0."U_summa",
-                T0."U_workDay",
-                T0."U_branch",
-                T0."U_onlinepbx"
-            FROM ${this.db}.OSLP T0
-                ${whereClause}
-        `;
+        SELECT
+            T0."SlpCode",
+            T0."SlpName",
+            T0."U_login",
+            T0."U_role",
+            T0."U_summa",
+            T0."U_workDay",
+            T0."U_branch",
+            T0."U_onlinepbx"
+        FROM ${this.db}.OSLP T0
+        ${whereClause}
+    `;
     }
 
     getRate({ currency = 'UZS', date = '' }) {
