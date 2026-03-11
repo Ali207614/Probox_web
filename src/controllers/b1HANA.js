@@ -1002,26 +1002,25 @@ class b1HANA {
                 if (end) dateQuery.$lte = end;
 
                 if (meeting === 'time') {
-                    // Yangi mantiq: Agar newTime bo'lsa uni, bo'lmasa meetingDate ni tekshirish
+                    // Yangi mantiq: Agar newTime bo'lsa uni, bo'lmasa time ni tekshirish
                     addAndCondition(filter, {
                         $or: [
+                            // 1-holat: newTime aniqlangan va u biz qidirayotgan vaqt oralig'ida
                             { newTime: dateQuery },
-                            {
-                                newTime: { $exists: false }, // yoki newTime null bo'lsa
-                                meetingDate: dateQuery
-                            },
-                            {
-                                newTime: null,
-                                meetingDate: dateQuery
-                            }
+
+                            // 2-holat: newTime yo'q (yoki null) va time biz qidirayotgan vaqt oralig'ida
+                            { newTime: null, time: dateQuery }
                         ]
                     });
                 } else {
                     let field;
                     if (meeting === 'meetingDate') field = 'meetingDate';
                     else if (meeting === 'meetingConfirmedDate') field = 'meetingConfirmedDate';
-                    else field = 'meetingDate';
+                    else field = 'meetingDate'; // default
 
+                    // Agar meeting === 'time' bo'lmasa, o'zining eski mantiqi ishlaydi
+                    // Eslatma: Bu yerda endi addAndCondition ishlatish xavfsizroq bo'lishi mumkin,
+                    // lekin sizda filter[field] = dateQuery turgan ekan. O'zgartirmaymiz.
                     filter[field] = dateQuery;
                 }
             }
