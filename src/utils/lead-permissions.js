@@ -140,7 +140,8 @@ permissions.OperatorM = [
     'answered',
     'callCount',
     'interested',
-    'scoring'
+    'scoring',
+    'source',
 ];
 
 permissions.CEO = [
@@ -153,6 +154,7 @@ permissions.CEO = [
     'status',
     'purchase',
     'purchaseDate',
+    'source',
 ];
 
 permissions.Manager = [
@@ -165,6 +167,7 @@ permissions.Manager = [
     'status',
     'purchase',
     'purchaseDate',
+    'source',
 ];
 
 
