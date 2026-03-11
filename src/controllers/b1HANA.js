@@ -986,12 +986,6 @@ class b1HANA {
             }
 
             if (meetingDateStart || meetingDateEnd) {
-                let field;
-                if (meeting === 'time') field = 'time';
-                else if (meeting === 'meetingDate') field = 'meetingDate';
-                else if (meeting === 'meetingConfirmedDate') field = 'meetingConfirmedDate';
-                else field = 'meetingDate';
-
                 const parseDate = (val) => {
                     if (!val) return null;
                     const clean = val.trim().replace(/\//g, '.');
@@ -1003,9 +997,33 @@ class b1HANA {
                 const end = parseDate(meetingDateEnd);
                 if (end) end.setHours(23, 59, 59, 999);
 
-                filter[field] = {};
-                if (start) filter[field].$gte = start;
-                if (end) filter[field].$lte = end;
+                const dateQuery = {};
+                if (start) dateQuery.$gte = start;
+                if (end) dateQuery.$lte = end;
+
+                if (meeting === 'time') {
+                    // Yangi mantiq: Agar newTime bo'lsa uni, bo'lmasa meetingDate ni tekshirish
+                    addAndCondition(filter, {
+                        $or: [
+                            { newTime: dateQuery },
+                            {
+                                newTime: { $exists: false }, // yoki newTime null bo'lsa
+                                meetingDate: dateQuery
+                            },
+                            {
+                                newTime: null,
+                                meetingDate: dateQuery
+                            }
+                        ]
+                    });
+                } else {
+                    let field;
+                    if (meeting === 'meetingDate') field = 'meetingDate';
+                    else if (meeting === 'meetingConfirmedDate') field = 'meetingConfirmedDate';
+                    else field = 'meetingDate';
+
+                    filter[field] = dateQuery;
+                }
             }
 
             parseYesNoUnmarked(purchase, 'purchase');
