@@ -2353,7 +2353,7 @@ class b1HANA {
                 return res.status(404).json({ message: 'Lead not found' });
             }
 
-            if(existingLead.status === 'Closed' && U_role !== 'OperatorM'){
+            if(existingLead.status === 'Closed' && (U_role !== 'OperatorM' || U_role !== 'Manager')){
                 return res.status(400).json({ message: "Lead yopilgan !" });
             }
 
@@ -2538,7 +2538,7 @@ class b1HANA {
             const SOFT_LOCKED_STATUS = 'Closed'; // faqat ayrim rollar o'zgartira oladi
 
 // ✅ Faqat shu rollar Closed'dan qayta o'tkaza oladi
-            const CLOSED_OVERRIDE_ROLES = new Set(['OperatorM', 'CEO']);
+            const CLOSED_OVERRIDE_ROLES = new Set(['OperatorM', 'CEO','Manager']);
             const canOverrideClosed = CLOSED_OVERRIDE_ROLES.has(U_role);
 
             const prevStatusHardLocked = HARD_LOCKED_STATUSES.has(prevStatus);
