@@ -277,7 +277,7 @@ async function handleOnlinePbxPayload(payload , io) {
                 update.$set.status = 'NoAnswer';
                 delete update.$setOnInsert.status;
             }
-            console.log(isMissedBase ," bu misseedd " ,  normalizedPhone)
+
             if (isMissedBase) {
                 update.$set.status = 'Missed';
                 delete update.$setOnInsert.status;

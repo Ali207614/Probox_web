@@ -7,6 +7,7 @@ const moment = require('moment');
 const { getSession, saveSession } = require("../helpers");
 const { api_params, api, db} = require("../config");
 const { execute } = require("../services/dbService");
+const VerificationCodeModel = require('../models/verification-code-model');
 
 require('dotenv').config();
 
@@ -371,6 +372,35 @@ class b1SL {
                 });
             }
 
+            // ==============================================================
+            // ✨ YANGI QO'SHILGAN QISM: SMS KODNI TEKSHIRISH
+            // ==============================================================
+            // const providedCode = req.body.verificationCode; // Front-end shu yerga kodni yuboradi
+            // const rawPhone = req.body.clientPhone;
+            // const normalizedPhone = this.normalizePhone(rawPhone);
+            //
+            // if (!normalizedPhone) {
+            //     return res.status(400).json({ status: false, message: 'Invalid client phone number' });
+            // }
+            //
+            // if (!providedCode) {
+            //     return res.status(400).json({ status: false, message: "Xariddan oldin SMS tasdiqlash kodi kiritilishi shart!" });
+            // }
+            //
+            // const savedCodeDoc = await VerificationCodeModel.findOne({ phone: normalizedPhone });
+            //
+            // if (!savedCodeDoc) {
+            //     return res.status(400).json({ status: false, message: "Kod muddati tugagan yoki noto'g'ri raqam kiritildi. Iltimos, qaytadan kod jo'nating." });
+            // }
+            //
+            // if (savedCodeDoc.code !== String(providedCode)) {
+            //     return res.status(400).json({ status: false, message: "Kiritilgan SMS kod noto'g'ri!" });
+            // }
+            //
+            // await VerificationCodeModel.deleteOne({ _id: savedCodeDoc._id });
+            // ==============================================================
+
+
             // 1) leadId
             const leadId = req.body.leadId;
             delete req.body.leadId;
@@ -439,17 +469,6 @@ class b1SL {
             const remainingAnnual = annualMaxLimit - financedAmount;
             const lastLimitMonthly = remainingAnnual / 12;
             const finalLimitMonthlyRounded = lastLimitMonthly > 0 ? Math.round(lastLimitMonthly) : 0;
-
-            // 4) client phone normalize
-            const rawPhone = body.clientPhone;
-            const normalizedPhone = this.normalizePhone(rawPhone);
-
-            if (!normalizedPhone) {
-                return res.status(400).json({
-                    status: false,
-                    message: 'Invalid client phone number',
-                });
-            }
 
             // 5) BP find/create by docs
             const safeJshshir = body.jshshir ? String(body.jshshir).replace(/\D/g, '') : '1';

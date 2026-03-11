@@ -44,6 +44,7 @@ const router = new Router();
 
 const invoiceRouter = require("./invoice")
 const {telegramBotBasicAuth} = require("../middlewares/basic-auth-telegram");
+const verifyCodeController = require("../controllers/verification-controller");
 
 router.post('/login', b1HANA.login);
 
@@ -95,6 +96,10 @@ router.get('/leads', authMiddleware, b1HANA.leads)
 router.get('/lead-rating/:id', b1HANA.getLeadRating);
 
 router.post('/lead-rating/:id', b1HANA.rateLead);
+
+
+router.post('/send-verification-code',verifyCodeController.sendVerificationCode);
+
 
 router.get('/leads/:id', authMiddleware, leadController.leadOne)
 
