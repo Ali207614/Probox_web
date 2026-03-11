@@ -164,13 +164,13 @@ function startRatingSmsCron() {
     // =========================================================================
     // 🛠 TEST UCHUN CRON: Har 1 minutda ishlaydi (Hozir yoniq)
     // =========================================================================
-    const cronExpression = '* * * * *';
+    //const cronExpression = '* * * * *';
     //const cronExpression = '*/5 * * * *';
 
     // =========================================================================
     // 🚀 PROD UCHUN CRON: Har soat boshida ishlaydi (Test tugagach shuni ochasiz)
     // =========================================================================
-    // const cronExpression = '0 * * * *';
+     const cronExpression = '0 * * * *';
 
     cron.schedule(cronExpression, async () => {
         try {
