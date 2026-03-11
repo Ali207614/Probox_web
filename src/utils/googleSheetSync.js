@@ -121,10 +121,6 @@ function buildDedupFilter({ sinceDedup, phoneCandidates, legacyRegex, looseRegex
         ],
     };
 
-    if (sinceDedup) {
-        filter.createdAt = { $gte: sinceDedup };
-    }
-
     if (source) filter.source = source;
 
     return filter;
@@ -145,6 +141,39 @@ function parseWorkDays(raw) {
  * MAIN
  * =========================
  */
+
+async function getOperatorBalance(operators) {
+    const startOfDay = moment().startOf('day').toDate();
+    const endOfDay = moment().endOf('day').toDate();
+
+    const todayLeads = await LeadModel.find({
+        operator: { $in: operators.map((o) => o.SlpCode) },
+        createdAt: { $gte: startOfDay, $lte: endOfDay },
+    }).lean();
+
+    const balance = {};
+    operators.forEach((op) => (balance[op.SlpCode] = 0));
+
+    for (const lead of todayLeads) {
+        if (balance[lead.operator] !== undefined) balance[lead.operator]++;
+    }
+    return balance;
+}
+
+let lastAssignedIndexLocal = 0;
+function pickLeastLoadedOperator(availableOperators, balance) {
+    if (!availableOperators.length) return null;
+
+    const minCount = Math.min(...availableOperators.map((op) => balance[op.SlpCode] || 0));
+    const leastLoaded = availableOperators.filter((op) => (balance[op.SlpCode] || 0) === minCount);
+
+    const chosen = leastLoaded[lastAssignedIndexLocal % leastLoaded.length];
+    lastAssignedIndexLocal++;
+
+    balance[chosen.SlpCode] = (balance[chosen.SlpCode] || 0) + 1;
+
+    return chosen;
+}
 async function main(io) {
     try {
         const sheetId = process.env.SHEET_ID;
@@ -392,17 +421,18 @@ async function main(io) {
             uniqueLeadsToInsert: uniqueLeads.length,
         });
 
-        // 6) Operator assignment
-        let lastAssignedIndex = 0;
+        const operatorBalance = await getOperatorBalance(operators);
 
         for (const lead of uniqueLeads) {
             const weekday = getWeekdaySafe(lead.time);
 
+            // Organika bo'lsa operator biriktirmaymiz
             if (lead.source?.trim() === 'Organika') {
                 lead.operator = null;
                 continue;
             }
 
+            // Shu kunda ishlaydigan operatorlarni filtrlaymiz
             const availableOperators = operators.filter((op) => {
                 const days = parseWorkDays(get(op, 'U_workDay', ''));
                 return days.includes(weekday);
@@ -413,8 +443,8 @@ async function main(io) {
                 continue;
             }
 
-            lead.operator = availableOperators[lastAssignedIndex % availableOperators.length].SlpCode;
-            lastAssignedIndex++;
+            const chosen = pickLeastLoadedOperator(availableOperators, operatorBalance);
+            lead.operator = chosen?.SlpCode || null;
         }
 
         // 7) Insert (skip duplicate key errors, continue)
@@ -436,10 +466,11 @@ async function main(io) {
                 }
 
                 skippedDuplicateInsertCount = writeErrors.length;
-
                 console.warn(`⚠️ Duplicate key errors skipped during insertMany: ${skippedDuplicateInsertCount}`);
-                // inserted array may be incomplete/unreliable in bulk duplicate scenarios
-                inserted = [];
+
+                // ASOSIY O'ZGARISH SHU YERDA:
+                // Xato bo'lsa ham, muvaffaqiyatli qo'shilganlarini ajratib olamiz
+                inserted = err.insertedDocs || [];
             }
         }
 

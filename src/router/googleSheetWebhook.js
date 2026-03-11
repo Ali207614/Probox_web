@@ -195,26 +195,20 @@ async function getOperatorBalance(operators) {
     for (const lead of todayLeads) {
         if (balance[lead.operator] !== undefined) balance[lead.operator]++;
     }
-
     return balance;
 }
 
-let lastAssignedIndex = 0;
-
+let lastAssignedIndexLocal = 0;
 function pickLeastLoadedOperator(availableOperators, balance) {
     if (!availableOperators.length) return null;
 
-    const pool = availableOperators.filter((op) => balance[op.SlpCode] !== undefined);
-    if (!pool.length) return null;
+    const minCount = Math.min(...availableOperators.map((op) => balance[op.SlpCode] || 0));
+    const leastLoaded = availableOperators.filter((op) => (balance[op.SlpCode] || 0) === minCount);
 
-    const minCount = Math.min(...pool.map((op) => balance[op.SlpCode] || 0));
-    const leastLoaded = pool.filter((op) => (balance[op.SlpCode] || 0) === minCount);
-
-    const chosen = leastLoaded[lastAssignedIndex % leastLoaded.length];
-    lastAssignedIndex++;
+    const chosen = leastLoaded[lastAssignedIndexLocal % leastLoaded.length];
+    lastAssignedIndexLocal++;
 
     balance[chosen.SlpCode] = (balance[chosen.SlpCode] || 0) + 1;
-
     return chosen;
 }
 
