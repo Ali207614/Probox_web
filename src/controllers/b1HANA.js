@@ -2370,7 +2370,7 @@ class b1HANA {
                 return res.status(404).json({ message: 'Lead not found' });
             }
 
-            if(existingLead.status === 'Closed' && (U_role !== 'OperatorM' || U_role !== 'Manager')){
+            if (existingLead.status === 'Closed' && (U_role !== 'OperatorM' && U_role !== 'Manager')) {
                 return res.status(400).json({ message: "Lead yopilgan !" });
             }
 
