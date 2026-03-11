@@ -271,7 +271,7 @@ async function handleOnlinePbxPayload(payload , io) {
 
             const isActiveStatus =
                 leadBefore?.status === 'Active' ||
-                (leadBefore?.pbx?.prev_status === 'Active' && leadBefore?.status === 'Ignored');
+                (leadBefore?.pbx?.prev_status === 'Active' && leadBefore?.status === 'Ignored') || (leadBefore?.pbx?.prev_status === 'Ignored' && leadBefore?.status === 'Ignored');
 
             if (shouldMoveToNoAnswer && (isActiveStatus || isMissedBase)) {
                 update.$set.status = 'NoAnswer';
