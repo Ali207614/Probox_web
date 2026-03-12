@@ -1003,7 +1003,6 @@ class b1HANA {
 
                 if (Object.keys(dateQuery).length > 0) {
                     if (meeting === 'time') {
-                        // Agar newTime bo'lsa uni, bo'lmasa time ni tekshirish
                         addAndCondition(filter, {
                             $or: [
                                 { newTime: dateQuery },
@@ -1019,8 +1018,12 @@ class b1HANA {
                             meetingConfirmed: true,
                             meetingConfirmedDate: dateQuery
                         });
+                    } else if (meeting === 'purchaseDate') {
+                        addAndCondition(filter, {
+                            status: 'Purchased', // (Ixtiyoriy) Faqat sotib olinganlarni olish kafolati uchun
+                            purchaseDate: dateQuery
+                        });
                     } else {
-                        // Ehtiyot shart: agar query'dan boshqa kutilmagan qiymat kelsa
                         filter['meetingDate'] = dateQuery;
                     }
                 }
@@ -1185,7 +1188,7 @@ class b1HANA {
                 n: item.n,
                 id: item._id,
                 seen:item?.seen,
-
+                purchaseDate: item.purchaseDate ? moment(item.purchaseDate).format('YYYY.MM.DD HH:mm') : null,
                 generalRating: item?.generalRating || null,
                 sellerRating: item?.sellerRating || null,
                 ratingComment: item?.ratingComment || null,
@@ -2843,6 +2846,7 @@ class b1HANA {
                     validData.purchaseDate = null;
                 }
             }
+
             // ✅ finalLimit bo'lsa limitDate qo'yamiz
             if (validData.finalLimit) {
                 validData.limitDate = new Date();
