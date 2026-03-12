@@ -80,7 +80,7 @@ async function processRatingSms() {
            status: 'Purchased',
            isRatingSmsSent: false,
            statusChangedAt: {
-               //$lte: twoHoursAgo,
+               $lte: twoHoursAgo,
                $gte: startOfToday
            },
            clientPhone: { $exists: true, $ne: null, $ne: '' }
@@ -173,13 +173,13 @@ function startRatingSmsCron() {
     // =========================================================================
     // 🛠 TEST UCHUN CRON: Har 1 minutda ishlaydi (Hozir yoniq)
     // =========================================================================
-    const cronExpression = '* * * * *';
+    //const cronExpression = '* * * * *';
     //const cronExpression = '*/5 * * * *';
 
     // =========================================================================
     // 🚀 PROD UCHUN CRON: Har soat boshida ishlaydi (Test tugagach shuni ochasiz)
     // =========================================================================
-    // const cronExpression = '0 * * * *';
+     const cronExpression = '0 * * * *';
 
     cron.schedule(cronExpression, async () => {
         try {
