@@ -2524,14 +2524,6 @@ class b1HANA {
                 }
             }
 
-            // ✅ meetingConfirmed => branch2 & seller required (sizdagi eski qoida)
-            if (validData.meetingConfirmed === true) {
-                if (!validData.branch2 && !validData.seller) {
-                    return res.status(400).json({
-                        message: `Uchrashuv bo'lganda filial va sotuvchi tanlash majburiy`,
-                    });
-                }
-            }
 
             // =========================================================
             // ✅ STATUS CHANGE LOGIC (passportVisit olib tashlandi)
