@@ -256,7 +256,7 @@ async function handleOnlinePbxPayload(payload , io) {
 
         if (isMehrliQongiroq) {
             if (isCallEnd && hasTalk) {
-                update.$set.status = 'Closed';
+                update.$set.status = 'Talked';
                 delete update.$setOnInsert.status;
             }
         } else {

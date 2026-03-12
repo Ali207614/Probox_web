@@ -195,6 +195,7 @@ const LeadSchema = new Schema(
                 'VisitedStore',
                 'NoPurchase',
                 'Closed',
+                'Talked'
             ],
             default: 'Active',
         },
