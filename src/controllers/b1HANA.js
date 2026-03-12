@@ -2549,19 +2549,22 @@ class b1HANA {
 
             const isStatusChanging =
                 nextStatus != null && nextStatus !== '';
-
 // ✅ Final statuslar
-            const HARD_LOCKED_STATUSES = new Set(['Purchased', 'NoPurchase']); // hech kim o'zgartira olmaydi
+            const HARD_LOCKED_STATUSES = new Set(['Purchased', 'NoPurchase']); // Manager'dan tashqari hech kim o'zgartira olmaydi
             const SOFT_LOCKED_STATUS = 'Closed'; // faqat ayrim rollar o'zgartira oladi
 
 // ✅ Faqat shu rollar Closed'dan qayta o'tkaza oladi
-            const CLOSED_OVERRIDE_ROLES = new Set(['OperatorM', 'CEO','Manager']);
+            const CLOSED_OVERRIDE_ROLES = new Set(['OperatorM', 'CEO', 'Manager']);
             const canOverrideClosed = CLOSED_OVERRIDE_ROLES.has(U_role);
+
+// ✅ YANGILIK: Hard locked statuslarni o'zgartira oladigan rollar
+            const HARD_LOCKED_OVERRIDE_ROLES = new Set(['Manager']); // Agar xohlasangiz 'CEO' ni ham qo'shishingiz mumkin
+            const canOverrideHardLocked = HARD_LOCKED_OVERRIDE_ROLES.has(U_role);
 
             const prevStatusHardLocked = HARD_LOCKED_STATUSES.has(prevStatus);
             const prevStatusIsClosed = prevStatus === SOFT_LOCKED_STATUS;
 
-// ✅ rejectionReason berilsa status Closed qilamiz (lekin Purchased/NoPurchase bo'lsa tegmaymiz)
+// ✅ rejectionReason berilsa status Closed qilamiz (lekin Purchased/NoPurchase bo'lsa tegmaymiz, Manager mustasno)
             if (validData.rejectionReason != null && validData.rejectionReason !== '') {
                 validData.rejectionReason2 = validData.rejectionReason;
 
@@ -2578,8 +2581,8 @@ class b1HANA {
                 validData.sellerBumpEscalatedAt=null;
                 validData.sellerBumpNoSellerAt=null;
 
-                // Purchased / NoPurchase bo'lsa statusni o'zgartirmaymiz
-                if (!prevStatusHardLocked) {
+                // Purchased / NoPurchase bo'lsa statusni o'zgartirmaymiz (Manager override qilolmasa)
+                if (!prevStatusHardLocked || canOverrideHardLocked) {
                     validData.status = 'Closed';
                 }
             }
@@ -2599,16 +2602,16 @@ class b1HANA {
                 validData.sellerBumpNotifiedAt=null;
                 validData.sellerBumpEscalatedAt=null;
                 validData.sellerBumpNoSellerAt=null;
-                // Purchased / NoPurchase bo'lsa statusni o'zgartirmaymiz
-                if (!prevStatusHardLocked) {
+
+                // Purchased / NoPurchase bo'lsa statusni o'zgartirmaymiz (Manager override qilolmasa)
+                if (!prevStatusHardLocked || canOverrideHardLocked) {
                     validData.status = 'Closed';
                 }
             }
 
-// ✅ Purchased / NoPurchase => hech kim o'zgartira olmaydi
-            if (isStatusChanging && prevStatusHardLocked) {
+            if (isStatusChanging && prevStatusHardLocked && !canOverrideHardLocked) {
                 return res.status(400).json({
-                    message: `Status ${prevStatus} yakuniy. Uni boshqa statusga o'zgartirib bo'lmaydi.`,
+                    message: `Status ${prevStatus} yakuniy. Uni boshqa statusga o'zgartirib bo'lmaydi. (Faqat Manager huquqiga ega)`,
                     statusFrom: prevStatus,
                     statusTo: nextStatus,
                     role: U_role,
@@ -2616,10 +2619,9 @@ class b1HANA {
                 });
             }
 
-// ✅ Closed => faqat OperatorM va CEO o'zgartira oladi
             if (isStatusChanging && prevStatusIsClosed && !canOverrideClosed) {
                 return res.status(400).json({
-                    message: `Status ${prevStatus} dan faqat OperatorM yoki CEO boshqa statusga o'tkaza oladi.`,
+                    message: `Status ${prevStatus} dan faqat OperatorM, Manager yoki CEO boshqa statusga o'tkaza oladi.`,
                     statusFrom: prevStatus,
                     statusTo: nextStatus,
                     role: U_role,
