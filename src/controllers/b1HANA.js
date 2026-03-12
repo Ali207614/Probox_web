@@ -1011,12 +1011,10 @@ class b1HANA {
                             ]
                         });
                     } else if (meeting === 'meetingDate') {
-                        // meetingDate: status 'WillVisitStore' bo'lishi va recallDate qidirilayotgan vaqt oralig'ida bo'lishi kerak
                         addAndCondition(filter, {
                             recallDate: dateQuery
                         });
                     } else if (meeting === 'meetingConfirmedDate' || meeting === 'meetingConfirmation') {
-                        // meetingConfirmation: uchrashuv aniq bo'lgan (meetingConfirmed: true) va meetingConfirmedDate vaqt oralig'ida bo'lishi kerak
                         addAndCondition(filter, {
                             meetingConfirmed: true,
                             meetingConfirmedDate: dateQuery

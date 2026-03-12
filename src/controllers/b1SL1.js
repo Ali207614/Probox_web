@@ -362,6 +362,23 @@ class b1SL {
         return { ok: errors.length === 0, invoice, payments, errors };
     }
 
+    normalizePhone(input) {
+        if (!input) return null;
+
+        let digits = digitsOnly(input);
+
+        // remove +998 prefix
+        if (digits.startsWith('998')) digits = digits.slice(3);
+
+        // remove leading 0
+        if (digits.startsWith('0')) digits = digits.slice(1);
+
+        // local format: 9 digits
+        if (digits.length !== 9) return null;
+
+        return digits;
+    }
+
     createInvoiceAndPayment = async (req, res, next) => {
         try {
             // 0) seller check
@@ -375,9 +392,9 @@ class b1SL {
             // ==============================================================
             // ✨ YANGI QO'SHILGAN QISM: SMS KODNI TEKSHIRISH
             // ==============================================================
-            // const providedCode = req.body.verificationCode; // Front-end shu yerga kodni yuboradi
-            // const rawPhone = req.body.clientPhone;
-            // const normalizedPhone = this.normalizePhone(rawPhone);
+            const providedCode = req.body.verificationCode; // Front-end shu yerga kodni yuboradi
+             const rawPhone = req.body.clientPhone;
+             const normalizedPhone = this.normalizePhone(rawPhone);
             //
             // if (!normalizedPhone) {
             //     return res.status(400).json({ status: false, message: 'Invalid client phone number' });
