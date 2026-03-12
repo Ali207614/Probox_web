@@ -49,114 +49,123 @@ async function sendRatingSms(phone, leadId) {
 }
 
 async function processRatingSms() {
-    const now = new Date();
+   try {
+       const now = new Date();
 
-    // =========================================================================
-    // 🛠 1. TEST REJIMI UCHUN FILTER (Hozir ishlab turibdi)
-    // =========================================================================
-    // const testIds = [
-    //     '6914163f6ce698946c044743',
-    //     '690ae2c2ed859c7e5bb4b14b',
-    //     '6914163f6ce698946c0446a9'
-    // ];
-    //
-    // const filter = {
-    //     _id: { $in: testIds },
-    //     clientPhone: { $exists: true, $ne: null, $ne: '' }
-    // };
-    // =========================================================================
-
-
-    // =========================================================================
-    // 🚀 2. PROD (JONLI) REJIM UCHUN FILTER (Test tugagach shuni ochasiz)
-    // =========================================================================
-    const twoHoursAgo = new Date(now.getTime() - TWO_HOURS_MS);
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    const filter = {
-        status: 'Purchased',
-        isRatingSmsSent: false,
-        statusChangedAt: {
-            $lte: twoHoursAgo,
-            $gte: startOfToday
-        },
-        clientPhone: { $exists: true, $ne: null, $ne: '' }
-    };
-    // =========================================================================
+       // =========================================================================
+       // 🛠 1. TEST REJIMI UCHUN FILTER (Hozir ishlab turibdi)
+       // =========================================================================
+       // const testIds = [
+       //     '6914163f6ce698946c044743',
+       //     '690ae2c2ed859c7e5bb4b14b',
+       //     '6914163f6ce698946c0446a9'
+       // ];
+       //
+       // const filter = {
+       //     _id: { $in: testIds },
+       //     clientPhone: { $exists: true, $ne: null, $ne: '' }
+       // };
+       // =========================================================================
 
 
-    // Bazadan qidirish
-    const leads = await LeadModel.find(filter)
-        .sort({ statusChangedAt: 1 }) // Test payti buni ahamiyati yo'q, lekin prod uchun kerak
-        .limit(BATCH_SIZE)
-        .select('_id clientPhone statusChangedAt')
-        .lean();
+       // =========================================================================
+       // 🚀 2. PROD (JONLI) REJIM UCHUN FILTER (Test tugagach shuni ochasiz)
+       // =========================================================================
+       const twoHoursAgo = new Date(now.getTime() - TWO_HOURS_MS);
+       const startOfToday = new Date();
+       startOfToday.setHours(0, 0, 0, 0);
 
-    if (!leads.length) return 0;
+       const filter = {
+           status: 'Purchased',
+           isRatingSmsSent: false,
+           statusChangedAt: {
+               $lte: twoHoursAgo,
+               $gte: startOfToday
+           },
+           clientPhone: { $exists: true, $ne: null, $ne: '' }
+       };
+       // =========================================================================
 
-    let sentCount = 0;
-    const idsToUpdateSuccess = [];
-    const chatEvents = [];
 
-    for (const lead of leads) {
-        const result = await sendRatingSms(lead.clientPhone, lead._id);
+       // Bazadan qidirish
+       const leads = await LeadModel.find(filter)
+           .sort({ statusChangedAt: 1 }) // Test payti buni ahamiyati yo'q, lekin prod uchun kerak
+           .limit(BATCH_SIZE)
+           .select('_id clientPhone statusChangedAt')
+           .lean();
 
-        if (result.success) {
-            sentCount++;
-            idsToUpdateSuccess.push(lead._id);
+       console.log(leads ," bu leadssssssssssssssss")
 
-            chatEvents.push({
-                leadId: lead._id,
-                type: 'event',
-                isSystem: true,
-                action: 'sms_sent',
-                createdBy: 0,
-                message: `Tizim: Reyting so'rovi SMS orqali mijozga jo'natildi.`,
-                createdAt: now,
-                updatedAt: now,
-            });
-        } else {
-            await LeadModel.updateOne(
-                { _id: lead._id },
-                {
-                    $set: {
-                        isRatingSmsSent: true,
-                        ratingSmsError: `SMS Error: ${result.error}`,
-                        updatedAt: now
-                    }
-                }
-            );
+       if (!leads.length) return 0;
 
-            chatEvents.push({
-                leadId: lead._id,
-                type: 'event',
-                isSystem: true,
-                action: 'field_changed',
-                createdBy: 0,
-                message: `Tizim xatosi: Reyting SMS jo'natib bo'lmadi.\nSabab: ${result.error}`,
-                createdAt: now,
-                updatedAt: now,
-            });
-        }
-    }
+       let sentCount = 0;
+       const idsToUpdateSuccess = [];
+       const chatEvents = [];
 
-    if (idsToUpdateSuccess.length > 0) {
-        await LeadModel.updateMany(
-            { _id: { $in: idsToUpdateSuccess } },
-            { $set: { isRatingSmsSent: true, updatedAt: now } }
-        );
-    }
+       for (const lead of leads) {
+           const result = await sendRatingSms(lead.clientPhone, lead._id);
 
-    if (chatEvents.length > 0) {
-        try {
-            await LeadChatModel.insertMany(chatEvents, { ordered: false });
-        } catch (err) {
-            console.error('[CRON:rating-sms] history insert error:', err?.message);
-        }
-    }
+           if (result.success) {
+               sentCount++;
+               idsToUpdateSuccess.push(lead._id);
 
-    return sentCount;
+               chatEvents.push({
+                   leadId: lead._id,
+                   type: 'event',
+                   isSystem: true,
+                   action: 'sms_sent',
+                   createdBy: 0,
+                   message: `Tizim: Reyting so'rovi SMS orqali mijozga jo'natildi.`,
+                   createdAt: now,
+                   updatedAt: now,
+               });
+           } else {
+               await LeadModel.updateOne(
+                   { _id: lead._id },
+                   {
+                       $set: {
+                           isRatingSmsSent: true,
+                           ratingSmsError: `SMS Error: ${result.error}`,
+                           updatedAt: now
+                       }
+                   }
+               );
+
+               chatEvents.push({
+                   leadId: lead._id,
+                   type: 'event',
+                   isSystem: true,
+                   action: 'field_changed',
+                   createdBy: 0,
+                   message: `Tizim xatosi: Reyting SMS jo'natib bo'lmadi.\nSabab: ${result.error}`,
+                   createdAt: now,
+                   updatedAt: now,
+               });
+           }
+       }
+
+       if (idsToUpdateSuccess.length > 0) {
+           await LeadModel.updateMany(
+               { _id: { $in: idsToUpdateSuccess } },
+               { $set: { isRatingSmsSent: true, updatedAt: now } }
+           );
+       }
+
+       if (chatEvents.length > 0) {
+           try {
+               await LeadChatModel.insertMany(chatEvents, { ordered: false });
+           } catch (err) {
+               console.error('[CRON:rating-sms] history insert error:', err?.message);
+           }
+       }
+
+       return sentCount;
+   }
+   catch (e){
+       console.error('[CRON:rating-sms] error:', e?.message);
+       return 0;
+   }
+
 }
 
 function startRatingSmsCron() {
