@@ -63,10 +63,17 @@ async function sendMissedCallSms(phone, clientName, leadId) {
 }
 
 
+async function sendNoAnswerSms(phone, clientName, leadId, companyPhone = '+998781134774') {
+    const displayName = clientName && clientName !== 'Noma\'lum' ? clientName : 'hurmatli mijoz';
 
+    const text = `Assalomu alaykum, ${displayName}! Probox jamoasi siz bilan bog'lana olmadi. Qulay vaqtda ${companyPhone} raqamiga qo'ng'iroq qilishingiz yoki t.me/proboxuzbot ga yozishingiz mumkin.`;
 
+    const result = await sendSms(phone, text, `noanswer_${leadId}`);
+    return result.success;
+}
 
 module.exports = {
+    sendNoAnswerSms,
     sendSms,
     sendMissedCallSms,
 };

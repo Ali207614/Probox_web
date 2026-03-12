@@ -2451,10 +2451,14 @@ class b1HANA {
                 validData.seen = false;
             }
 
-            // ✅ meetingConfirmed bo'lsa meetingHappened=true
-            if (validData.meetingConfirmed) {
-                validData.meetingHappened = true;
+            if (validData.meetingConfirmed === true) {
+                validData.status = 'VisitedStore'
+                validData.meetingConfirmedDate = new Date();
+            }else {
+                validData.meetingConfirmed = null;
+                validData.meetingConfirmedDate = null;
             }
+
 
             // ✅ Seller rejection bo'lsa meetingHappened=true
             if ((validData.rejectionReason2 || validData.rejectionReason) && req.user?.U_role === 'Seller') {

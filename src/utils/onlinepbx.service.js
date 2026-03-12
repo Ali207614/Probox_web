@@ -13,7 +13,7 @@ const { generateShortId } = require('../utils/createLead');
 const b1Sl = require('../controllers/b1SL');
 const { ALLOWED_STATUSES } = require('../config');
 const { writeCallEventFromPBX } = require('./lead-chat-events.util');
-const {sendMissedCallSms} = require("../services/sms.service");
+const {sendMissedCallSms, sendNoAnswerSms} = require("../services/sms.service");
 
 
 const COMPANY_GATEWAY = '781134774';
@@ -132,6 +132,8 @@ async function handleOnlinePbxPayload(payload , io) {
                     'noAnswerCount',
                     'callCount',
                     'source',
+                    'isMissedSmsSent',
+                    'isNoAnswerSmsSent'
                 ].join(' ')
             )
             .lean();
@@ -313,6 +315,42 @@ async function handleOnlinePbxPayload(payload , io) {
                                 });
                             } catch (dbError) {
                                 console.error('[PBX] Missed SMS holatini bazaga saqlashda xatolik:', dbError);
+                            }
+                        }
+                    });
+            }
+
+            // Eski Missed SMS kodini o'chirib, o'rniga buni qo'shamiz:
+            if (shouldMoveToNoAnswer && !leadBefore.isNoAnswerSmsSent) {
+
+                const clientName = leadBefore.clientName || leadBefore.cardName || null;
+
+                // Funksiyani chaqiramiz (kutib turmaymiz, orqa fonda ishlaydi)
+                sendNoAnswerSms(canonicalPhone, clientName, String(leadBefore._id))
+                    .then(async (success) => {
+                        if (success) {
+                            console.log(`[PBX] NoAnswer SMS muvaffaqiyatli jo'natildi -> ${canonicalPhone}`);
+
+                            try {
+                                // 1. Lead'ga SMS ketdi deb belgilab qo'yamiz
+                                await LeadModel.updateOne(
+                                    { _id: leadBefore._id },
+                                    { $set: { isNoAnswerSmsSent: true } }
+                                );
+
+                                // 2. Tarixga (LeadChat) yozib qo'yamiz
+                                await LeadChatModel.create({
+                                    leadId: leadBefore._id,
+                                    type: 'event',
+                                    isSystem: true,
+                                    action: 'sms_sent',
+                                    createdBy: 0,
+                                    message: `Tizim: Mijozga "Javobsiz qolgan qo'ng'iroq (No Answer)" SMS xabari jo'natildi.`,
+                                    createdAt: new Date(),
+                                    updatedAt: new Date()
+                                });
+                            } catch (dbError) {
+                                console.error('[PBX] NoAnswer SMS holatini bazaga saqlashda xatolik:', dbError);
                             }
                         }
                     });
