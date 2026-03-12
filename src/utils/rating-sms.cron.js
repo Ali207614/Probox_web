@@ -10,6 +10,7 @@ const SMS_PASSWORD = process.env.SMS_PASSWORD || 'SIZNING_PAROLINGIZ';
 
 const basicAuthToken = Buffer.from(`${SMS_USERNAME}:${SMS_PASSWORD}`).toString('base64');
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
 const BATCH_SIZE = 20;
 
 async function sendRatingSms(phone, leadId) {
@@ -79,7 +80,7 @@ async function processRatingSms() {
            status: 'Purchased',
            isRatingSmsSent: false,
            statusChangedAt: {
-               $lte: twoHoursAgo,
+               //$lte: twoHoursAgo,
                $gte: startOfToday
            },
            clientPhone: { $exists: true, $ne: null, $ne: '' }
@@ -94,7 +95,6 @@ async function processRatingSms() {
            .select('_id clientPhone statusChangedAt')
            .lean();
 
-       console.log(leads ," bu leadssssssssssssssss")
 
        if (!leads.length) return 0;
 
