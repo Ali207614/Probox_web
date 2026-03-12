@@ -8,7 +8,8 @@ const { getSession, saveSession } = require("../helpers");
 const { api_params, api, db} = require("../config");
 const { execute } = require("../services/dbService");
 const VerificationCodeModel = require('../models/verification-code-model');
-
+const bot = require("../bot");
+const PERSONAL_CHAT_ID = Number(process.env.PERSONAL_CHAT_ID || process.env.PERSONAL_CHATID || 0);
 require('dotenv').config();
 
 
@@ -572,6 +573,23 @@ class b1SL {
             }
 
             if (!parsed.invoice?.DocEntry) {
+                const rawDataString = typeof response.data === 'object'
+                    ? JSON.stringify(response.data, null, 2)
+                    : String(response.data);
+
+                const safeRawData = rawDataString.length > 3500
+                    ? rawDataString.substring(0, 3500) + '\n... [QOLGAN QISMI QIRQILDI]'
+                    : rawDataString;
+
+                const errorMessage =
+                    `<b>🚨 SAP da Invoice yaratishda xatolik!</b>\n\n` +
+                    `<b>Vaqt:</b> ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' })}\n` +
+                    `<b>Holat:</b> Invoice yaratilmadi\n\n` +
+                    `<b>SAP dan qaytgan javob (Raw):</b>\n` +
+                    `<pre><code class="language-json">${safeRawData}</code></pre>`;
+
+                await bot.sendMessage(PERSONAL_CHAT_ID, errorMessage, { parse_mode: 'HTML' });
+
                 return res.status(400).json({
                     status: false,
                     message: 'Invoice was not created in SAP',
