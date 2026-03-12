@@ -1013,7 +1013,6 @@ class b1HANA {
                     } else if (meeting === 'meetingDate') {
                         // meetingDate: status 'WillVisitStore' bo'lishi va recallDate qidirilayotgan vaqt oralig'ida bo'lishi kerak
                         addAndCondition(filter, {
-                            status: 'WillVisitStore',
                             recallDate: dateQuery
                         });
                     } else if (meeting === 'meetingConfirmedDate' || meeting === 'meetingConfirmation') {
