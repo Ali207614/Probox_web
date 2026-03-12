@@ -1018,12 +1018,27 @@ class b1HANA {
                             meetingConfirmed: true,
                             meetingConfirmedDate: dateQuery
                         });
-                    } else if (meeting === 'purchaseDate') {
-                        addAndCondition(filter, {
-                            status: 'Purchased', // (Ixtiyoriy) Faqat sotib olinganlarni olish kafolati uchun
-                            purchaseDate: dateQuery
-                        });
-                    } else {
+                    }  else if (meeting === 'purchaseDate') {
+                    addAndCondition(filter, {
+                        status: 'Purchased',
+                        $or: [
+                            // 1. Agar purchaseDate bo'lsa, o'shani tekshiradi
+                            { purchaseDate: dateQuery },
+
+                            // 2. purchaseDate yo'q bo'lsa, invoiceCreatedAt ni tekshiradi
+                            { purchaseDate: null, invoiceCreatedAt: dateQuery },
+
+                            // 3. Ikkalasi ham yo'q bo'lsa, statusChangedAt ni tekshiradi
+                            { purchaseDate: null, invoiceCreatedAt: null, statusChangedAt: dateQuery },
+
+                            // 4. Uchalasi ham yo'q bo'lsa, newTime ni tekshiradi
+                            { purchaseDate: null, invoiceCreatedAt: null, statusChangedAt: null, newTime: dateQuery },
+
+                            // 5. To'rtalasi ham yo'q bo'lsa, eng oxirida time ni tekshiradi
+                            { purchaseDate: null, invoiceCreatedAt: null, statusChangedAt: null, newTime: null, time: dateQuery }
+                        ]
+                    });
+                } else {
                         filter['meetingDate'] = dateQuery;
                     }
                 }

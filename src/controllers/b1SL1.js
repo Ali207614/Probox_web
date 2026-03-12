@@ -609,7 +609,7 @@ class b1SL {
                         cardCode: body.CardCode,
                         finalLimit: leadFinalLimit,
                         finalPercentage: leadFinalPercentage,
-
+                        purchaseDate: new Date(),
                         invoiceCreatedAt: new Date(),
                         paymentCreated: paymentBodies.length > 0,
                         paymentCreatedAt: paymentBodies.length > 0 ? new Date() : null,
