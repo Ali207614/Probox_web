@@ -2836,15 +2836,13 @@ class b1HANA {
                 }
             }
 
-            // =========================================================
-            // ✅ purchase -> status
-            // =========================================================
-            if (validData.purchase) {
-                validData.status = 'Purchased';
-            } else if (validData.purchase === false) {
-                validData.status = 'Closed';
+            if (isStatusChanging && nextStatus !== prevStatus) {
+                if (nextStatus === 'Purchased') {
+                    validData.purchaseDate = new Date();
+                } else if (prevStatus === 'Purchased' && nextStatus !== 'Purchased') {
+                    validData.purchaseDate = null;
+                }
             }
-
             // ✅ finalLimit bo'lsa limitDate qo'yamiz
             if (validData.finalLimit) {
                 validData.limitDate = new Date();
