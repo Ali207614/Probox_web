@@ -438,7 +438,7 @@ class b1SL {
 
             // 1.1) usedType validate
             const usedTypeRaw = req.body.usedType;
-            const allowedUsedTypes = new Set(['finalLimit', 'percentage', 'internalLimit']);
+            const allowedUsedTypes = new Set(['finalLimit', 'percentage', 'internalLimit','tanish']);
 
             if(!allowedUsedTypes.has(usedTypeRaw)){
                 return res.status(400).json({

@@ -18,6 +18,7 @@ const sendVerificationCode = async (req, res) => {
         const deviceNames = Array.isArray(devices)
             ? devices.map(d => d.name).join(', ')
             : "Tanlangan mahsulotlar";
+
         const text = `Assalomu alaykum! Bu Probox jamoasi.\n\t\n ${deviceNames} sizniki bo'lishiga bir qadam qoldi. Xaridingizni xavfsiz tasdiqlash uchun menejerga ushbu maxsus kodni taqdim eting:\n\t\nKod: ${code}\n\t\nTexnikangiz uzoq vaqt xizmatingizda bo'lsin!`;
 
         // 4. Eskisi bo'lsa o'chirib, yangisini bazaga saqlaymiz
