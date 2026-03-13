@@ -3,7 +3,7 @@ const { sendSms } = require('../services/sms.service');
 
 const sendVerificationCode = async (req, res) => {
     try {
-        const { phone } = req.body;
+        const { phone , devices} = req.body;
         if (!phone) {
             return res.status(400).json({ status: false, message: "Telefon raqam kiritilmagan" });
         }
@@ -15,7 +15,10 @@ const sendVerificationCode = async (req, res) => {
         const code = Math.floor(1000 + Math.random() * 9000).toString();
 
         // 3. Matnni shakllantiramiz
-        const text = `Assalomu alaykum! Bu Probox jamoasi.\n\t\nSizniki bo'lishiga bir qadam qoldi. Xaridingizni xavfsiz tasdiqlash uchun menejerga ushbu maxsus kodni taqdim eting:\n\t\nKod: ${code}\n\t\nTexnikangiz uzoq vaqt xizmatingizda bo'lsin!`;
+        const deviceNames = Array.isArray(devices)
+            ? devices.map(d => d.name).join(', ')
+            : "Tanlangan mahsulotlar";
+        const text = `Assalomu alaykum! Bu Probox jamoasi.\n\t\n ${deviceNames} sizniki bo'lishiga bir qadam qoldi. Xaridingizni xavfsiz tasdiqlash uchun menejerga ushbu maxsus kodni taqdim eting:\n\t\nKod: ${code}\n\t\nTexnikangiz uzoq vaqt xizmatingizda bo'lsin!`;
 
         // 4. Eskisi bo'lsa o'chirib, yangisini bazaga saqlaymiz
         await VerificationCodeModel.deleteMany({ phone: cleanPhone });
