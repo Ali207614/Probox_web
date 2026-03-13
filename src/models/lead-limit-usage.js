@@ -7,7 +7,7 @@ const LeadLimitUsageSchema = new Schema(
         usedType: {
             type: String,
             required: true,
-            enum: ['finalLimit', 'internalLimit', 'percentage'],
+            enum: ['finalLimit', 'internalLimit', 'percentage','tanish'],
             index: true,
         },
         month: { type: String },
