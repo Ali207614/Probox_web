@@ -98,7 +98,7 @@ router.get('/lead-rating/:id', b1HANA.getLeadRating);
 router.post('/lead-rating/:id', b1HANA.rateLead);
 
 
-router.post('/send-verification-code',verifyCodeController.sendVerificationCode);
+router.post('/send-verification-code', authMiddleware, verifyCodeController.sendVerificationCode);
 
 
 router.get('/leads/:id', authMiddleware, leadController.leadOne)

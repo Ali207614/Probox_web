@@ -396,26 +396,31 @@ class b1SL {
             const providedCode = req.body.verificationCode; // Front-end shu yerga kodni yuboradi
              const rawPhone = req.body.clientPhone;
              const normalizedPhone = this.normalizePhone(rawPhone);
-            //
-            // if (!normalizedPhone) {
-            //     return res.status(400).json({ status: false, message: 'Invalid client phone number' });
-            // }
-            //
-            // if (!providedCode) {
-            //     return res.status(400).json({ status: false, message: "Xariddan oldin SMS tasdiqlash kodi kiritilishi shart!" });
-            // }
-            //
-            // const savedCodeDoc = await VerificationCodeModel.findOne({ phone: normalizedPhone });
-            //
-            // if (!savedCodeDoc) {
-            //     return res.status(400).json({ status: false, message: "Kod muddati tugagan yoki noto'g'ri raqam kiritildi. Iltimos, qaytadan kod jo'nating." });
-            // }
-            //
-            // if (savedCodeDoc.code !== String(providedCode)) {
-            //     return res.status(400).json({ status: false, message: "Kiritilgan SMS kod noto'g'ri!" });
-            // }
-            //
-            // await VerificationCodeModel.deleteOne({ _id: savedCodeDoc._id });
+
+
+             if(providedCode){
+                 if (!normalizedPhone) {
+                     return res.status(400).json({ status: false, message: 'Invalid client phone number' });
+                 }
+
+                 if (!providedCode) {
+                     return res.status(400).json({ status: false, message: "Xariddan oldin SMS tasdiqlash kodi kiritilishi shart!" });
+                 }
+
+                 const savedCodeDoc = await VerificationCodeModel.findOne({ phone: normalizedPhone });
+
+                 if (!savedCodeDoc) {
+                     return res.status(400).json({ status: false, message: "Kod muddati tugagan yoki noto'g'ri raqam kiritildi. Iltimos, qaytadan kod jo'nating." });
+                 }
+
+                 if (savedCodeDoc.code !== String(providedCode)) {
+                     return res.status(400).json({ status: false, message: "Kiritilgan SMS kod noto'g'ri!" });
+                 }
+
+                 await VerificationCodeModel.deleteOne({ _id: savedCodeDoc._id });
+             }
+
+
             // ==============================================================
 
 
