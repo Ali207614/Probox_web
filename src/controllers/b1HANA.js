@@ -324,6 +324,17 @@ class b1HANA {
                 // months
                 const months = rows.length;
 
+
+                let itemsArray = [];
+                if (first.ItemDetails) {
+                    try {
+                        // "{"ItemCode":"A",...},{"ItemCode":"B",...}" -> "[{...},{...}]"
+                        itemsArray = JSON.parse('[' + first.ItemDetails + ']');
+                    } catch (e) {
+                        console.error("JSON parse error in items:", e);
+                        itemsArray = [];
+                    }
+                }
                 // last due date
                 let lastDue = null;
                 for (const r of rows) {
@@ -346,7 +357,7 @@ class b1HANA {
                     DocNum: toInt(first.DocNum),
                     CardCode: first.CardCode,
                     contractDate: formatDate(toDate(first.ContractDate)), // ✅ Shartnoma sanasi
-                    items: first.ItemDetails ? first.ItemDetails.split(' | ') : [],
+                    items: itemsArray,
                     months, // ✅ nechi oyga olgani
                     lastDueDate: formatDate(lastDue), // ✅ eng oxirgi DueDate
 

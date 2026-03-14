@@ -1127,8 +1127,9 @@ SELECT
   COALESCE(SUM(T2."SumApplied"), 0) AS "SumApplied",
   MAX(T3."DocDate")  AS "DocDate",
   MAX(T3."Canceled") AS "Canceled",
-  (SELECT STRING_AGG(I1."ItemCode" || ' : ' || I1."Dscription", ' | ')
-   FROM ${this.db}.INV1 I1 WHERE I1."DocEntry" = T0."DocEntry") AS "ItemDetails",
+  (SELECT STRING_AGG('{"ItemCode":"' || I1."ItemCode" || '","ItemName":"' || REPLACE(I1."Dscription", '"', '\"') || '"}', ',')
+   FROM ${this.db}.INV1 I1
+   WHERE I1."DocEntry" = T0."DocEntry") AS "ItemDetails",
   -- ✅ INV1 dan tovar statistikasi
   MAX(IAG."LineCount") AS "LineCount",
   MAX(IAG."ItemCount") AS "ItemCount",
