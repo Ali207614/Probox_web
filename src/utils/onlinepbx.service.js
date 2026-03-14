@@ -399,9 +399,10 @@ async function handleOnlinePbxPayload(payload , io) {
             delete update.$setOnInsert.passportId;
         }
 
-
-        if(update.$set.status){
+        if (update.$set.status && update.$set.status !== leadBefore?.status) {
             update.$set.statusChangedAt = now;
+        } else if (!isExistingLead) {
+            update.$setOnInsert.statusChangedAt = null;
         }
 
         if (shouldCountEnd && hasTalk) {
