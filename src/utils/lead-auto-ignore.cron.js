@@ -79,7 +79,7 @@ function startLeadAutoIgnoreCron() {
         const ids = targets.map((t) => t._id);
 
         const updateRes = await LeadModel.updateMany(
-          { _id: { $in: ids }, status: 'Active', statusChangedAt: null },
+          { _id: { $in: ids }, status: 'Active'},
           {
             $set: {
               status: 'Ignored',
