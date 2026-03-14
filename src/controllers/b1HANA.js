@@ -345,7 +345,8 @@ class b1HANA {
                     DocEntry: toInt(first.DocEntry),
                     DocNum: toInt(first.DocNum),
                     CardCode: first.CardCode,
-
+                    contractDate: formatDate(toDate(first.ContractDate)), // ✅ Shartnoma sanasi
+                    items: first.ItemDetails ? first.ItemDetails.split(' | ') : [],
                     months, // ✅ nechi oyga olgani
                     lastDueDate: formatDate(lastDue), // ✅ eng oxirgi DueDate
 

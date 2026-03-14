@@ -10,7 +10,7 @@ function getSinceDate(lead) {
   return lead.createdAt || lead.time || lead.newTime || lead.updatedAt || null;
 }
 
-// ✅ Asia/Tashkent bo'yicha bugun 00:00 ni topamiz (UTC offsetni qo'lda hisoblaymiz)
+
 function startOfTodayTashkent(now = new Date()) {
   // Tashkent doim UTC+5 deb hisoblaymiz (agar DST bo'lmasa)
   const TASHKENT_OFFSET_MIN = 5 * 60;

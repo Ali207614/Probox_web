@@ -1115,7 +1115,7 @@ SELECT
   T1."DueDate",
   T1."InsTotal",
   T1."InstlmntID",
-
+  T0."DocDate" AS "ContractDate",
   (SELECT SUM(A1."DocTotal")
    FROM ${this.db}.OINV A1
    WHERE A1."DocEntry" = T0."DocEntry" AND A1."CANCELED" = 'N') AS "Total",
@@ -1127,7 +1127,8 @@ SELECT
   COALESCE(SUM(T2."SumApplied"), 0) AS "SumApplied",
   MAX(T3."DocDate")  AS "DocDate",
   MAX(T3."Canceled") AS "Canceled",
-
+  (SELECT STRING_AGG(I1."ItemCode" || ' : ' || I1."Dscription", ' | ')
+   FROM ${this.db}.INV1 I1 WHERE I1."DocEntry" = T0."DocEntry") AS "ItemDetails",
   -- ✅ INV1 dan tovar statistikasi
   MAX(IAG."LineCount") AS "LineCount",
   MAX(IAG."ItemCount") AS "ItemCount",
@@ -1163,6 +1164,7 @@ WHERE
 GROUP BY
   T0."DocEntry",
   T0."CardCode",
+  T0."DocDate",
   T1."InstlmntID",
   T1."DueDate",
   T1."InsTotal",
