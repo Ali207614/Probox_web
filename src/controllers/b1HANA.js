@@ -3471,131 +3471,131 @@ class b1HANA {
         }
     };
 
-    // distribution = async (req, res, next) => {
-    //     try {
-    //         let { startDate, endDate } = req.query;
-    //         if (!startDate || !endDate) {
-    //             return res.status(404).json({ error: 'startDate and endDate are required' });
-    //         }
-    //
-    //         const executorsQuery = await DataRepositories.getSalesPersons(notIncExecutorRole);
-    //         let executorList = await this.execute(executorsQuery);
-    //
-    //         let SalesList = executorList.filter(el => el.U_role === 'Assistant')
-    //
-    //         const query = await DataRepositories.getDistribution({ startDate, endDate })
-    //         let data = await this.execute(query)
-    //         let docEntries = [...new Set(data.map(el => el.DocEntry))]
-    //         const invoices = await InvoiceModel.find({ DocEntry: { $in: docEntries } });
-    //         let newResult = []
-    //         let count = 0
-    //         for (let i = 0; i < data.length; i++) {
-    //             let existInvoice = invoices.filter(el => el.DocEntry == data[i].DocEntry)
-    //             if (existInvoice?.length) {
-    //                 let existShuffle = existInvoice.find(el => el.InstlmntID == data[i].InstlmntID)
-    //                 if (!existShuffle) {
-    //                     let nonExistList = shuffleArray(SalesList.filter(item => !existInvoice.map(item => item.SlpCode).includes(item.SlpCode)))
-    //                     let lastExecutor = existInvoice[existInvoice.length - 1]
-    //                     let isManager = executorList.find(el => 6 == lastExecutor?.SlpCode && el?.U_role == 'Manager')
-    //                     let first = isManager ? isManager :  (nonExistList.length ? nonExistList[0] : shuffleArray(SalesList)[0])
-    //                     newResult.push({
-    //                         DueDate: parseLocalDateString(moment(data[i].DueDate).format('YYYY.MM.DD')),
-    //                         SlpName: first.SlpName,
-    //                         InstlmntID: data[i].InstlmntID,
-    //                         DocEntry: data[i].DocEntry,
-    //                         SlpCode: first.SlpCode,
-    //                         CardCode: data[i].CardCode,
-    //                         ItemName: data[i].Dscription
-    //                     })
-    //                 }
-    //             }
-    //             else {
-    //                 let first = SalesList[count]
-    //
-    //                 newResult.push({
-    //                     DueDate: parseLocalDateString(moment(data[i].DueDate).format('YYYY.MM.DD')),
-    //                     SlpName: first?.SlpName,
-    //                     InstlmntID: data[i].InstlmntID,
-    //                     DocEntry: data[i].DocEntry,
-    //                     SlpCode: first?.SlpCode,
-    //                     CardCode: data[i].CardCode,
-    //                     ItemName: data[i].Dscription
-    //                 })
-    //             }
-    //             count = (count == (SalesList.length - 1)) ? 0 : count += 1
-    //         }
-    //         await InvoiceModel.create(newResult)
-    //         return res.status(200).json({ message: 'success' });
-    //     }
-    //     catch (e) {
-    //         next(e)
-    //     }
-    // };
-
     distribution = async (req, res, next) => {
         try {
             let { startDate, endDate } = req.query;
+            if (!startDate || !endDate) {
+                return res.status(404).json({ error: 'startDate and endDate are required' });
+            }
 
             const executorsQuery = await DataRepositories.getSalesPersons(notIncExecutorRole);
-            const executorList = await this.execute(executorsQuery);
-            const SalesList = executorList.filter(el => el.U_role === 'Assistant');
+            let executorList = await this.execute(executorsQuery);
 
-            if (!SalesList.length) {
-                return res.status(400).json({ error: 'Assistantlar topilmadi' });
-            }
+            let SalesList = executorList.filter(el => el.U_role === 'Assistant')
 
-            // 2. Sanani filterlash (MongoDB formatiga o'tkazish)
-            const start = moment(startDate, 'YYYY.MM.DD').startOf('day').toDate();
-            const end = moment(endDate, 'YYYY.MM.DD').endOf('day').toDate();
-
-            // 3. SlpCode null bo'lgan invoice'larni topish
-            const nullInvoices = await InvoiceModel.find({
-                DueDate: { $gte: start, $lte: end },
-                $or: [{ SlpCode: null }, { SlpCode: { $exists: false } }]
-            }).lean();
-
-            if (!nullInvoices.length) {
-                return res.status(200).json({ message: 'Taqsimlanmagan invoice-lar topilmadi' });
-            }
-
-            // 4. Taqsimlash logikasi (Bulk operations)
-            const bulkOps = [];
-            let assistantIndex = 0;
-
-            for (const inv of nullInvoices) {
-                const currentAssistant = SalesList[assistantIndex];
-
-                bulkOps.push({
-                    updateOne: {
-                        filter: { _id: inv._id },
-                        update: {
-                            $set: {
-                                SlpCode: currentAssistant.SlpCode,
-                                SlpName: currentAssistant.SlpName
-                            }
-                        }
+            const query = await DataRepositories.getDistribution({ startDate, endDate })
+            let data = await this.execute(query)
+            let docEntries = [...new Set(data.map(el => el.DocEntry))]
+            const invoices = await InvoiceModel.find({ DocEntry: { $in: docEntries } });
+            let newResult = []
+            let count = 0
+            for (let i = 0; i < data.length; i++) {
+                let existInvoice = invoices.filter(el => el.DocEntry == data[i].DocEntry)
+                if (existInvoice?.length) {
+                    let existShuffle = existInvoice.find(el => el.InstlmntID == data[i].InstlmntID)
+                    if (!existShuffle) {
+                        let nonExistList = shuffleArray(SalesList.filter(item => !existInvoice.map(item => item.SlpCode).includes(item.SlpCode)))
+                        let lastExecutor = existInvoice[existInvoice.length - 1]
+                        let isManager = executorList.find(el => 6 == lastExecutor?.SlpCode && el?.U_role == 'Manager')
+                        let first = isManager ? isManager :  (nonExistList.length ? nonExistList[0] : shuffleArray(SalesList)[0])
+                        newResult.push({
+                            DueDate: parseLocalDateString(moment(data[i].DueDate).format('YYYY.MM.DD')),
+                            SlpName: first.SlpName,
+                            InstlmntID: data[i].InstlmntID,
+                            DocEntry: data[i].DocEntry,
+                            SlpCode: first.SlpCode,
+                            CardCode: data[i].CardCode,
+                            ItemName: data[i].Dscription
+                        })
                     }
-                });
+                }
+                else {
+                    let first = SalesList[count]
 
-                // Assistantlar bo'ylab navbatga qo'yish
-                assistantIndex = (assistantIndex + 1) % SalesList.length;
+                    newResult.push({
+                        DueDate: parseLocalDateString(moment(data[i].DueDate).format('YYYY.MM.DD')),
+                        SlpName: first?.SlpName,
+                        InstlmntID: data[i].InstlmntID,
+                        DocEntry: data[i].DocEntry,
+                        SlpCode: first?.SlpCode,
+                        CardCode: data[i].CardCode,
+                        ItemName: data[i].Dscription
+                    })
+                }
+                count = (count == (SalesList.length - 1)) ? 0 : count += 1
             }
-
-            // 5. Bazada ommaviy yangilash
-            if (bulkOps.length > 0) {
-                await InvoiceModel.bulkWrite(bulkOps);
-            }
-
-            return res.status(200).json({
-                message: 'success',
-                distributedCount: nullInvoices.length,
-                perAssistant: Math.floor(nullInvoices.length / SalesList.length)
-            });
-
-        } catch (e) {
-            next(e);
+            await InvoiceModel.create(newResult)
+            return res.status(200).json({ message: 'success' });
+        }
+        catch (e) {
+            next(e)
         }
     };
+
+    // distribution = async (req, res, next) => {
+    //     try {
+    //         let { startDate, endDate } = req.query;
+    //
+    //         const executorsQuery = await DataRepositories.getSalesPersons(notIncExecutorRole);
+    //         const executorList = await this.execute(executorsQuery);
+    //         const SalesList = executorList.filter(el => el.U_role === 'Assistant');
+    //
+    //         if (!SalesList.length) {
+    //             return res.status(400).json({ error: 'Assistantlar topilmadi' });
+    //         }
+    //
+    //         // 2. Sanani filterlash (MongoDB formatiga o'tkazish)
+    //         const start = moment(startDate, 'YYYY.MM.DD').startOf('day').toDate();
+    //         const end = moment(endDate, 'YYYY.MM.DD').endOf('day').toDate();
+    //
+    //         // 3. SlpCode null bo'lgan invoice'larni topish
+    //         const nullInvoices = await InvoiceModel.find({
+    //             DueDate: { $gte: start, $lte: end },
+    //             $or: [{ SlpCode: null }, { SlpCode: { $exists: false } }]
+    //         }).lean();
+    //
+    //         if (!nullInvoices.length) {
+    //             return res.status(200).json({ message: 'Taqsimlanmagan invoice-lar topilmadi' });
+    //         }
+    //
+    //         // 4. Taqsimlash logikasi (Bulk operations)
+    //         const bulkOps = [];
+    //         let assistantIndex = 0;
+    //
+    //         for (const inv of nullInvoices) {
+    //             const currentAssistant = SalesList[assistantIndex];
+    //
+    //             bulkOps.push({
+    //                 updateOne: {
+    //                     filter: { _id: inv._id },
+    //                     update: {
+    //                         $set: {
+    //                             SlpCode: currentAssistant.SlpCode,
+    //                             SlpName: currentAssistant.SlpName
+    //                         }
+    //                     }
+    //                 }
+    //             });
+    //
+    //             // Assistantlar bo'ylab navbatga qo'yish
+    //             assistantIndex = (assistantIndex + 1) % SalesList.length;
+    //         }
+    //
+    //         // 5. Bazada ommaviy yangilash
+    //         if (bulkOps.length > 0) {
+    //             await InvoiceModel.bulkWrite(bulkOps);
+    //         }
+    //
+    //         return res.status(200).json({
+    //             message: 'success',
+    //             distributedCount: nullInvoices.length,
+    //             perAssistant: Math.floor(nullInvoices.length / SalesList.length)
+    //         });
+    //
+    //     } catch (e) {
+    //         next(e);
+    //     }
+    // };
 
     async  fetchRateFromDb(execute ,DataRepositories) {
         const query = DataRepositories.getRate({ /* sizning paramlaringiz bo'lsa */ });
