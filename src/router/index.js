@@ -179,6 +179,7 @@ router.get('/analytics/statuses', authMiddleware, analyticsController.getGeneral
 router.get('/analytics/sources', authMiddleware, analyticsController.getSourceDailyStats);
 router.get('/analytics/source-distribution', authMiddleware, analyticsController.getSourceStatusDistribution);
 router.get('/analytics/branches', authMiddleware, analyticsController.getBranchPerformance);
+router.get('/analytics/branch-sources', authMiddleware, analyticsController.getBranchSourceStats);
 
 router.post('/leads/:id/chat', authMiddleware, b1HANA.addChat);
 router.get('/leads/:id/chat', authMiddleware, b1HANA.getChats);

@@ -52,6 +52,7 @@ class AnalyticsController {
         this.getSourceDailyStats = this.getSourceDailyStats.bind(this);
         this.getSourceStatusDistribution = this.getSourceStatusDistribution.bind(this);
         this.getBranchPerformance = this.getBranchPerformance.bind(this);
+        this.getBranchSourceStats = this.getBranchSourceStats.bind(this);
     }
 
     async getOperatorsMap() {
@@ -338,6 +339,73 @@ class AnalyticsController {
             }).sort((a, b) => b.purchasedCount - a.purchasedCount);
 
             res.json({ status: true, data: result });
+        } catch (err) { next(err); }
+    }
+
+    // 8. Do'konlar kesimida manbalar statistikasi
+    async getBranchSourceStats(req, res, next) {
+        try {
+            const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
+
+            // 1. Barcha branchlarni va source listni tayyorlaymiz
+            const allBranches = await require('../models/branch-model').find({}).lean();
+
+            const stats = await Lead.aggregate([
+                ...getTimePipeline(),
+                {
+                    $match: {
+                        actualTime: { $gte: startDate, $lte: endDate },
+                        branch2: { $ne: null },
+                        source: { $in: this.sourcesList }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { branch: "$branch2", source: "$source" },
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$_id.branch",
+                        sources: { $push: { k: "$_id.source", v: "$count" } },
+                        totalLeads: { $sum: "$count" }
+                    }
+                }
+            ]);
+
+            // 2. Agregatsiya natijasini Map ko'rinishiga keltiramiz
+            const statsMap = Object.fromEntries(stats.map(s => [String(s._id), s]));
+
+            // 3. Natijani shakllantiramiz
+            const result = allBranches.map(branch => {
+                const dbData = statsMap[String(branch.id)] || { totalLeads: 0, sources: [] };
+                const foundSourcesMap = Object.fromEntries(dbData.sources.map(s => [s.k, s.v]));
+
+                // Har bir branch ichida barcha sourcelarni 0 bo'lsa ham ko'rsatamiz
+                const sourceDetails = this.sourcesList.map(srcName => {
+                    const count = foundSourcesMap[srcName] || 0;
+                    return {
+                        source: srcName,
+                        count: count,
+                        percentage: percent(count, dbData.totalLeads)
+                    };
+                });
+
+                return {
+                    branchId: branch.id,
+                    branchName: branch.name,
+                    totalLeads: dbData.totalLeads,
+                    sources: sourceDetails
+                };
+            }).sort((a, b) => b.totalLeads - a.totalLeads);
+
+            res.json({
+                status: true,
+                range: { start, end },
+                data: result
+            });
         } catch (err) { next(err); }
     }
 }
