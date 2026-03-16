@@ -62,6 +62,7 @@ const LeadChatSchema = new Schema(
         createdBy: { type: Number, required: true, trim: true, index: true }, // sizda required edi, shuni saqlaymiz
         createdByRole: { type: String, default: null, index: true }, // Seller / Operator / Admin / System
         isSystem: { type: Boolean, default: false, index: true },
+        eventId: { type: String, default: null, index: true },
 
         /**
          * ✅ 4) MAIN TEXT (UI uchun)
@@ -163,6 +164,14 @@ LeadChatSchema.index(
     }
 );
 
+
+LeadChatSchema.index(
+    { leadId: 1, eventId: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { eventId: { $type: 'string', $ne: '' } },
+    }
+);
 
 
 

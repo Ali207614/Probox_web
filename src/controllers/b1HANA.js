@@ -2401,9 +2401,6 @@ class b1HANA {
                 return res.status(404).json({ message: 'Lead not found' });
             }
 
-            if (existingLead.status === 'Closed' && (U_role !== 'OperatorM' && U_role !== 'Manager')) {
-                return res.status(400).json({ message: "Lead yopilgan !" });
-            }
 
             if (!permissions[U_role]) {
                 return res.status(403).json({
@@ -2580,18 +2577,15 @@ class b1HANA {
             const HARD_LOCKED_STATUSES = new Set(['Purchased', 'NoPurchase']); // Manager'dan tashqari hech kim o'zgartira olmaydi
             const SOFT_LOCKED_STATUS = 'Closed'; // faqat ayrim rollar o'zgartira oladi
 
-// ✅ Faqat shu rollar Closed'dan qayta o'tkaza oladi
-            const CLOSED_OVERRIDE_ROLES = new Set(['OperatorM', 'CEO', 'Manager']);
+            const CLOSED_OVERRIDE_ROLES = new Set(['OperatorM', 'CEO', 'Manager' , 'SellerM']);
             const canOverrideClosed = CLOSED_OVERRIDE_ROLES.has(U_role);
 
-// ✅ YANGILIK: Hard locked statuslarni o'zgartira oladigan rollar
             const HARD_LOCKED_OVERRIDE_ROLES = new Set(['Manager']); // Agar xohlasangiz 'CEO' ni ham qo'shishingiz mumkin
             const canOverrideHardLocked = HARD_LOCKED_OVERRIDE_ROLES.has(U_role);
 
             const prevStatusHardLocked = HARD_LOCKED_STATUSES.has(prevStatus);
             const prevStatusIsClosed = prevStatus === SOFT_LOCKED_STATUS;
 
-// ✅ rejectionReason berilsa status Closed qilamiz (lekin Purchased/NoPurchase bo'lsa tegmaymiz, Manager mustasno)
             if (validData.rejectionReason != null && validData.rejectionReason !== '') {
                 validData.rejectionReason2 = validData.rejectionReason;
 
