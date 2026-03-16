@@ -174,6 +174,11 @@ router.post('/leads', authMiddleware, b1HANA.createLead);
 router.get('/lead-analytics', authMiddleware, analyticsController.getLeadsAnalytics);
 router.get('/leads/analytics/funnel-by-operators', authMiddleware ,analyticsController.getLeadsFunnelByOperators);
 
+router.get('/analytics/operators', authMiddleware, analyticsController.getOperatorPerformance);
+router.get('/analytics/statuses', authMiddleware, analyticsController.getGeneralStatusStats);
+router.get('/analytics/sources', authMiddleware, analyticsController.getSourceDailyStats);
+router.get('/analytics/source-distribution', authMiddleware, analyticsController.getSourceStatusDistribution);
+router.get('/analytics/branches', authMiddleware, analyticsController.getBranchPerformance);
 
 router.post('/leads/:id/chat', authMiddleware, b1HANA.addChat);
 router.get('/leads/:id/chat', authMiddleware, b1HANA.getChats);

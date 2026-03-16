@@ -1,31 +1,99 @@
 const moment = require("moment-timezone");
 const Lead = require("../models/lead-model");
+const Branch = require("../models/branch-model");
+const dbService = require('../services/dbService');
+const DataRepositories = require('../repositories/dataRepositories');
+
+const getTimePipeline = () => [
+    {
+        $addFields: {
+            actualTime: {
+                $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }]
+            }
+        }
+    }
+];
+
+function percent(a, b) {
+    return (!b || b === 0) ? 0 : +(a / b * 100).toFixed(2);
+}
+
+function buildDayList(start, end) {
+    const days = [];
+    let current = moment(start);
+    const last = moment(end);
+    while (current <= last) {
+        days.push(current.format("YYYY.MM.DD"));
+        current.add(1, "day");
+    }
+    return days;
+}
 
 class AnalyticsController {
-    getLeadsAnalytics = async (req, res, next) => {
+    constructor() {
+        this.sourcesList = [
+            "Manychat", "Meta", "Organika", "Eski qo'ng'iroq",
+            "Mehrli qo'ng'iroq", "Community", "Qayta sotuv",
+            "Kiruvchi", "Chiquvchi", "Telegram bot"
+        ];
+
+        this.allPossibleStatuses = [
+            'Active', 'Blocked', 'Purchased', 'Returned', 'Missed',
+            'Ignored', 'NoAnswer', 'FollowUp', 'Considering',
+            'WillVisitStore', 'WillSendPassport', 'Scoring',
+            'ScoringResult', 'VisitedStore', 'NoPurchase', 'Closed', 'Talked'
+        ];
+
+        // ✅ Barcha metodlarni bog'lash
+        this.getLeadsAnalytics = this.getLeadsAnalytics.bind(this);
+        this.getLeadsFunnelByOperators = this.getLeadsFunnelByOperators.bind(this);
+        this.getOperatorPerformance = this.getOperatorPerformance.bind(this);
+        this.getGeneralStatusStats = this.getGeneralStatusStats.bind(this);
+        this.getSourceDailyStats = this.getSourceDailyStats.bind(this);
+        this.getSourceStatusDistribution = this.getSourceStatusDistribution.bind(this);
+        this.getBranchPerformance = this.getBranchPerformance.bind(this);
+    }
+
+    async getOperatorsMap() {
+        try {
+            const sql = DataRepositories.getSalesPersons({
+                include: ['Operator1', 'Operator2', 'Seller', 'Manager']
+            });
+            const data = await dbService.execute(sql);
+            const opMap = new Map();
+            if (Array.isArray(data)) {
+                data.forEach(op => opMap.set(String(op.SlpCode), op.SlpName));
+            }
+            return opMap;
+        } catch (err) {
+            console.error('[Analytics] SAP Error:', err.message);
+            return new Map();
+        }
+    }
+
+    _parseRange(start, end) {
+        if (!start || !end) {
+            const error = new Error("start va end majburiy (DD.MM.YYYY)");
+            error.statusCode = 400;
+            throw error;
+        }
+        return {
+            startDate: moment.tz(start, "DD.MM.YYYY", "Asia/Tashkent").startOf("day").toDate(),
+            endDate: moment.tz(end, "DD.MM.YYYY", "Asia/Tashkent").endOf("day").toDate()
+        };
+    }
+
+    // 1. Asosiy Funnel va Branch Analitikasi
+    async getLeadsAnalytics(req, res, next) {
         try {
             const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
 
-            if (!start || !end) {
-                return res.status(400).json({ message: "start va end majburiy" });
-            }
+            const leads = await Lead.aggregate([
+                ...getTimePipeline(),
+                { $match: { actualTime: { $gte: startDate, $lte: endDate } } }
+            ]);
 
-            // 1) DATE PARSE (Asia/Tashkent, dot format)
-            const startDate = moment.tz(start, "DD.MM.YYYY", "Asia/Tashkent")
-                .startOf("day").toDate();
-
-            const endDate = moment.tz(end, "DD.MM.YYYY", "Asia/Tashkent")
-                .endOf("day").toDate();
-
-            // 2) LEADS FETCH
-            const leads = await Lead.find({
-                time: { $gte: startDate, $lte: endDate }
-            }).lean();
-
-
-            // ================================
-            //  ANALITIKA 1: FUNNEL
-            // ================================
             const funnel = {
                 leads: leads.length,
                 called: leads.filter(l => l.called).length,
@@ -34,267 +102,244 @@ class AnalyticsController {
                 passport: leads.filter(l => l.passportVisit === "Passport").length,
                 meetingSet: leads.filter(l => l.meetingDate).length,
                 visit: leads.filter(l => l.meetingHappened).length,
-                processing: leads.filter(l => l.passportVisit === 'Processing').length,
+                processing: leads.filter(l => l.status === 'Scoring').length,
                 purchase: leads.filter(l => l.purchase).length,
             };
 
-            const funnelFinal = [
-                { no: 1, name: 'Leads', count: funnel.leads, cr: 100 },
-                { no: 2, name: 'Qo‘ng‘iroq qilindi', count: funnel.called, cr: percent(funnel.called, funnel.leads) },
-                { no: 3, name: 'Javob berdi', count: funnel.answered, cr: percent(funnel.answered, funnel.leads) },
-                { no: 4, name: 'Qiziqish bildirdi', count: funnel.interested, cr: percent(funnel.interested, funnel.leads) },
-                { no: 5, name: 'Pasport', count: funnel.passport, cr: percent(funnel.passport, funnel.leads) },
-                { no: 6, name: 'Uchrashuv belgilandi', count: funnel.meetingSet, cr: percent(funnel.meetingSet, funnel.leads) },
-                { no: 7, name: 'Vizit bo\'ldi', count: funnel.visit, cr: percent(funnel.visit, funnel.leads) },
-                { no: 8, name: 'Jarayonda', count: funnel.processing, cr: percent(funnel.processing, funnel.leads) },
-                { no: 9, name: 'Harid bo\'ldi', count: funnel.purchase, cr: percent(funnel.purchase, funnel.leads) },
-            ];
-
-
-
-
             const dayList = buildDayList(startDate, endDate);
-
-            const sourceMap = {};
-
-            for (const lead of leads) {
-                const src = lead.source || "Unknown";
-
-                if (!sourceMap[src]) {
-                    sourceMap[src] = {
-                        total: 0,
-                        per_day: dayList.map(d => ({ day: d, count: 0 }))
-                    };
-                }
-
-                sourceMap[src].total += 1;
-
-                const dayStr = moment(lead.time).format("YYYY.MM.DD");
-
-                const idx = sourceMap[src].per_day.findIndex(d => d.day === dayStr);
-                if (idx >= 0) {
-                    sourceMap[src].per_day[idx].count += 1;
-                }
-            }
-
-            const totalSources = leads.length;
-            const sourceAnalytics = Object.keys(sourceMap).map(src => ({
-                source: src,
-                count: sourceMap[src].total,
-                percent: percent(sourceMap[src].total, totalSources),
-                per_day: sourceMap[src].per_day
-            }));
-
-            const branches = [
-                { id: 1, name: "Qoratosh" },
-                { id: 2, name: "Sagbon" },
-                { id: 3, name: "Parkent" }
-            ];
-
-            const branchLookup = {};
-            branches.forEach(b => branchLookup[b.id] = b.name);
-
-            const branchMap = {};
-            branches.forEach(b => {
-                branchMap[b.id] = {
-                    id: b.id,
-                    name: b.name,
-                    total: 0,
-                    per_day: dayList.map(d => ({ day: d, count: 0 }))
+            const sourceAnalytics = this.sourcesList.map(src => {
+                const filtered = leads.filter(l => l.source === src);
+                return {
+                    source: src,
+                    count: filtered.length,
+                    percent: percent(filtered.length, leads.length),
+                    per_day: dayList.map(d => ({
+                        day: d,
+                        count: filtered.filter(l => moment(l.actualTime).format("YYYY.MM.DD") === d).length
+                    }))
                 };
-            });
+            }).sort((a, b) => b.count - a.count);
 
-            for (const lead of leads) {
-                const b = Number(lead.branch2);
-
-                if (!branchMap[b]) continue;
-
-                branchMap[b].total++;
-
-                const dayStr = moment(lead.time).format("YYYY.MM.DD");
-                const idx = branchMap[b].per_day.findIndex(d => d.day === dayStr);
-                if (idx >= 0) branchMap[b].per_day[idx].count++;
-            }
-
-            const totalBranches = Object.values(branchMap)
-                .reduce((acc, b) => acc + b.total, 0);
-
-            const branchAnalytics = Object.values(branchMap).map(b => ({
-                branch_id: b.id,
-                branch_name: b.name,
-                count: b.total,
-                percent: percent(b.total, totalBranches),
-                per_day: b.per_day
-            }));
-
-
-
-
-            // =====================================
-            //  SEND RESPONSE
-            // =====================================
-            return res.json({
+            res.json({
                 status: true,
                 range: { start, end },
-                analytics1_funnel: funnelFinal,
-                analytics2_sources: sourceAnalytics,
-                analytics3_branches: branchAnalytics,
+                funnel: [
+                    { no: 1, name: 'Leads', count: funnel.leads, cr: 100 },
+                    { no: 2, name: 'Qo‘ng‘iroq qilindi', count: funnel.called, cr: percent(funnel.called, funnel.leads) },
+                    { no: 3, name: 'Javob berdi', count: funnel.answered, cr: percent(funnel.answered, funnel.leads) },
+                    { no: 4, name: 'Qiziqish bildirdi', count: funnel.interested, cr: percent(funnel.interested, funnel.leads) },
+                    { no: 5, name: 'Pasport', count: funnel.passport, cr: percent(funnel.passport, funnel.leads) },
+                    { no: 6, name: 'Uchrashuv belgilandi', count: funnel.meetingSet, cr: percent(funnel.meetingSet, funnel.leads) },
+                    { no: 7, name: 'Vizit bo\'ldi', count: funnel.visit, cr: percent(funnel.visit, funnel.leads) },
+                    { no: 8, name: 'Jarayonda', count: funnel.processing, cr: percent(funnel.processing, funnel.leads) },
+                    { no: 9, name: 'Harid bo\'ldi', count: funnel.purchase, cr: percent(funnel.purchase, funnel.leads) },
+                ],
+                sources: sourceAnalytics
             });
+        } catch (err) { next(err); }
+    }
 
-        } catch (err) {
-            next(err);
-        }
-    };
-
-    getLeadsFunnelByOperators = async (req, res, next) => {
+    // 2. Operatorlar kesimida Funnel
+    async getLeadsFunnelByOperators(req, res, next) {
         try {
             const { start, end } = req.query;
-
-            if (!start || !end) {
-                return res.status(400).json({ message: "start va end majburiy" });
-            }
-
-            const startDate = moment.tz(start, "DD.MM.YYYY", "Asia/Tashkent").startOf("day").toDate();
-            const endDate   = moment.tz(end, "DD.MM.YYYY", "Asia/Tashkent").endOf("day").toDate();
-
-            // operator field (sizda operator ext / operator1 bo'lishi mumkin)
-            const OP_FIELD = "operator"; // <- kerak bo'lsa: "pbx.operator_ext" yoki "operator"
+            const { startDate, endDate } = this._parseRange(start, end);
+            const opMap = await this.getOperatorsMap();
 
             const rows = await Lead.aggregate([
-                {
-                    $match: {
-                        time: { $gte: startDate, $lte: endDate },
-                    },
-                },
-
-                // operator yo'q bo'lsa "Unknown"
-                {
-                    $addFields: {
-                        __op: { $ifNull: [`$${OP_FIELD}`, "Belgilanmagan"] },
-                    },
-                },
-
+                ...getTimePipeline(),
+                { $match: { actualTime: { $gte: startDate, $lte: endDate } } },
                 {
                     $group: {
-                        _id: "$__op",
-
+                        _id: { $ifNull: ["$operator", "Belgilanmagan"] },
                         leads: { $sum: 1 },
-
-                        called: {
-                            $sum: { $cond: [{ $eq: ["$called", true] }, 1, 0] },
-                        },
-                        answered: {
-                            $sum: { $cond: [{ $eq: ["$answered", true] }, 1, 0] },
-                        },
-                        interested: {
-                            $sum: { $cond: [{ $eq: ["$interested", true] }, 1, 0] },
-                        },
-
-                        // old logic: passportVisit === "Passport"
-                        passport: {
-                            $sum: { $cond: [{ $eq: ["$passportVisit", "Passport"] }, 1, 0] },
-                        },
-
-                        meetingSet: {
-                            $sum: {
-                                $cond: [
-                                    {
-                                        $and: [
-                                            { $ne: ["$meetingDate", null] },
-                                            { $ne: ["$meetingDate", ""] },
-                                        ],
-                                    },
-                                    1,
-                                    0,
-                                ],
-                            },
-                        },
-
-                        visit: {
-                            $sum: { $cond: [{ $eq: ["$meetingHappened", true] }, 1, 0] },
-                        },
-
-                        // siz endi status enum’ni yangilayapsiz.
-                        // oldingisi: passportVisit === 'Processing' edi.
-                        // yangi enum’da "Scoring" yoki shunga o'xshash bo'lsa, shu yerda tekshiring.
-                        // Masalan: status === 'Scoring'
-                        processing: {
-                            $sum: { $cond: [{ $eq: ["$status", "Scoring"] }, 1, 0] },
-                        },
-
-                        // old logic: purchase boolean
-                        purchase: {
-                            $sum: { $cond: [{ $eq: ["$purchase", true] }, 1, 0] },
-                        },
-                    },
+                        called: { $sum: { $cond: ["$called", 1, 0] } },
+                        answered: { $sum: { $cond: ["$answered", 1, 0] } },
+                        interested: { $sum: { $cond: ["$interested", 1, 0] } },
+                        passport: { $sum: { $cond: [{ $eq: ["$passportVisit", "Passport"] }, 1, 0] } },
+                        meetingSet: { $sum: { $cond: [{ $and: ["$meetingDate", { $ne: ["$meetingDate", ""] }] }, 1, 0] } },
+                        visit: { $sum: { $cond: ["$meetingHappened", 1, 0] } },
+                        processing: { $sum: { $cond: [{ $eq: ["$status", "Scoring"] }, 1, 0] } },
+                        purchase: { $sum: { $cond: ["$purchase", 1, 0] } },
+                    }
                 },
-                { $match: { _id: { $nin: ["Organika", "organika", "Belgilanmagan", ""] } } },
-
-                { $sort: { leads: -1 } },
+                { $sort: { leads: -1 } }
             ]);
 
+            const result = rows.map(r => ({
+                operatorName: opMap.get(String(r._id)) || r._id,
+                totals: r,
+                funnel: [
+                    { no: 1, name: "Leads", count: r.leads, cr: 100 },
+                    { no: 9, name: "Harid bo'ldi", count: r.purchase, cr: percent(r.purchase, r.leads) }
+                ]
+            }));
 
-            const result = rows.map(r => {
-                const leads = r.leads || 0;
+            res.json({ status: true, data: result });
+        } catch (err) { next(err); }
+    }
 
-                const funnelFinal = [
-                    { no: 1, name: "Leads", count: leads, cr: leads ? 100 : 0 },
-                    { no: 2, name: "Qo‘ng‘iroq qilindi", count: r.called, cr: percent(r.called, leads) },
-                    { no: 3, name: "Javob berdi", count: r.answered, cr: percent(r.answered, leads) },
-                    { no: 4, name: "Qiziqish bildirdi", count: r.interested, cr: percent(r.interested, leads) },
-                    { no: 5, name: "Pasport", count: r.passport, cr: percent(r.passport, leads) },
-                    { no: 6, name: "Uchrashuv belgilandi", count: r.meetingSet, cr: percent(r.meetingSet, leads) },
-                    { no: 7, name: "Vizit bo'ldi", count: r.visit, cr: percent(r.visit, leads) },
-                    { no: 8, name: "Jarayonda", count: r.processing, cr: percent(r.processing, leads) },
-                    { no: 9, name: "Harid bo'ldi", count: r.purchase, cr: percent(r.purchase, leads) },
-                ];
+    // 3. Operator Performance (Statuslar)
+    async getOperatorPerformance(req, res, next) {
+        try {
+            const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
+            const opMap = await this.getOperatorsMap();
 
+            const stats = await Lead.aggregate([
+                ...getTimePipeline(),
+                { $match: { actualTime: { $gte: startDate, $lte: endDate }, operator: { $ne: null } } },
+                { $group: { _id: { operator: "$operator", status: "$status" }, count: { $sum: 1 } } },
+                { $group: { _id: "$_id.operator", foundStatuses: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } },
+                { $sort: { total: -1 } }
+            ]);
+
+            const result = stats.map(item => {
+                const statusMap = Object.fromEntries(item.foundStatuses.map(s => [s.k, s.v]));
                 return {
-                    operator: r._id,
-                    totals: {
-                        leads: r.leads,
-                        called: r.called,
-                        answered: r.answered,
-                        interested: r.interested,
-                        passport: r.passport,
-                        meetingSet: r.meetingSet,
-                        visit: r.visit,
-                        processing: r.processing,
-                        purchase: r.purchase,
-                    },
-                    funnel: funnelFinal,
+                    slpCode: item._id,
+                    operatorName: opMap.get(String(item._id)) || "Noma'lum",
+                    total: item.total,
+                    details: this.allPossibleStatuses.map(st => ({
+                        status: st,
+                        count: statusMap[st] || 0,
+                        percentage: percent(statusMap[st] || 0, item.total)
+                    }))
                 };
             });
 
-            return res.json({
-                status: true,
-                range: { start, end },
-                analytics1_funnel_by_operators: result,
-            });
-        } catch (err) {
-            next(err);
-        }
-    };
-
-}
-
-
-function percent(a, b) {
-    if (!b || b === 0) return 0;
-    return +(a / b * 100).toFixed(2);
-}
-
-function buildDayList(start, end) {
-    const days = [];
-    let current = moment(start);
-
-    const last = moment(end);
-
-    while (current <= last) {
-        days.push(current.format("YYYY.MM.DD"));
-        current = current.add(1, "day");
+            res.json({ status: true, data: result });
+        } catch (err) { next(err); }
     }
-    return days;
+
+    // 4. Umumiy Status Stats
+    async getGeneralStatusStats(req, res, next) {
+        try {
+            const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
+
+            const stats = await Lead.aggregate([
+                ...getTimePipeline(),
+                { $match: { actualTime: { $gte: startDate, $lte: endDate } } },
+                { $group: { _id: "$status", count: { $sum: 1 } } }
+            ]);
+
+            const total = stats.reduce((acc, curr) => acc + curr.count, 0);
+            const statsMap = Object.fromEntries(stats.map(s => [s._id, s.count]));
+
+            const result = this.allPossibleStatuses.map(st => ({
+                status: st,
+                count: statsMap[st] || 0,
+                percentage: percent(statsMap[st] || 0, total)
+            })).sort((a, b) => b.count - a.count);
+
+            res.json({ status: true, total, data: result });
+        } catch (err) { next(err); }
+    }
+
+    // 5. Source Daily Stats
+    async getSourceDailyStats(req, res, next) {
+        try {
+            const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
+            const dayList = buildDayList(startDate, endDate);
+
+            const stats = await Lead.aggregate([
+                ...getTimePipeline(),
+                { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $in: this.sourcesList } } },
+                {
+                    $facet: {
+                        overall: [{ $group: { _id: "$source", count: { $sum: 1 } } }],
+                        daily: [{ $group: { _id: { source: "$source", date: { $dateToString: { format: "%Y.%m.%d", date: "$actualTime" } } }, count: { $sum: 1 } } }]
+                    }
+                }
+            ]);
+
+            const overallMap = Object.fromEntries((stats[0].overall || []).map(o => [o._id, o.count]));
+            const dailyMap = new Map((stats[0].daily || []).map(d => [`${d._id.source}_${d._id.date}`, d.count]));
+            const totalAll = Object.values(overallMap).reduce((a, b) => a + b, 0);
+
+            const result = this.sourcesList.map(sourceName => ({
+                source: sourceName,
+                count: overallMap[sourceName] || 0,
+                percentage: percent(overallMap[sourceName] || 0, totalAll),
+                per_day: dayList.map(day => ({ day, count: dailyMap.get(`${sourceName}_${day}`) || 0 }))
+            })).sort((a, b) => b.count - a.count);
+
+            res.json({ status: true, total: totalAll, data: result });
+        } catch (err) { next(err); }
+    }
+
+    // 6. Source Distribution
+    async getSourceStatusDistribution(req, res, next) {
+        try {
+            const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
+
+            const stats = await Lead.aggregate([
+                ...getTimePipeline(),
+                { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $in: this.sourcesList } } },
+                { $group: { _id: { source: "$source", status: "$status" }, count: { $sum: 1 } } },
+                { $group: { _id: "$_id.source", foundStats: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } }
+            ]);
+
+            const statsMap = Object.fromEntries(stats.map(s => [s._id, s]));
+
+            const result = this.sourcesList.map(sourceName => {
+                const dbData = statsMap[sourceName] || { total: 0, foundStats: [] };
+                const foundMap = Object.fromEntries(dbData.foundStats.map(f => [f.k, f.v]));
+                return {
+                    source: sourceName,
+                    total: dbData.total,
+                    details: this.allPossibleStatuses.map(st => ({
+                        status: st,
+                        count: foundMap[st] || 0,
+                        percentage: percent(foundMap[st] || 0, dbData.total)
+                    }))
+                };
+            }).sort((a, b) => b.total - a.total);
+
+            res.json({ status: true, data: result });
+        } catch (err) { next(err); }
+    }
+
+    // 7. Branch Performance
+    async getBranchPerformance(req, res, next) {
+        try {
+            const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
+            const allBranches = await Branch.find({}).lean();
+
+            const stats = await Lead.aggregate([
+                ...getTimePipeline(),
+                { $match: { actualTime: { $gte: startDate, $lte: endDate }, branch2: { $ne: null } } },
+                {
+                    $group: {
+                        _id: "$branch2",
+                        visitedCount: { $sum: { $cond: [{ $or: [{ $eq: ["$status", "VisitedStore"] }, { $eq: ["$meetingHappened", true] }]}, 1, 0] } },
+                        purchasedCount: { $sum: { $cond: ["$purchase", 1, 0] } },
+                        totalLeads: { $sum: 1 }
+                    }
+                }
+            ]);
+
+            const statsMap = Object.fromEntries(stats.map(s => [String(s._id), s]));
+
+            const result = allBranches.map(branch => {
+                const data = statsMap[String(branch.id)] || { visitedCount: 0, purchasedCount: 0, totalLeads: 0 };
+                return {
+                    branchName: branch.name,
+                    totalLeads: data.totalLeads,
+                    visitedCount: data.visitedCount,
+                    purchasedCount: data.purchasedCount,
+                    conversionToPurchase: percent(data.purchasedCount, data.visitedCount),
+                    totalConversion: percent(data.purchasedCount, data.totalLeads)
+                };
+            }).sort((a, b) => b.purchasedCount - a.purchasedCount);
+
+            res.json({ status: true, data: result });
+        } catch (err) { next(err); }
+    }
 }
 
 module.exports = new AnalyticsController();
