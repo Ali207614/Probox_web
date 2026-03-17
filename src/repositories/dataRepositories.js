@@ -1787,54 +1787,55 @@ ORDER BY
     getMehrliQongiroqCandidates() {
         return `
             WITH new_sales AS (
-                SELECT 
-                    T0."CardCode", 
+                SELECT
+                    T0."CardCode",
                     MAX(T0."CardName") AS "CardName",
                     MAX(BP."Phone1") AS "Phone1",
                     MAX(BP."Cellular") AS "Cellular",
                     'NEW_SALE' AS "EventType",
                     STRING_AGG(T1."Dscription", ', ') AS "ItemNames",
                     SUM(T0."DocTotal") AS "Amount",
-                    0 AS "InstlmntID"
+                    0 AS "InstlmntID",
+                    0 AS "TotalInstlmnt",
+                    T0."DocEntry" AS "DocEntry"
                 FROM ${this.db}."OINV" T0
-                JOIN ${this.db}."INV1" T1 ON T0."DocEntry" = T1."DocEntry"
-                JOIN ${this.db}."OCRD" BP ON T0."CardCode" = BP."CardCode"
+                         JOIN ${this.db}."INV1" T1 ON T0."DocEntry" = T1."DocEntry"
+                         JOIN ${this.db}."OCRD" BP ON T0."CardCode" = BP."CardCode"
                 WHERE T0."DocDate" = ADD_DAYS(CURRENT_DATE, -1)
                   AND T0."CANCELED" = 'N'
-                GROUP BY T0."CardCode"
+                GROUP BY T0."CardCode", T0."DocEntry"
             ),
-            on_time_payments AS (
-                SELECT 
-                    T0."CardCode", 
-                    MAX(T0."CardName") AS "CardName",
-                    MAX(BP."Phone1") AS "Phone1",
-                    MAX(BP."Cellular") AS "Cellular",
-                    'PAYMENT' AS "EventType",
-                    STRING_AGG(T4."Dscription", ', ') AS "ItemNames",
-                    SUM(T1."SumApplied") AS "Amount",
-                    MAX(T3."InstlmntID") AS "InstlmntID"
-                FROM ${this.db}."ORCT" T0
-                JOIN ${this.db}."RCT2" T1 ON T0."DocEntry" = T1."DocNum"
-                JOIN ${this.db}."OINV" T2 ON T1."DocEntry" = T2."DocEntry" AND T1."InvType" = 13
-                JOIN ${this.db}."INV6" T3 ON T2."DocEntry" = T3."DocEntry" AND T1."InstId" = T3."InstlmntID"
-                JOIN ${this.db}."INV1" T4 ON T2."DocEntry" = T4."DocEntry"
-                JOIN ${this.db}."OCRD" BP ON T0."CardCode" = BP."CardCode"
-                WHERE T0."DocDate" = ADD_DAYS(CURRENT_DATE, -1)
-                  AND T0."Canceled" = 'N'
-                  -- DueDate dan max 2 kun o'tib to'laganlar
-                  AND DAYS_BETWEEN(T3."DueDate", T0."DocDate") <= 5
-                GROUP BY T0."CardCode"
-            ),
-            combined AS (
-                SELECT * FROM new_sales
-                UNION ALL
-                SELECT * FROM on_time_payments
-            )
-            SELECT 
-                C.* FROM combined C
-            -- Faqat telefon raqami borlarni olamiz
+                 on_time_payments AS (
+                     SELECT
+                         T0."CardCode",
+                         MAX(T0."CardName") AS "CardName",
+                         MAX(BP."Phone1") AS "Phone1",
+                         MAX(BP."Cellular") AS "Cellular",
+                         'PAYMENT' AS "EventType",
+                         STRING_AGG(DISTINCT T4."Dscription", ', ') AS "ItemNames",
+                         SUM(T1."SumApplied") AS "Amount",
+                         MAX(T3."InstlmntID") AS "InstlmntID",
+                         (SELECT COUNT(*) FROM ${this.db}."INV6" IX WHERE IX."DocEntry" = T2."DocEntry") AS "TotalInstlmnt",
+                         T2."DocEntry" AS "DocEntry"
+                     FROM ${this.db}."ORCT" T0
+                              JOIN ${this.db}."RCT2" T1 ON T0."DocEntry" = T1."DocNum"
+                              JOIN ${this.db}."OINV" T2 ON T1."DocEntry" = T2."DocEntry" AND T1."InvType" = 13
+                              JOIN ${this.db}."INV6" T3 ON T2."DocEntry" = T3."DocEntry" AND T1."InstId" = T3."InstlmntID"
+                              JOIN ${this.db}."INV1" T4 ON T2."DocEntry" = T4."DocEntry"
+                              JOIN ${this.db}."OCRD" BP ON T0."CardCode" = BP."CardCode"
+                     WHERE T0."DocDate" = ADD_DAYS(CURRENT_DATE, -1)
+                       AND T0."Canceled" = 'N'
+                       AND DAYS_BETWEEN(T3."DueDate", T0."DocDate") <= 2
+                     GROUP BY T0."CardCode", T2."DocEntry"
+                 ),
+                 combined AS (
+                     SELECT * FROM new_sales
+                     UNION ALL
+                     SELECT * FROM on_time_payments
+                 )
+            SELECT C.* FROM combined C
             WHERE C."Phone1" IS NOT NULL OR C."Cellular" IS NOT NULL
-            LIMIT 100
+                LIMIT 100
         `;
     }
 

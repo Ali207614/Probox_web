@@ -6,7 +6,7 @@ const dbService = require('../services/dbService');
 const DataRepositories = require('../repositories/dataRepositories');
 
 const SOURCE_NAME = 'Mehrli Qongiroq';
-const MAX_LEADS_PER_DAY = 10;
+const MAX_LEADS_PER_DAY = 5;
 const TARGET_OPERATOR_CODE = 58;
 
 /**
@@ -14,7 +14,7 @@ const TARGET_OPERATOR_CODE = 58;
  */
 function startMehrliCallJob() {
     cron.schedule(
-        '59 14 * * *',
+        '56 15 * * *',
         async () => {
             try {
                 console.log('[CRON] Mehrli Qongiroq job started');
@@ -94,12 +94,16 @@ function startMehrliCallJob() {
 
                         let messageText = '';
                         let eventId = '';
-                        const formattedAmount = currencyFormatter.format(rowData.Amount || 0);
+                        const formattedAmount = new Intl.NumberFormat('en-US', {
+                            style: 'currency',
+                            currency: 'USD'
+                        }).format(rowData.Amount || 0);
 
                         if (rowData.EventType === 'NEW_SALE') {
                             messageText = `Mijoz kecha yangi xaridni amalga oshirdi.\n` +
                                 `Tovar: ${rowData.ItemNames}\n` +
-                                `Summa: ${formattedAmount}`;
+                                `Summa: ${formattedAmount}\n\n` +
+                                `Xarid qilgan`; // Oxiriga qo'shildi
                             eventId = `SALE_${rowData.DocEntry}`;
                         }
                         else if (rowData.EventType === 'PAYMENT') {
@@ -109,7 +113,8 @@ function startMehrliCallJob() {
                             messageText = `Mijoz kecha oylik to'lovni o'z vaqtida amalga oshirdi.\n` +
                                 `Tovar: ${rowData.ItemNames}\n` +
                                 `Summa: ${formattedAmount}\n` +
-                                `To'lov: ${total} / ${current}-chi to'lov to'landi.`;
+                                `To'lov: ${total} / ${current}-chi to'lov to'landi.\n\n` +
+                                `To'lov to'lagan`; // Oxiriga qo'shildi
                             eventId = `PAYMENT_${rowData.DocEntry}_${current}`;
                         }
 
