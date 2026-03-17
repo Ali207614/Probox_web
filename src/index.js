@@ -82,7 +82,7 @@ startLeadRecallBumpCron()
 startSellerBumpNotifyCron()
 startScoringBumpNotifyCron()
 startRatingSmsCron()
-//startMehrliCallJob()
+startMehrliCallJob()
 
 startLeadBumpNotifyCron({
     pbxClient,

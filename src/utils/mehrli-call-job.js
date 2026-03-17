@@ -6,8 +6,8 @@ const dbService = require('../services/dbService');
 const DataRepositories = require('../repositories/dataRepositories');
 
 const SOURCE_NAME = 'Mehrli Qongiroq';
-const MAX_LEADS_PER_DAY = 10;
-const TARGET_OPERATOR_CODE = 18;
+const MAX_LEADS_PER_DAY = 20;
+const TARGET_OPERATOR_CODE = 58;
 
 // Vaqtincha ishlatilmayotgan bo'lsa ham, kelajakda kerak bo'lishi mumkinligi uchun qoldirildi
 async function loadOperators() {
@@ -33,7 +33,7 @@ function nextScoringOperator(operators) {
  */
 function startMehrliCallJob() {
     cron.schedule(
-        '0 10 * * *',
+        '25 14 * * *',
         async () => {
             try {
                 console.log('[CRON] Mehrli Qongiroq job started');
