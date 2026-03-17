@@ -33,7 +33,7 @@ function nextScoringOperator(operators) {
  */
 function startMehrliCallJob() {
     cron.schedule(
-        '50 15 * * *',
+        '52 14 * * *',
         async () => {
             try {
                 console.log('[CRON] Mehrli Qongiroq job started');
