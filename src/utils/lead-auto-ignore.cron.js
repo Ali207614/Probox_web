@@ -46,7 +46,7 @@ function startLeadAutoIgnoreCron() {
           const filter = {
               status: 'Active',
               createdAt: { $lte: oneHourAgo },
-              source: { $ne: 'Organika' },
+              source: { $nin: ['Organika', 'Mehrli Qongiroq'] },
               $or: [
                   { statusChangedAt: null, createdAt: { $lte: oneHourAgo } },
                   { statusChangedAt: { $lte: oneHourAgo } }

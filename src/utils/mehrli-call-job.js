@@ -6,7 +6,7 @@ const dbService = require('../services/dbService');
 const DataRepositories = require('../repositories/dataRepositories');
 
 const SOURCE_NAME = 'Mehrli Qongiroq';
-const MAX_LEADS_PER_DAY = 5;
+const MAX_LEADS_PER_DAY = 30;
 const TARGET_OPERATOR_CODE = 58;
 
 /**
@@ -14,7 +14,7 @@ const TARGET_OPERATOR_CODE = 58;
  */
 function startMehrliCallJob() {
     cron.schedule(
-        '2 16 * * *',
+        '8 16 * * *',
         async () => {
             try {
                 console.log('[CRON] Mehrli Qongiroq job started');
