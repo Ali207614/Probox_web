@@ -16,7 +16,7 @@ const { writeCallEventFromPBX } = require('./lead-chat-events.util');
 const {sendMissedCallSms, sendNoAnswerSms} = require("../services/sms.service");
 
 
-const COMPANY_GATEWAY = '781134774';
+const COMPANY_GATEWAYS = ['781134774', '555134774'];
 
 const DEDUP_WINDOW_DAYS = 5;
 const DEDUP_WINDOW_MS = DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -98,7 +98,7 @@ async function handleOnlinePbxPayload(payload , io) {
     try {
         // 1) gateway check
 
-        if (payload?.gateway && String(payload.gateway) !== COMPANY_GATEWAY) {
+        if (payload?.gateway && !COMPANY_GATEWAYS.includes(String(payload.gateway))) {
             return { ok: true, skipped: 'wrong_gateway' };
         }
 
