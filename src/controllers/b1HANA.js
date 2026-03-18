@@ -1019,7 +1019,7 @@ class b1HANA {
                 if (end) dateQuery.$lte = end;
 
                 if (Object.keys(dateQuery).length > 0) {
-                    if (meeting === 'lastUpdatedAt') {
+                    if (meeting === 'lastUpdatedDate') {
                         // FAQAT newTime bo'lganlar va shu oraliqda
                         addAndCondition(filter, {
                             newTime: { $exists: true, $ne: null, ...dateQuery }
