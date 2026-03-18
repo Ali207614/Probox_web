@@ -14,13 +14,13 @@ async function sendSms(phone, text, messageIdPrefix = 'sms') {
     // =================================================================
     // 🛠 TEST REJIMI (Prodga chiqarayotganda shu blokni o'chirib tashlaysiz)
     // =================================================================
-    const allowedPhones = ['903367448', '0005770']; // Faqat shu 2 ta raqamga ruxsat
-
-    const isAllowed = allowedPhones.some(num => String(phone).includes(num));
-    if (!isAllowed) {
-        // Agar boshqa (haqiqiy mijoz) raqami kelsa, SMS jo'natilmaydi
-        return { success: false, error: 'Faqat test raqamlarga ruxsat berilgan' };
-    }
+    // const allowedPhones = ['903367448', '0005770']; // Faqat shu 2 ta raqamga ruxsat
+    //
+    // const isAllowed = allowedPhones.some(num => String(phone).includes(num));
+    // if (!isAllowed) {
+    //     // Agar boshqa (haqiqiy mijoz) raqami kelsa, SMS jo'natilmaydi
+    //     return { success: false, error: 'Faqat test raqamlarga ruxsat berilgan' };
+    // }
     // =================================================================
 
     const cleanPhone = String(phone).replace(/\D/g, '');
