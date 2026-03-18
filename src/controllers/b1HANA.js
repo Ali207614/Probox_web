@@ -1049,6 +1049,7 @@ class b1HANA {
                 time: item.time ? moment(item.time).tz('Asia/Tashkent').format('YYYY.MM.DD HH:mm') : null,
                 newTime: item.newTime ? moment(item.newTime).tz('Asia/Tashkent').format('YYYY.MM.DD HH:mm') : null,
                 purchaseDate: item.purchaseDate ? moment(item.purchaseDate).tz('Asia/Tashkent').format('YYYY.MM.DD HH:mm') : null,
+                recallDate: item.purchaseDate ? moment(item.purchaseDate).tz('Asia/Tashkent').format('YYYY.MM.DD HH:mm') : null,
             }));
 
             return res.status(200).json({ total, page, limit, totalPages: Math.ceil(total / limit), data });
