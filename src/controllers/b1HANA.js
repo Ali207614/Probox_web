@@ -879,25 +879,45 @@ class b1HANA {
             const skip = (page - 1) * limit;
 
             const {
-                search, source, branch, operator, operator2,
-                meetingDateStart, meetingDateEnd, meeting,
-                purchase, called, answered, interested,
-                called2, answered2, passportId, jshshir,
-                scoreMin, scoreMax, mib, aliment,
-                officialSalaryMin, officialSalaryMax,
-                finalLimit, finalPercentageMin, finalPercentageMax,
-                scoring, seller, isBlocked, meetingHappened,
-                passportVisit, callCount2, callCount,
-                rejectionReason, consideringBumped
+                search,
+                source,
+                branch,
+                operator,
+                operator2,
+                meetingDateStart,
+                meetingDateEnd,
+                meeting,
+                purchase,
+                called,
+                answered,
+                interested,
+                called2,
+                answered2,
+                passportId,
+                jshshir,
+                scoreMin,
+                scoreMax,
+                mib,
+                aliment,
+                officialSalaryMin,
+                officialSalaryMax,
+                finalLimit,
+                finalPercentageMin,
+                finalPercentageMax,
+                scoring,
+                seller,
+                isBlocked,
+                meetingHappened,
+                passportVisit,
+                callCount2,
+                callCount,
+                rejectionReason,
+                consideringBumped
             } = req.query;
 
             const filter = {};
 
-            // --- YORDAMCHI FUNKSIYALAR ---
-            const addAndCondition = (obj, condition) => {
-                if (!obj.$and) obj.$and = [];
-                obj.$and.push(condition);
-            };
+            const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
             const parseArray = (val) => {
                 if (!val) return null;
@@ -905,70 +925,78 @@ class b1HANA {
                 return val.split(',').map((v) => v.trim()).filter(Boolean);
             };
 
-            // --- ROLE BASED FILTERS (Scoring logic) ---
-            if (req.user?.U_role === 'Scoring') {
-                addAndCondition(filter, {
-                    $or: [
-                        { status: 'Scoring' },
-                        {
-                            $or: [
-                                { source: 'Qayta sotuv' },
-                                {
-                                    $and: [
-                                        { source: { $ne: 'Qayta sotuv' } },
-                                        {
-                                            $or: [
-                                                { passportId: { $exists: true, $nin: [null, ''] } },
-                                                { jshshir: { $exists: true, $nin: [null, ''] } },
-                                            ],
-                                        },
-                                    ],
-                                },
-                            ],
-                        },
-                    ],
-                });
-            } else {
-                // Scoring bo'lmaganlar uchun "Qayta sotuv" cheklovi
-                addAndCondition(filter, {
-                    $or: [
-                        { source: { $ne: 'Qayta sotuv' } },
-                        {
-                            source: 'Qayta sotuv',
-                            $or: [
-                                { finalLimit: { $gt: 0 } },
-                                { finalPercentage: { $gt: 0 } }
-                            ],
-                        },
-                    ],
-                });
+            const normalizePhone = (str) => {
+                if (!str) return '';
+                return str.replace(/\D+/g, '');
+            };
+
+            function buildLoosePhonePattern(digits) {
+                // "998901234567" -> "9\\D*9\\D*8\\D*9\\D*0..."
+                return digits.split('').join('\\D*');
             }
 
-            // --- SEARCH LOGIC ---
             if (search) {
                 const s = search.trim();
-                const safeSearch = s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const digits = s.replace(/\D+/g, '');
+                const safeSearch = escapeRegex(s);
+                const phoneSearch = normalizePhone(s); // faqat digit
 
-                if (digits.length >= 2) {
-                    const pattern = digits.split('').join('\\D*');
-                    addAndCondition(filter, {
-                        $or: [
-                            { clientPhone: { $regex: pattern } },
-                            { clientPhone2: { $regex: pattern } }
-                        ]
-                    });
+                if (/^\d+$/.test(phoneSearch) && phoneSearch.length >= 2) {
+                    const pattern = buildLoosePhonePattern(phoneSearch);
+
+                    filter.$or = [
+                        { clientPhone:  { $regex: pattern } },
+                        { clientPhone2: { $regex: pattern } },
+
+                        // BONUS: agar DB da ba’zi raqamlar allaqachon digits-only bo‘lsa
+                        { clientPhone:  { $regex: phoneSearch } },
+                        { clientPhone2: { $regex: phoneSearch } },
+                    ];
                 } else {
-                    addAndCondition(filter, {
-                        $or: [
-                            { clientName: { $regex: safeSearch, $options: 'i' } },
-                            { comment: { $regex: safeSearch, $options: 'i' } },
-                        ]
-                    });
+                    filter.$or = [
+                        { clientName: { $regex: safeSearch, $options: 'i' } },
+                        { comment: { $regex: safeSearch, $options: 'i' } },
+                    ];
                 }
             }
 
-            // --- DATE FILTERS (Tashkent Timezone) ---
+            const sources = parseArray(source);
+            const branches = parseArray(branch);
+            const rejectionReasons = parseArray(rejectionReason);
+            const operators = parseArray(operator);
+            const operators2 = parseArray(operator2);
+            const scorings = parseArray(scoring);
+            const sellers = parseArray(seller);
+
+            const statuses = parseArray(req.query.status);
+            if (statuses?.length && !statuses.includes('unmarked')) {
+                filter.status = { $in: statuses };
+            }
+
+            if(callCount2) filter.callCount2 = parseInt(callCount2);
+            if(callCount) filter.callCount = parseInt(callCount);
+
+            if (sources?.length) addAndCondition(filter, { source: { $in: sources } });
+            if (branches?.length) filter.branch = { $in: branches };
+            if (operators?.length) filter.operator = { $in: operators };
+            if (operators2?.length) filter.operator2 = { $in: operators2 };
+            if (scorings?.length) filter.scoring = { $in: scorings };
+            if (sellers?.length) filter.seller = { $in: sellers };
+            if (rejectionReasons?.length) filter.rejectionReason = { $in: rejectionReasons };
+
+            function parseYesNoUnmarked(value, field, isNumeric = false) {
+                if (value === undefined) return;
+
+                if (isNumeric) {
+                    if (value === 'yes') addAndCondition(filter, { [field]: { $gt: 0 } });
+                    else if (value === 'no') addAndCondition(filter, { [field]: 0 });
+                    else if (value === 'unmarked') addAndCondition(filter, { [field]: null });
+                } else {
+                    if (value === 'yes') filter[field] = true;
+                    else if (value === 'no') filter[field] = false;
+                    else if (value === 'unmarked') addAndCondition(filter, { [field]: null });
+                }
+            }
+
             if (meetingDateStart || meetingDateEnd) {
                 const tz = 'Asia/Tashkent';
                 let start = meetingDateStart ? moment.tz(meetingDateStart, ['DD.MM.YYYY', 'YYYY-MM-DD'], tz).startOf('day').toDate() : null;
@@ -998,24 +1026,130 @@ class b1HANA {
                 }
             }
 
-            // --- ARRAY FILTERS ---
-            const arrayFilters = {
-                source: parseArray(source), branch: parseArray(branch),
-                operator: parseArray(operator), operator2: parseArray(operator2),
-                scoring: parseArray(scoring), seller: parseArray(seller),
-                rejectionReason: parseArray(rejectionReason)
-            };
+            parseYesNoUnmarked(purchase, 'purchase');
+            parseYesNoUnmarked(called, 'called');
+            parseYesNoUnmarked(answered, 'answered');
+            parseYesNoUnmarked(interested, 'interested');
+            parseYesNoUnmarked(called2, 'called2');
+            parseYesNoUnmarked(answered2, 'answered2');
+            parseYesNoUnmarked(mib, 'mib');
+            parseYesNoUnmarked(aliment, 'aliment');
+            parseYesNoUnmarked(finalLimit, 'finalLimit', true);
+            parseYesNoUnmarked(meetingHappened, 'meetingHappened');
+            parseYesNoUnmarked(consideringBumped, 'consideringBumped');
 
-            Object.keys(arrayFilters).forEach(key => {
-                if (arrayFilters[key]?.length) filter[key] = { $in: arrayFilters[key] };
-            });
+            if(isBlocked){
+                if(isBlocked === 'yes'){
+                    filter.isBlocked = true;
+                }
+                else if(isBlocked === 'unmarked' || isBlocked === 'no'){
+                    addAndCondition(filter, {
+                        $or: [
+                            { isBlocked: { $exists: false } },
+                            { isBlocked: null },
+                            { isBlocked: false },
+                        ],
+                    });
 
-            const statuses = parseArray(req.query.status);
-            if (statuses?.length && !statuses.includes('unmarked')) filter.status = { $in: statuses };
+                }
+            }
 
-            // --- NUMERIC & BOOLEAN FILTERS ---
-            if(callCount) filter.callCount = parseInt(callCount);
-            if(callCount2) filter.callCount2 = parseInt(callCount2);
+            if (passportId) {
+                if (passportId === 'yes') {
+                    filter.passportId = { $exists: true, $nin: [null, ''] };
+                } else if (passportId === 'no') {
+                    addAndCondition(filter, {
+                        $or: [
+                            { passportId: { $exists: false } },
+                            { passportId: null },
+                            { passportId: '' },
+                        ],
+                    });
+                } else if (passportId === 'unmarked') {
+                    addAndCondition(filter, { passportId: null });
+                }
+            }
+
+            if (jshshir) {
+                if (jshshir === 'yes') {
+                    filter.jshshir = { $exists: true, $nin: [null, ''] };
+                } else if (jshshir === 'no') {
+                    addAndCondition(filter, {
+                        $or: [
+                            { jshshir: { $exists: false } },
+                            { jshshir: null },
+                            { jshshir: '' },
+                        ],
+                    });
+                } else if (jshshir === 'unmarked') {
+                    addAndCondition(filter, { jshshir: null });
+                }
+            }
+
+            if (['Passport', 'Visit', 'Processing'].includes(passportVisit)) {
+                filter.passportVisit = passportVisit;
+            }
+
+
+            // if (req.user?.U_role === 'Scoring') {
+            //     addAndCondition(filter, {
+            //         $or: [
+            //             { source: 'Qayta sotuv' },
+            //             {
+            //                 $and: [
+            //                     { source: { $ne: 'Qayta sotuv' } },
+            //                     {
+            //                         $or: [
+            //                             { passportId: { $exists: true, $nin: [null, ''] } },
+            //                             { jshshir: { $exists: true, $nin: [null, ''] } },
+            //                         ],
+            //                     },
+            //                 ],
+            //             },
+            //         ],
+            //     });
+            // }
+
+            if (req.user?.U_role === 'Scoring') {
+                addAndCondition(filter, {
+                    $or: [
+                        { status: 'Scoring' },
+
+                        {
+                            $or: [
+                                { source: 'Qayta sotuv' },
+                                {
+                                    $and: [
+                                        { source: { $ne: 'Qayta sotuv' } },
+                                        {
+                                            $or: [
+                                                { passportId: { $exists: true, $nin: [null, ''] } },
+                                                { jshshir: { $exists: true, $nin: [null, ''] } },
+                                            ],
+                                        },
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                });
+            }
+
+
+            if (req.user?.U_role !== 'Scoring') {
+                addAndCondition(filter, {
+                    $or: [
+                        { source: { $ne: 'Qayta sotuv' } },
+                        {
+                            source: 'Qayta sotuv',
+                            $or: [
+                                { finalLimit: { $gt: 0 } },
+                                { finalPercentage: { $gt: 0 } }
+                            ],
+                        },
+                    ],
+                });
+            }
 
             const addRangeFilter = (field, min, max) => {
                 if (min || max) {
@@ -1024,455 +1158,110 @@ class b1HANA {
                     if (max) filter[field].$lte = parseFloat(max);
                 }
             };
+
             addRangeFilter('score', scoreMin, scoreMax);
             addRangeFilter('officialSalary', officialSalaryMin, officialSalaryMax);
             addRangeFilter('finalPercentage', finalPercentageMin, finalPercentageMax);
 
-            // --- EXECUTION ---
             const total = await LeadModel.countDocuments(filter);
+
             const rawData = await LeadModel.aggregate([
                 { $match: filter },
                 {
                     $addFields: {
                         _statusOrder: { $cond: [{ $eq: ['$status', 'Returned'] }, 0, 1] },
+
                         _sortTime: { $ifNull: ['$newTime', '$time'] },
                     },
                 },
                 { $sort: { _statusOrder: 1, _sortTime: -1 } },
                 { $skip: skip },
                 { $limit: limit },
+                { $project: { _statusOrder: 0, _sortTime: 0 } },
             ]);
 
-            const data = rawData.map(item => ({
-                ...item,
+
+            const data = rawData.map((item) => ({
+                n: item.n,
                 id: item._id,
-                time: item.time ? moment(item.time).tz('Asia/Tashkent').format('YYYY.MM.DD HH:mm') : null,
-                newTime: item.newTime ? moment(item.newTime).tz('Asia/Tashkent').format('YYYY.MM.DD HH:mm') : null,
-                purchaseDate: item.purchaseDate ? moment(item.purchaseDate).tz('Asia/Tashkent').format('YYYY.MM.DD HH:mm') : null,
-                recallDate: item.recallDate ? moment(item.recallDate).tz('Asia/Tashkent').format('YYYY.MM.DD HH:mm') : null,
+                seen:item?.seen,
+                purchaseDate: item.purchaseDate ? moment(item.purchaseDate).format('YYYY.MM.DD HH:mm') : null,
+                generalRating: item?.generalRating || null,
+                sellerRating: item?.sellerRating || null,
+                ratingComment: item?.ratingComment || null,
+                ratingSmsError: item?.ratingSmsError || null,
+                consideringBumped: ['Closed', 'Purchased'].includes(item.status)
+                    ? false
+                    : item?.consideringBumped,
+                newTime:item.newTime ? moment(item.newTime).format('YYYY.MM.DD HH:mm') : null,
+                noAnswerCount:item?.noAnswerCount,
+                recallDate:item?.recallDate ? moment(item.recallDate).format('YYYY.MM.DD HH:mm') : null,
+                rejectionReason: item.rejectionReason || item.rejectionReason2 || null,
+                rejectionReason2: item.rejectionReason2 || item.rejectionReason || null,
+                clientPhone2: item.clientPhone2 || null,
+                address2: item.address2 || null,
+                paymentScore: item.paymentScore || null,
+                totalContracts: item.totalContracts || null,
+                openContracts: item.openContracts || null,
+                totalAmount: item.totalAmount || null,
+                totalPaid: item.totalPaid || null,
+                overdueDebt: item.overdueDebt || null,
+                maxDelay: item.maxDelay || null,
+                avgPaymentDelay: item.avgPaymentDelay || null,
+                callCount: item?.callCount || null,
+                callCount2: item?.callCount2 || null,
+                meetingHappened: item.meetingHappened || null,
+                cardCode:item?.cardCode || null,
+                invoiceCreated:item.invoiceCreated || null,
+                invoiceDocEntry:item.invoiceDocEntry || null,
+                invoiceDocNum:item.invoiceDocNum || null,
+                invoiceCreatedAt:item.invoiceCreatedAt || null,
+                status: item.status,
+                isBlocked: item?.isBlocked ?? false,
+                clientName: item.clientName || '',
+                jsshir: item.jshshir || '',
+                branch2: item.branch2 || '',
+                clientPhone: item.clientPhone || '',
+                source: item.source || '',
+                time: item.time ? moment(item.time).format('YYYY.MM.DD HH:mm') : null,
+                operator: item.operator || null,
+                operator2: item.operator2 || null,
+                branch: item.branch || null,
+                comment: item.comment || '',
+                meetingConfirmed: item.meetingConfirmed ?? null,
+                purchase: item.purchase ?? null,
+                called: item.called ?? null,
+                answered: item.answered ?? null,
+                interested: item.interested ?? null,
+                called2: item.called2 ?? null,
+                answered2: item.answered2 ?? null,
+                scoring: item.scoring || null,
+                seller: item.seller || null,
+                passportId: item.passportId || '',
+                meetingDate: item.meetingDate
+                    ? moment(item.meetingDate).format('YYYY.MM.DD HH:mm')
+                    : null,
+                score: item.score ?? null,
+                mib: item.mib ?? null,
+                aliment: item.aliment ?? null,
+                officialSalary: item.officialSalary ?? null,
+                finalLimit: item.finalLimit ?? null,
+                finalPercentage: item.finalPercentage ?? null,
+                createdAt: item.createdAt || null,
             }));
 
-            return res.status(200).json({ total, page, limit, totalPages: Math.ceil(total / limit), data });
-
+            return res.status(200).json({
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+                data,
+            });
         } catch (e) {
             console.error('Error fetching leads:', e);
             next(e);
         }
     };
-
-    // leads = async (req, res, next) => {
-    //     try {
-    //         const page = parseInt(req.query.page) || 1;
-    //         const limit = parseInt(req.query.limit) || 10;
-    //         const skip = (page - 1) * limit;
-    //
-    //         const {
-    //             search,
-    //             source,
-    //             branch,
-    //             operator,
-    //             operator2,
-    //             meetingDateStart,
-    //             meetingDateEnd,
-    //             meeting,
-    //             purchase,
-    //             called,
-    //             answered,
-    //             interested,
-    //             called2,
-    //             answered2,
-    //             passportId,
-    //             jshshir,
-    //             scoreMin,
-    //             scoreMax,
-    //             mib,
-    //             aliment,
-    //             officialSalaryMin,
-    //             officialSalaryMax,
-    //             finalLimit,
-    //             finalPercentageMin,
-    //             finalPercentageMax,
-    //             scoring,
-    //             seller,
-    //             isBlocked,
-    //             meetingHappened,
-    //             passportVisit,
-    //             callCount2,
-    //             callCount,
-    //             rejectionReason,
-    //             consideringBumped
-    //         } = req.query;
-    //
-    //         const filter = {};
-    //
-    //         const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    //
-    //         const parseArray = (val) => {
-    //             if (!val) return null;
-    //             if (Array.isArray(val)) return val;
-    //             return val.split(',').map((v) => v.trim()).filter(Boolean);
-    //         };
-    //
-    //         const normalizePhone = (str) => {
-    //             if (!str) return '';
-    //             return str.replace(/\D+/g, '');
-    //         };
-    //
-    //         function buildLoosePhonePattern(digits) {
-    //             // "998901234567" -> "9\\D*9\\D*8\\D*9\\D*0..."
-    //             return digits.split('').join('\\D*');
-    //         }
-    //
-    //         if (search) {
-    //             const s = search.trim();
-    //             const safeSearch = escapeRegex(s);
-    //             const phoneSearch = normalizePhone(s); // faqat digit
-    //
-    //             if (/^\d+$/.test(phoneSearch) && phoneSearch.length >= 2) {
-    //                 const pattern = buildLoosePhonePattern(phoneSearch);
-    //
-    //                 filter.$or = [
-    //                     { clientPhone:  { $regex: pattern } },
-    //                     { clientPhone2: { $regex: pattern } },
-    //
-    //                     // BONUS: agar DB da ba’zi raqamlar allaqachon digits-only bo‘lsa
-    //                     { clientPhone:  { $regex: phoneSearch } },
-    //                     { clientPhone2: { $regex: phoneSearch } },
-    //                 ];
-    //             } else {
-    //                 filter.$or = [
-    //                     { clientName: { $regex: safeSearch, $options: 'i' } },
-    //                     { comment: { $regex: safeSearch, $options: 'i' } },
-    //                 ];
-    //             }
-    //         }
-    //
-    //         const sources = parseArray(source);
-    //         const branches = parseArray(branch);
-    //         const rejectionReasons = parseArray(rejectionReason);
-    //         const operators = parseArray(operator);
-    //         const operators2 = parseArray(operator2);
-    //         const scorings = parseArray(scoring);
-    //         const sellers = parseArray(seller);
-    //
-    //         const statuses = parseArray(req.query.status);
-    //         if (statuses?.length && !statuses.includes('unmarked')) {
-    //             filter.status = { $in: statuses };
-    //         }
-    //
-    //         if(callCount2) filter.callCount2 = parseInt(callCount2);
-    //         if(callCount) filter.callCount = parseInt(callCount);
-    //
-    //         if (sources?.length) addAndCondition(filter, { source: { $in: sources } });
-    //         if (branches?.length) filter.branch = { $in: branches };
-    //         if (operators?.length) filter.operator = { $in: operators };
-    //         if (operators2?.length) filter.operator2 = { $in: operators2 };
-    //         if (scorings?.length) filter.scoring = { $in: scorings };
-    //         if (sellers?.length) filter.seller = { $in: sellers };
-    //         if (rejectionReasons?.length) filter.rejectionReason = { $in: rejectionReasons };
-    //
-    //         function parseYesNoUnmarked(value, field, isNumeric = false) {
-    //             if (value === undefined) return;
-    //
-    //             if (isNumeric) {
-    //                 if (value === 'yes') addAndCondition(filter, { [field]: { $gt: 0 } });
-    //                 else if (value === 'no') addAndCondition(filter, { [field]: 0 });
-    //                 else if (value === 'unmarked') addAndCondition(filter, { [field]: null });
-    //             } else {
-    //                 if (value === 'yes') filter[field] = true;
-    //                 else if (value === 'no') filter[field] = false;
-    //                 else if (value === 'unmarked') addAndCondition(filter, { [field]: null });
-    //             }
-    //         }
-    //
-    //         const addAndCondition = (obj, condition) => {
-    //             if (!obj.$and) obj.$and = [];
-    //             obj.$and.push(condition);
-    //         };
-    //
-    //         if (meetingDateStart || meetingDateEnd) {
-    //             const tz = 'Asia/Tashkent';
-    //             let start = null;
-    //             let end = null;
-    //
-    //             if (meetingDateStart) {
-    //                 start = moment.tz(meetingDateStart, ['DD.MM.YYYY', 'YYYY-MM-DD'], tz).startOf('day').toDate();
-    //             }
-    //             if (meetingDateEnd) {
-    //                 end = moment.tz(meetingDateEnd, ['DD.MM.YYYY', 'YYYY-MM-DD'], tz).endOf('day').toDate();
-    //             }
-    //
-    //             const dateQuery = {};
-    //             if (start) dateQuery.$gte = start;
-    //             if (end) dateQuery.$lte = end;
-    //
-    //             if (Object.keys(dateQuery).length > 0) {
-    //                 if (meeting === 'lastUpdatedDate') {
-    //                     // FAQAT newTime bo'lganlar va shu oraliqda
-    //                     addAndCondition(filter, {
-    //                         newTime: { $exists: true, $ne: null, ...dateQuery }
-    //                     });
-    //                 } else if (meeting === 'createdAt') {
-    //                     // FAQAT original ochilgan vaqti bo'yicha
-    //                     addAndCondition(filter, { time: dateQuery });
-    //                 } else if (meeting === 'time') {
-    //                     // Priority: newTime, agar u yo'q bo'lsa time
-    //                     addAndCondition(filter, {
-    //                         $or: [
-    //                             { newTime: dateQuery },
-    //                             { newTime: null, time: dateQuery }
-    //                         ]
-    //                     });
-    //                 } else if (meeting === 'purchaseDate') {
-    //                     addAndCondition(filter, {
-    //                         status: 'Purchased',
-    //                         $or: [
-    //                             { purchaseDate: dateQuery },
-    //                             { purchaseDate: null, invoiceCreatedAt: dateQuery }
-    //                         ]
-    //                     });
-    //                 } else {
-    //                     filter.meetingDate = dateQuery;
-    //                 }
-    //             }
-    //         }
-    //
-    //         parseYesNoUnmarked(purchase, 'purchase');
-    //         parseYesNoUnmarked(called, 'called');
-    //         parseYesNoUnmarked(answered, 'answered');
-    //         parseYesNoUnmarked(interested, 'interested');
-    //         parseYesNoUnmarked(called2, 'called2');
-    //         parseYesNoUnmarked(answered2, 'answered2');
-    //         parseYesNoUnmarked(mib, 'mib');
-    //         parseYesNoUnmarked(aliment, 'aliment');
-    //         parseYesNoUnmarked(finalLimit, 'finalLimit', true);
-    //         parseYesNoUnmarked(meetingHappened, 'meetingHappened');
-    //         parseYesNoUnmarked(consideringBumped, 'consideringBumped');
-    //
-    //         if(isBlocked){
-    //             if(isBlocked === 'yes'){
-    //                 filter.isBlocked = true;
-    //             }
-    //             else if(isBlocked === 'unmarked' || isBlocked === 'no'){
-    //                 addAndCondition(filter, {
-    //                     $or: [
-    //                         { isBlocked: { $exists: false } },
-    //                         { isBlocked: null },
-    //                         { isBlocked: false },
-    //                     ],
-    //                 });
-    //
-    //             }
-    //         }
-    //
-    //         if (passportId) {
-    //             if (passportId === 'yes') {
-    //                 filter.passportId = { $exists: true, $nin: [null, ''] };
-    //             } else if (passportId === 'no') {
-    //                 addAndCondition(filter, {
-    //                     $or: [
-    //                         { passportId: { $exists: false } },
-    //                         { passportId: null },
-    //                         { passportId: '' },
-    //                     ],
-    //                 });
-    //             } else if (passportId === 'unmarked') {
-    //                 addAndCondition(filter, { passportId: null });
-    //             }
-    //         }
-    //
-    //         if (jshshir) {
-    //             if (jshshir === 'yes') {
-    //                 filter.jshshir = { $exists: true, $nin: [null, ''] };
-    //             } else if (jshshir === 'no') {
-    //                 addAndCondition(filter, {
-    //                     $or: [
-    //                         { jshshir: { $exists: false } },
-    //                         { jshshir: null },
-    //                         { jshshir: '' },
-    //                     ],
-    //                 });
-    //             } else if (jshshir === 'unmarked') {
-    //                 addAndCondition(filter, { jshshir: null });
-    //             }
-    //         }
-    //
-    //         if (['Passport', 'Visit', 'Processing'].includes(passportVisit)) {
-    //             filter.passportVisit = passportVisit;
-    //         }
-    //
-    //
-    //         // if (req.user?.U_role === 'Scoring') {
-    //         //     addAndCondition(filter, {
-    //         //         $or: [
-    //         //             { source: 'Qayta sotuv' },
-    //         //             {
-    //         //                 $and: [
-    //         //                     { source: { $ne: 'Qayta sotuv' } },
-    //         //                     {
-    //         //                         $or: [
-    //         //                             { passportId: { $exists: true, $nin: [null, ''] } },
-    //         //                             { jshshir: { $exists: true, $nin: [null, ''] } },
-    //         //                         ],
-    //         //                     },
-    //         //                 ],
-    //         //             },
-    //         //         ],
-    //         //     });
-    //         // }
-    //
-    //         if (req.user?.U_role === 'Scoring') {
-    //             addAndCondition(filter, {
-    //                 $or: [
-    //                     { status: 'Scoring' },
-    //
-    //                     {
-    //                         $or: [
-    //                             { source: 'Qayta sotuv' },
-    //                             {
-    //                                 $and: [
-    //                                     { source: { $ne: 'Qayta sotuv' } },
-    //                                     {
-    //                                         $or: [
-    //                                             { passportId: { $exists: true, $nin: [null, ''] } },
-    //                                             { jshshir: { $exists: true, $nin: [null, ''] } },
-    //                                         ],
-    //                                     },
-    //                                 ],
-    //                             },
-    //                         ],
-    //                     },
-    //                 ],
-    //             });
-    //         }
-    //
-    //
-    //         if (req.user?.U_role !== 'Scoring') {
-    //             addAndCondition(filter, {
-    //                 $or: [
-    //                     { source: { $ne: 'Qayta sotuv' } },
-    //                     {
-    //                         source: 'Qayta sotuv',
-    //                         $or: [
-    //                             { finalLimit: { $gt: 0 } },
-    //                             { finalPercentage: { $gt: 0 } }
-    //                         ],
-    //                     },
-    //                 ],
-    //             });
-    //         }
-    //
-    //         const addRangeFilter = (field, min, max) => {
-    //             if (min || max) {
-    //                 filter[field] = {};
-    //                 if (min) filter[field].$gte = parseFloat(min);
-    //                 if (max) filter[field].$lte = parseFloat(max);
-    //             }
-    //         };
-    //
-    //         addRangeFilter('score', scoreMin, scoreMax);
-    //         addRangeFilter('officialSalary', officialSalaryMin, officialSalaryMax);
-    //         addRangeFilter('finalPercentage', finalPercentageMin, finalPercentageMax);
-    //
-    //         const total = await LeadModel.countDocuments(filter);
-    //
-    //         const rawData = await LeadModel.aggregate([
-    //             { $match: filter },
-    //             {
-    //                 $addFields: {
-    //                     _statusOrder: { $cond: [{ $eq: ['$status', 'Returned'] }, 0, 1] },
-    //
-    //                     _sortTime: { $ifNull: ['$newTime', '$time'] },
-    //                 },
-    //             },
-    //             { $sort: { _statusOrder: 1, _sortTime: -1 } },
-    //             { $skip: skip },
-    //             { $limit: limit },
-    //             { $project: { _statusOrder: 0, _sortTime: 0 } },
-    //         ]);
-    //
-    //
-    //         const data = rawData.map((item) => ({
-    //             n: item.n,
-    //             id: item._id,
-    //             seen:item?.seen,
-    //             purchaseDate: item.purchaseDate ? moment(item.purchaseDate).format('YYYY.MM.DD HH:mm') : null,
-    //             generalRating: item?.generalRating || null,
-    //             sellerRating: item?.sellerRating || null,
-    //             ratingComment: item?.ratingComment || null,
-    //             ratingSmsError: item?.ratingSmsError || null,
-    //             consideringBumped: ['Closed', 'Purchased'].includes(item.status)
-    //                 ? false
-    //                 : item?.consideringBumped,
-    //             newTime:item.newTime ? moment(item.newTime).format('YYYY.MM.DD HH:mm') : null,
-    //             noAnswerCount:item?.noAnswerCount,
-    //             recallDate:item?.recallDate ? moment(item.recallDate).format('YYYY.MM.DD HH:mm') : null,
-    //             rejectionReason: item.rejectionReason || item.rejectionReason2 || null,
-    //             rejectionReason2: item.rejectionReason2 || item.rejectionReason || null,
-    //             clientPhone2: item.clientPhone2 || null,
-    //             address2: item.address2 || null,
-    //             paymentScore: item.paymentScore || null,
-    //             totalContracts: item.totalContracts || null,
-    //             openContracts: item.openContracts || null,
-    //             totalAmount: item.totalAmount || null,
-    //             totalPaid: item.totalPaid || null,
-    //             overdueDebt: item.overdueDebt || null,
-    //             maxDelay: item.maxDelay || null,
-    //             avgPaymentDelay: item.avgPaymentDelay || null,
-    //             callCount: item?.callCount || null,
-    //             callCount2: item?.callCount2 || null,
-    //             meetingHappened: item.meetingHappened || null,
-    //             cardCode:item?.cardCode || null,
-    //             invoiceCreated:item.invoiceCreated || null,
-    //             invoiceDocEntry:item.invoiceDocEntry || null,
-    //             invoiceDocNum:item.invoiceDocNum || null,
-    //             invoiceCreatedAt:item.invoiceCreatedAt || null,
-    //             status: item.status,
-    //             isBlocked: item?.isBlocked ?? false,
-    //             clientName: item.clientName || '',
-    //             jsshir: item.jshshir || '',
-    //             branch2: item.branch2 || '',
-    //             clientPhone: item.clientPhone || '',
-    //             source: item.source || '',
-    //             time: item.time ? moment(item.time).format('YYYY.MM.DD HH:mm') : null,
-    //             operator: item.operator || null,
-    //             operator2: item.operator2 || null,
-    //             branch: item.branch || null,
-    //             comment: item.comment || '',
-    //             meetingConfirmed: item.meetingConfirmed ?? null,
-    //             purchase: item.purchase ?? null,
-    //             called: item.called ?? null,
-    //             answered: item.answered ?? null,
-    //             interested: item.interested ?? null,
-    //             called2: item.called2 ?? null,
-    //             answered2: item.answered2 ?? null,
-    //             scoring: item.scoring || null,
-    //             seller: item.seller || null,
-    //             passportId: item.passportId || '',
-    //             meetingDate: item.meetingDate
-    //                 ? moment(item.meetingDate).format('YYYY.MM.DD HH:mm')
-    //                 : null,
-    //             score: item.score ?? null,
-    //             mib: item.mib ?? null,
-    //             aliment: item.aliment ?? null,
-    //             officialSalary: item.officialSalary ?? null,
-    //             finalLimit: item.finalLimit ?? null,
-    //             finalPercentage: item.finalPercentage ?? null,
-    //             createdAt: item.createdAt || null,
-    //         }));
-    //
-    //         return res.status(200).json({
-    //             total,
-    //             page,
-    //             limit,
-    //             totalPages: Math.ceil(total / limit),
-    //             data,
-    //         });
-    //     } catch (e) {
-    //         console.error('Error fetching leads:', e);
-    //         next(e);
-    //     }
-    // };
 
     createLeadFromTelegramBotWithImage = async (req, res, next) => {
         try {
