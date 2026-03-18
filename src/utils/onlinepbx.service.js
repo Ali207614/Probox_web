@@ -258,6 +258,7 @@ async function handleOnlinePbxPayload(payload , io) {
             if (isCallEnd && hasTalk) {
                 update.$set.status = 'Talked';
                 delete update.$setOnInsert.status;
+                delete update.$set.newTime;
             }
         } else {
             if (shouldCountEnd && isNoAnswerOutboundEnd) {
