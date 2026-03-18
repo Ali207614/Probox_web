@@ -997,61 +997,54 @@ class b1HANA {
                 }
             }
 
-            if (meetingDateStart || meetingDateEnd) {
-                const parseDate = (val) => {
-                    if (!val) return null;
-                    const clean = val.trim().replace(/\//g, '.');
-                    const d = moment(clean, ['DD.MM.YYYY', 'YYYY.MM.DD'], true);
-                    return d.isValid() ? d.toDate() : null;
-                };
+            const addAndCondition = (obj, condition) => {
+                if (!obj.$and) obj.$and = [];
+                obj.$and.push(condition);
+            };
 
-                const start = parseDate(meetingDateStart);
-                const end = parseDate(meetingDateEnd);
-                if (end) end.setHours(23, 59, 59, 999);
+            if (meetingDateStart || meetingDateEnd) {
+                const tz = 'Asia/Tashkent';
+                let start = null;
+                let end = null;
+
+                if (meetingDateStart) {
+                    start = moment.tz(meetingDateStart, ['DD.MM.YYYY', 'YYYY-MM-DD'], tz).startOf('day').toDate();
+                }
+                if (meetingDateEnd) {
+                    end = moment.tz(meetingDateEnd, ['DD.MM.YYYY', 'YYYY-MM-DD'], tz).endOf('day').toDate();
+                }
 
                 const dateQuery = {};
                 if (start) dateQuery.$gte = start;
                 if (end) dateQuery.$lte = end;
 
                 if (Object.keys(dateQuery).length > 0) {
-                    if (meeting === 'time') {
-                        // Avvalgi mantiq: priority newTime, keyin time
+                    if (meeting === 'lastUpdatedAt') {
+                        // FAQAT newTime bo'lganlar va shu oraliqda
+                        addAndCondition(filter, {
+                            newTime: { $exists: true, $ne: null, ...dateQuery }
+                        });
+                    } else if (meeting === 'createdAt') {
+                        // FAQAT original ochilgan vaqti bo'yicha
+                        addAndCondition(filter, { time: dateQuery });
+                    } else if (meeting === 'time') {
+                        // Priority: newTime, agar u yo'q bo'lsa time
                         addAndCondition(filter, {
                             $or: [
                                 { newTime: dateQuery },
                                 { newTime: null, time: dateQuery }
                             ]
                         });
-                    } else if (meeting === 'lastUpdatedAt') {
-                        // YANGI: Faqat newTime bo'yicha, newTime bo'lmasa filterga kirmaydi
-                        addAndCondition(filter, {
-                            newTime: { $ne: null, ...dateQuery }
-                        });
-                    } else if (meeting === 'createdAt') {
-                        // YANGI: Faqat time bo'yicha
-                        addAndCondition(filter, {
-                            time: dateQuery
-                        });
-                    } else if (meeting === 'meetingDate') {
-                        addAndCondition(filter, { recallDate: dateQuery });
-                    } else if (meeting === 'meetingConfirmedDate' || meeting === 'meetingConfirmation') {
-                        addAndCondition(filter, {
-                            meetingConfirmed: true,
-                            meetingConfirmedDate: dateQuery
-                        });
                     } else if (meeting === 'purchaseDate') {
                         addAndCondition(filter, {
                             status: 'Purchased',
                             $or: [
                                 { purchaseDate: dateQuery },
-                                { purchaseDate: null, invoiceCreatedAt: dateQuery },
-                                { purchaseDate: null, invoiceCreatedAt: null, statusChangedAt: dateQuery },
-                                { purchaseDate: null, invoiceCreatedAt: null, statusChangedAt: null, newTime: dateQuery },
-                                { purchaseDate: null, invoiceCreatedAt: null, statusChangedAt: null, newTime: null, time: dateQuery }
+                                { purchaseDate: null, invoiceCreatedAt: dateQuery }
                             ]
                         });
                     } else {
-                        filter['meetingDate'] = dateQuery;
+                        filter.meetingDate = dateQuery;
                     }
                 }
             }
