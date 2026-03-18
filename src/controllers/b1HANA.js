@@ -1275,7 +1275,7 @@ class b1HANA {
                 cardCode: cardCodeFromBody,
             } = req.body;
 
-            // multiple fayl
+            // Multiple fayl
             const files = Array.isArray(req.files) ? req.files : [];
 
             const source = 'TelegramBot';
@@ -1308,7 +1308,7 @@ class b1HANA {
                 });
             }
 
-            // qo‘shimcha himoya
+            // Qo‘shimcha himoya: Faqat rasmlarni qabul qilish
             const invalidFiles = files.filter(
                 (file) => !file.mimetype || !file.mimetype.startsWith('image/')
             );
@@ -1343,6 +1343,18 @@ class b1HANA {
             };
 
             let lead = await LeadModel.findOne(duplicateQuery);
+
+            // UMUMIY RASMLAR SONINI TEKSHIRISH (YANGI QO'SHILGAN MANTIQ)
+            if (lead && files.length > 0) {
+                const currentImageCount = await LeadImage.countDocuments({ leadId: lead._id });
+
+                if (currentImageCount + files.length > 10) {
+                    return res.status(400).json({
+                        message: `Bitta lead uchun maksimal 10 ta rasm ruxsat etilgan. Hozirda bu lead'da ${currentImageCount} ta rasm mavjud. Yana ${files.length} ta yuklab bo'lmaydi.`,
+                        location: 'telegram_bot_lead_image_limit_exceeded',
+                    });
+                }
+            }
 
             let savedImages = [];
             let imageUploadResults = [];
@@ -1409,6 +1421,7 @@ class b1HANA {
                 };
             }
 
+            // AGAR LEAD MAJVUD BO'LSA (YANGILASH)
             if (lead) {
                 actionType = 'updated_existing';
 
@@ -1512,6 +1525,7 @@ class b1HANA {
                 });
             }
 
+            // AGAR LEAD YANGI BO'LSA (YARATISH)
             let operator = null;
             try {
                 operator = await assignBalancedOperator();
