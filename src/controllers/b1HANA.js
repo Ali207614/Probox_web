@@ -953,23 +953,37 @@ class b1HANA {
             if (search) {
                 const s = search.trim();
                 const safeSearch = escapeRegex(s);
-                const phoneSearch = normalizePhone(s); // faqat digit
 
-                if (/^\d+$/.test(phoneSearch) && phoneSearch.length >= 2) {
+                // Probelsiz holatda faqat raqamdan iboratligini tekshirish
+                const isOnlyDigits = /^\d+$/.test(s.replace(/\s+/g, ''));
+
+                // Asosiy massivni initsializatsiya qilish
+                filter.$or = [];
+
+                if (isOnlyDigits && s.replace(/\s+/g, '').length >= 2) {
+                    const phoneSearch = normalizePhone(s);
                     const pattern = buildLoosePhonePattern(phoneSearch);
 
                     filter.$or = [
-                        { clientPhone:  { $regex: pattern } },
+                        { clientPhone: { $regex: pattern } },
                         { clientPhone2: { $regex: pattern } },
-
-                        // BONUS: agar DB da ba’zi raqamlar allaqachon digits-only bo‘lsa
-                        { clientPhone:  { $regex: phoneSearch } },
+                        // BONUS: DB dagi raqamlar aniq formatda bo'lsa
+                        { clientPhone: { $regex: phoneSearch } },
                         { clientPhone2: { $regex: phoneSearch } },
+
+                        // Yangi qo'shilgan maydonlar (faqat raqamli so'rov uchun)
+                        { jshshir: { $regex: phoneSearch } }, // JShShIR faqat raqam
+                        { passportId: { $regex: phoneSearch } } // Pasportning faqat raqam qismi kiritilganda
                     ];
                 } else {
+                    // Harf qatnashgan yoki matnli so'rovlar uchun
                     filter.$or = [
                         { clientName: { $regex: safeSearch, $options: 'i' } },
                         { comment: { $regex: safeSearch, $options: 'i' } },
+
+                        // Yangi qo'shilgan maydon (harf va raqam aralash uchun)
+                        // probellarni olib tashlab qidirish yaxshiroq natija beradi (masalan: "AA 123" -> "AA123")
+                        { passportId: { $regex: safeSearch.replace(/\s+/g, ''), $options: 'i' } }
                     ];
                 }
             }
