@@ -175,7 +175,7 @@ async function handleOnlinePbxPayload(payload , io) {
         const shouldCountEnd = isCallEnd && incomingUuid && incomingUuid !== prevCountedUuid;
 
         // outbound call_end & no talk => NoAnswer
-        const isNoAnswerOutboundEnd = isCallEnd && !hasTalk && isOutbound;
+        const isNoAnswerOutboundEnd = isCallEnd && !hasTalk && isOutbound && !isMehrliQongiroq;
         const shouldMoveToNoAnswer = isNoAnswerOutboundEnd;
 
         // ✅ NEW: call_end + talk bo'lsa — status restore (Missed/NoAnswer bo'lmasa)
@@ -357,7 +357,7 @@ async function handleOnlinePbxPayload(payload , io) {
                     });
             }
 
-            if (isCallEnd && hasTalk) {
+            if (isCallEnd && hasTalk && !isMehrliQongiroq) {
                 if (isExistingLead) {
                     const curStatus = leadBefore?.status;
 
@@ -444,6 +444,14 @@ async function handleOnlinePbxPayload(payload , io) {
             update.$set['pbx.last_answered_uuid'] = incomingUuid;
             update.$set.answered = true;
             update.$set.answeredAt = now;
+        }
+
+        if (isMehrliQongiroq) {
+            if (isCallEnd && hasTalk) {
+                update.$set.status = 'Talked';
+                delete update.$setOnInsert.status;
+                update.$set.newTime = null;
+            }
         }
 
 
