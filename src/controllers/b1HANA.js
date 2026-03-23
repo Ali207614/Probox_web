@@ -461,6 +461,7 @@ class b1HANA {
 
             const query = await DataRepositories.getSalesManager({ login, password });
             let user = await this.execute(query);
+
             if (user.length === 0) {
                 return next(ApiError.BadRequest('Пользователь не найден'));
             }
@@ -469,15 +470,29 @@ class b1HANA {
                 return next(ApiError.BadRequest('Найдено несколько пользователей с указанными учетными данными. Проверьте введенные данные.'));
             }
 
-            const token = tokenService.generateJwt(user[0]);
+            const userData = user[0];
+
+            // ✨ JWT uchun toza va xavfsiz payload (parol kabi ortiqcha narsalar kirmaydi)
+            const payload = {
+                id: userData.SlpCode,         // Tizim bo'ylab qulay ishlash uchun 'id' va 'name'
+                name: userData.SlpName,
+                U_slpCode: userData.SlpCode,  // Asl nomlari ham tursin
+                SlpCode: userData.SlpCode,  // Asl nomlari ham tursin
+                SlpName: userData.SlpName,  // Asl nomlari ham tursin
+                U_name: userData.SlpName,
+                U_role: userData.U_role,
+                U_branch: userData.U_branch,
+            };
+
+            const token = tokenService.generateJwt(payload);
 
             return res.status(201).json({
                 token,
                 data: {
-                    SlpCode: user[0].SlpCode,
-                    SlpName: user[0].SlpName,
-                    U_role: user[0].U_role,
-                    U_branch: user[0].U_branch,
+                    SlpCode: userData.SlpCode,
+                    SlpName: userData.SlpName,
+                    U_role: userData.U_role,
+                    U_branch: userData.U_branch,
                 }
             });
         }

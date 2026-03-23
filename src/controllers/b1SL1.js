@@ -9,6 +9,7 @@ const { api_params, api, db} = require("../config");
 const { execute } = require("../services/dbService");
 const VerificationCodeModel = require('../models/verification-code-model');
 const bot = require("../bot");
+const {writeLeadEvent} = require("../utils/lead-chat-events.util");
 const PERSONAL_CHAT_ID = Number(process.env.PERSONAL_CHAT_ID || process.env.PERSONAL_CHATID || 0);
 require('dotenv').config();
 
@@ -382,47 +383,48 @@ class b1SL {
 
     createInvoiceAndPayment = async (req, res, next) => {
         try {
-            // 0) seller check
-            if (!req.user?.U_branch) {
+            // 0) seller check va kerakli ID larni olish
+            const branchCode = req.user?.U_branch;
+            if (!branchCode) {
                 return res.status(400).json({
                     status: false,
                     message: "Filial ma'lumotlari topilmadi. Iltimos, savdo nuqtasini tekshiring.",
                 });
             }
 
-            // ==============================================================
-            // ✨ YANGI QO'SHILGAN QISM: SMS KODNI TEKSHIRISH
-            // ==============================================================
-            const providedCode = req.body.verificationCode; // Front-end shu yerga kodni yuboradi
-             const rawPhone = req.body.clientPhone;
-             const normalizedPhone = this.normalizePhone(rawPhone);
-
-
-             if(providedCode){
-                 if (!normalizedPhone) {
-                     return res.status(400).json({ status: false, message: 'Invalid client phone number' });
-                 }
-
-                 if (!providedCode) {
-                     return res.status(400).json({ status: false, message: "Xariddan oldin SMS tasdiqlash kodi kiritilishi shart!" });
-                 }
-
-                 const savedCodeDoc = await VerificationCodeModel.findOne({ phone: normalizedPhone });
-
-                 if (!savedCodeDoc) {
-                     return res.status(400).json({ status: false, message: "Kod muddati tugagan yoki noto'g'ri raqam kiritildi. Iltimos, qaytadan kod jo'nating." });
-                 }
-
-                 if (savedCodeDoc.code !== String(providedCode)) {
-                     return res.status(400).json({ status: false, message: "Kiritilgan SMS kod noto'g'ri!" });
-                 }
-
-                 await VerificationCodeModel.deleteOne({ _id: savedCodeDoc._id });
-             }
-
+            // Frontend o'zi map qilib olishi uchun faqat ID va Kod saqlanadi
+            const sellerId = String(req.user?.SlpCode || req.user?.id || req.user?._id || '');
+            const chatCreatedById = Number(req.user?.SlpCode || req.user?.id || req.user?._id || 0);
 
             // ==============================================================
+            // ✨ SMS KODNI TEKSHIRISH
+            // ==============================================================
+            const providedCode = req.body.verificationCode;
+            const rawPhone = req.body.clientPhone;
+            const normalizedPhone = this.normalizePhone(rawPhone);
 
+            if (providedCode) {
+                if (!normalizedPhone) {
+                    return res.status(400).json({ status: false, message: 'Invalid client phone number' });
+                }
+
+                if (!providedCode) {
+                    return res.status(400).json({ status: false, message: "Xariddan oldin SMS tasdiqlash kodi kiritilishi shart!" });
+                }
+
+                const savedCodeDoc = await VerificationCodeModel.findOne({ phone: normalizedPhone });
+
+                if (!savedCodeDoc) {
+                    return res.status(400).json({ status: false, message: "Kod muddati tugagan yoki noto'g'ri raqam kiritildi. Iltimos, qaytadan kod jo'nating." });
+                }
+
+                if (savedCodeDoc.code !== String(providedCode)) {
+                    return res.status(400).json({ status: false, message: "Kiritilgan SMS kod noto'g'ri!" });
+                }
+
+                await VerificationCodeModel.deleteOne({ _id: savedCodeDoc._id });
+            }
+            // ==============================================================
 
             // 1) leadId
             const leadId = req.body.leadId;
@@ -438,9 +440,9 @@ class b1SL {
 
             // 1.1) usedType validate
             const usedTypeRaw = req.body.usedType;
-            const allowedUsedTypes = new Set(['finalLimit', 'percentage', 'internalLimit','tanish']);
+            const allowedUsedTypes = new Set(['finalLimit', 'percentage', 'internalLimit', 'tanish']);
 
-            if(!allowedUsedTypes.has(usedTypeRaw)){
+            if (!allowedUsedTypes.has(usedTypeRaw)) {
                 return res.status(400).json({
                     status: false,
                     message: 'Invalid usedType',
@@ -451,16 +453,16 @@ class b1SL {
 
             // 2) existing invoices check (max 2)
             const sapInvoiceQuery = `
-      SELECT
-        T0."DocEntry",
-        T0."DocNum",
-        T0."U_leadId",
-        T0."CANCELED"
-      FROM ${db}."OINV" T0
-      WHERE
-        T0."CANCELED" = 'N'
-        AND T0."U_leadId" = '${leadId}'
-    `;
+            SELECT
+                T0."DocEntry",
+                T0."DocNum",
+                T0."U_leadId",
+                T0."CANCELED"
+            FROM ${db}."OINV" T0
+            WHERE
+                T0."CANCELED" = 'N'
+              AND T0."U_leadId" = '${leadId}'
+        `;
 
             const existingInvoices = await execute(sapInvoiceQuery);
             if (existingInvoices?.length > 2) {
@@ -482,13 +484,12 @@ class b1SL {
             }, 0);
 
             const firstPayment = Number(body.U_FirstPayment || 0);
-            const financedAmount = Math.max(0, total - firstPayment); // ✅ usedAmount (hamma holatda)
+            const financedAmount = Math.max(0, total - firstPayment);
 
             const maximumLimit = Number(body.maximumLimit || 0);
-            const annualMaxLimit = Math.min(maximumLimit * 12, 30000000); // ✅ snapshot finalLimit (UZS)
+            const annualMaxLimit = Math.min(maximumLimit * 12, 30000000);
 
             const finalPercentage = total > 0 ? Number(body.finalPercentage || 0) : 0;
-            // only for usedType=finalLimit (lead.finalLimit)
             const remainingAnnual = annualMaxLimit - financedAmount;
             const lastLimitMonthly = remainingAnnual / 12;
             const finalLimitMonthlyRounded = lastLimitMonthly > 0 ? Math.round(lastLimitMonthly) : 0;
@@ -546,10 +547,11 @@ class b1SL {
 
             const paymentBodies = this.buildPaymentBodies({
                 cardCode: body.CardCode,
-                branchCode: req.user.U_branch,
+                branchCode: branchCode,
                 docRate,
                 payments: paymentsInput,
             });
+
             // 8) SAP batch build + call
             const { batchId, payload } = this.buildBatchInvoiceAndPayments(body, paymentBodies);
 
@@ -618,7 +620,7 @@ class b1SL {
 
             // 9) lead fields depending on usedType
             const leadFinalLimit = usedType === 'finalLimit' ? finalLimitMonthlyRounded : 0;
-            const leadFinalPercentage = 0; // ✅ siz aytganday, hammasida 0
+            const leadFinalPercentage = 0;
 
             await LeadModel.updateOne(
                 { _id: leadId },
@@ -637,6 +639,11 @@ class b1SL {
                         paymentCreated: paymentBodies.length > 0,
                         paymentCreatedAt: paymentBodies.length > 0 ? new Date() : null,
 
+                        // ✨ Faqat kod va ID (Frontend map qiladi)
+                        seller: sellerId,
+                        branch: branchCode,
+                        saleType: usedType, // yoki sxemangizdagi sotuv turi maydoni
+
                         ...(createdBP && { cardCode: body.CardCode }),
                     },
                 }
@@ -645,29 +652,59 @@ class b1SL {
             // 10) usage log (ONE record)
             const actor = {
                 type: 'user',
-                id: String(req.user?._id || req.user?.id || null),
+                id: sellerId,
                 cardCode: body.CardCode,
-                name:null,
+                name: sellerId, // Ism o'rniga id yuboryapmiz, frontend topib oladi
                 jshshir: body.jshshir,
                 passportId: body.passportId,
+                branchCode: branchCode
             };
 
             await LeadLimitUsageModel.create({
                 leadId,
-                usedType,                 // ✅ finalLimit | percentage | internalLimit
-                usedAmount: financedAmount, // ✅ doim (total - firstPayment)
-                month:body?.NumberOfInstallments || 1,
-                firstPayment:firstPayment,
+                usedType,
+                usedAmount: financedAmount,
+                month: body?.NumberOfInstallments || 1,
+                firstPayment: firstPayment,
                 snapshot: {
-                    finalLimit: annualMaxLimit, // ✅ doim maxLimit*12 cap
+                    finalLimit: annualMaxLimit,
                     internalLimit: body.internalLimit != null ? Number(body.internalLimit) : null,
                     percentage: Number(finalPercentage.toFixed(2)),
                     currency: 'UZS',
                 },
-
                 actor,
                 reason: 'invoice_created',
             });
+
+            // =========================================================
+            // ✨ Chat (Event) tarixiga yozish
+            // =========================================================
+            try {
+                await writeLeadEvent({
+                    leadId: leadId,
+                    reqUser: {
+                        ...req.user,
+                        id: chatCreatedById // LeadChatSchema number kutgani uchun aniq turlangan
+                    },
+                    isSystem: false,
+                    type: 'event',
+                    action: 'lead_updated',
+                    message: "Muvaffaqiyatli xarid amalga oshirildi",
+                    statusFrom: 'WillVisitStore',
+                    statusTo: 'Purchased',
+                    changes: [
+                        { field: 'status', from: 'WillVisitStore', to: 'Purchased' },
+                        { field: 'invoiceCreated', from: false, to: true },
+                        { field: 'purchase', from: false, to: true },
+                        { field: 'branch', from: null, to: branchCode },
+                        { field: 'seller', from: null, to: sellerId },
+                        { field: 'saleType', from: null, to: usedType }
+                    ]
+                });
+            } catch (eventErr) {
+                console.error('Lead chat event yozishda xatolik:', eventErr);
+            }
+            // =========================================================
 
             return res.status(201).json({
                 status: true,
@@ -692,7 +729,7 @@ class b1SL {
                 if (token.status) return this.createInvoiceAndPayment(req, res, next);
                 return res.status(401).json({ status: false, message: token.message });
             }
-            console.log(err)
+            console.log(err);
             const sapErr = get(err, 'response.data.error.message.value', 'SAP error');
             return res.status(400).json({
                 status: false,
@@ -700,6 +737,327 @@ class b1SL {
             });
         }
     };
+
+    // createInvoiceAndPayment = async (req, res, next) => {
+    //     try {
+    //         // 0) seller check
+    //         if (!req.user?.U_branch) {
+    //             return res.status(400).json({
+    //                 status: false,
+    //                 message: "Filial ma'lumotlari topilmadi. Iltimos, savdo nuqtasini tekshiring.",
+    //             });
+    //         }
+    //
+    //         // ==============================================================
+    //         // ✨ YANGI QO'SHILGAN QISM: SMS KODNI TEKSHIRISH
+    //         // ==============================================================
+    //         const providedCode = req.body.verificationCode; // Front-end shu yerga kodni yuboradi
+    //          const rawPhone = req.body.clientPhone;
+    //          const normalizedPhone = this.normalizePhone(rawPhone);
+    //
+    //
+    //          if(providedCode){
+    //              if (!normalizedPhone) {
+    //                  return res.status(400).json({ status: false, message: 'Invalid client phone number' });
+    //              }
+    //
+    //              if (!providedCode) {
+    //                  return res.status(400).json({ status: false, message: "Xariddan oldin SMS tasdiqlash kodi kiritilishi shart!" });
+    //              }
+    //
+    //              const savedCodeDoc = await VerificationCodeModel.findOne({ phone: normalizedPhone });
+    //
+    //              if (!savedCodeDoc) {
+    //                  return res.status(400).json({ status: false, message: "Kod muddati tugagan yoki noto'g'ri raqam kiritildi. Iltimos, qaytadan kod jo'nating." });
+    //              }
+    //
+    //              if (savedCodeDoc.code !== String(providedCode)) {
+    //                  return res.status(400).json({ status: false, message: "Kiritilgan SMS kod noto'g'ri!" });
+    //              }
+    //
+    //              await VerificationCodeModel.deleteOne({ _id: savedCodeDoc._id });
+    //          }
+    //
+    //
+    //         // ==============================================================
+    //
+    //
+    //         // 1) leadId
+    //         const leadId = req.body.leadId;
+    //         delete req.body.leadId;
+    //         delete req.body.selectedDevices;
+    //
+    //         if (!leadId) {
+    //             return res.status(400).json({
+    //                 status: false,
+    //                 message: 'leadId is required',
+    //             });
+    //         }
+    //
+    //         // 1.1) usedType validate
+    //         const usedTypeRaw = req.body.usedType;
+    //         const allowedUsedTypes = new Set(['finalLimit', 'percentage', 'internalLimit','tanish']);
+    //
+    //         if(!allowedUsedTypes.has(usedTypeRaw)){
+    //             return res.status(400).json({
+    //                 status: false,
+    //                 message: 'Invalid usedType',
+    //             });
+    //         }
+    //         const usedType = allowedUsedTypes.has(usedTypeRaw) ? usedTypeRaw : 'finalLimit';
+    //         delete req.body.usedType;
+    //
+    //         // 2) existing invoices check (max 2)
+    //         const sapInvoiceQuery = `
+    //   SELECT
+    //     T0."DocEntry",
+    //     T0."DocNum",
+    //     T0."U_leadId",
+    //     T0."CANCELED"
+    //   FROM ${db}."OINV" T0
+    //   WHERE
+    //     T0."CANCELED" = 'N'
+    //     AND T0."U_leadId" = '${leadId}'
+    // `;
+    //
+    //         const existingInvoices = await execute(sapInvoiceQuery);
+    //         if (existingInvoices?.length > 2) {
+    //             return res.status(400).json({
+    //                 status: false,
+    //                 message: 'This lead already has 2 invoices in SAP',
+    //                 DocEntry: existingInvoices[0].DocEntry,
+    //                 DocNum: existingInvoices[0].DocNum,
+    //             });
+    //         }
+    //
+    //         let body = { ...req.body };
+    //         // 3) totals + calculations
+    //         const lines = Array.isArray(body.DocumentLines) ? body.DocumentLines : [];
+    //         const total = lines.reduce((sum, l) => {
+    //             const price = Number(l?.Price || 0);
+    //             const qty = Number(l?.Quantity || 1);
+    //             return sum + price * qty;
+    //         }, 0);
+    //
+    //         const firstPayment = Number(body.U_FirstPayment || 0);
+    //         const financedAmount = Math.max(0, total - firstPayment); // ✅ usedAmount (hamma holatda)
+    //
+    //         const maximumLimit = Number(body.maximumLimit || 0);
+    //         const annualMaxLimit = Math.min(maximumLimit * 12, 30000000); // ✅ snapshot finalLimit (UZS)
+    //
+    //         const finalPercentage = total > 0 ? Number(body.finalPercentage || 0) : 0;
+    //         // only for usedType=finalLimit (lead.finalLimit)
+    //         const remainingAnnual = annualMaxLimit - financedAmount;
+    //         const lastLimitMonthly = remainingAnnual / 12;
+    //         const finalLimitMonthlyRounded = lastLimitMonthly > 0 ? Math.round(lastLimitMonthly) : 0;
+    //
+    //         // 5) BP find/create by docs
+    //         const safeJshshir = body.jshshir ? String(body.jshshir).replace(/\D/g, '') : '1';
+    //         const safePassport = body.passportId ? String(body.passportId).replace(/['"]/g, '').trim() : '1';
+    //
+    //         const bpRows = await execute(this.findBpByDocUnsafeSql(safeJshshir, safePassport));
+    //
+    //         let cardCode;
+    //         let createdBP = false;
+    //
+    //         if (bpRows?.length) {
+    //             cardCode = bpRows[0].CardCode;
+    //         } else {
+    //             const bp = await this.createBusinessPartner({
+    //                 CardName: body.clientName || 'No Name',
+    //                 Phone1: normalizedPhone,
+    //                 Currency: 'UZS',
+    //                 U_jshshir: body.jshshir,
+    //                 Cellular: body.passportId,
+    //             });
+    //
+    //             if (!bp?.CardCode) {
+    //                 return res.status(400).json({
+    //                     status: false,
+    //                     message: bp?.message || 'Failed to create Business Partner',
+    //                 });
+    //             }
+    //
+    //             cardCode = bp.CardCode;
+    //             createdBP = true;
+    //         }
+    //
+    //         body.CardCode = cardCode;
+    //
+    //         // 6) cleanup client fields
+    //         delete body.clientPhone;
+    //         delete body.clientName;
+    //         delete body.jshshir;
+    //         delete body.passportId;
+    //         delete body.clientAddress;
+    //         delete body.monthlyLimit;
+    //         delete body.sellerName;
+    //
+    //         // 7) payments prepare
+    //         const paymentsInput = body.payments;
+    //         const docRate = Number(body.DocRate || 11990);
+    //
+    //         delete body.payments;
+    //         delete body.DocRate;
+    //         delete body.CashSum;
+    //         delete body.paymentType;
+    //
+    //         const paymentBodies = this.buildPaymentBodies({
+    //             cardCode: body.CardCode,
+    //             branchCode: req.user.U_branch,
+    //             docRate,
+    //             payments: paymentsInput,
+    //         });
+    //         // 8) SAP batch build + call
+    //         const { batchId, payload } = this.buildBatchInvoiceAndPayments(body, paymentBodies);
+    //
+    //         const axiosInstance = Axios.create({
+    //             baseURL: `${this.api}`,
+    //             timeout: 30000,
+    //             headers: {
+    //                 'Content-Type': `multipart/mixed;boundary=${batchId}`,
+    //                 Cookie: get(getSession(), 'Cookie[0]', '') + get(getSession(), 'Cookie[1]', ''),
+    //                 SessionId: get(getSession(), 'SessionId', ''),
+    //             },
+    //             httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+    //         });
+    //
+    //         const response = await axiosInstance.post('/$batch', payload);
+    //
+    //         const parsed = this.parseSapBatchResponseMulti(response.data);
+    //
+    //         if (!parsed.ok) {
+    //             return res.status(400).json({
+    //                 status: false,
+    //                 message: 'SAP batch error',
+    //                 errors: parsed.errors,
+    //                 raw: response.data,
+    //             });
+    //         }
+    //
+    //         if (!parsed.invoice?.DocEntry) {
+    //             const rawDataString = typeof response.data === 'object'
+    //                 ? JSON.stringify(response.data, null, 2)
+    //                 : String(response.data);
+    //
+    //             const safeRawData = rawDataString.length > 3500
+    //                 ? rawDataString.substring(0, 3500) + '\n... [QOLGAN QISMI QIRQILDI]'
+    //                 : rawDataString;
+    //
+    //             const errorMessage =
+    //                 `<b>🚨 SAP da Invoice yaratishda xatolik!</b>\n\n` +
+    //                 `<b>Vaqt:</b> ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' })}\n` +
+    //                 `<b>Holat:</b> Invoice yaratilmadi\n\n` +
+    //                 `<b>SAP dan qaytgan javob (Raw):</b>\n` +
+    //                 `<pre><code class="language-json">${safeRawData}</code></pre>`;
+    //
+    //             await bot.sendMessage(PERSONAL_CHAT_ID, errorMessage, { parse_mode: 'HTML' });
+    //
+    //             return res.status(400).json({
+    //                 status: false,
+    //                 message: 'Invoice was not created in SAP',
+    //                 raw: response.data,
+    //             });
+    //         }
+    //
+    //         if (paymentBodies.length > 0 && parsed.payments.length !== paymentBodies.length) {
+    //             return res.status(400).json({
+    //                 status: false,
+    //                 message: 'Some Incoming Payments were not created in SAP',
+    //                 expected: paymentBodies.length,
+    //                 created: parsed.payments.length,
+    //                 errors: parsed.errors,
+    //                 raw: response.data,
+    //             });
+    //         }
+    //
+    //         const invoiceDocEntry = parsed?.invoice?.DocEntry || 0;
+    //         const invoiceDocNum = parsed?.invoice?.DocNum || 0;
+    //
+    //         // 9) lead fields depending on usedType
+    //         const leadFinalLimit = usedType === 'finalLimit' ? finalLimitMonthlyRounded : 0;
+    //         const leadFinalPercentage = 0; // ✅ siz aytganday, hammasida 0
+    //
+    //         await LeadModel.updateOne(
+    //             { _id: leadId },
+    //             {
+    //                 $set: {
+    //                     invoiceCreated: true,
+    //                     invoiceDocEntry,
+    //                     invoiceDocNum,
+    //                     status: 'Purchased',
+    //                     purchase: true,
+    //                     cardCode: body.CardCode,
+    //                     finalLimit: leadFinalLimit,
+    //                     finalPercentage: leadFinalPercentage,
+    //                     purchaseDate: new Date(),
+    //                     invoiceCreatedAt: new Date(),
+    //                     paymentCreated: paymentBodies.length > 0,
+    //                     paymentCreatedAt: paymentBodies.length > 0 ? new Date() : null,
+    //
+    //                     ...(createdBP && { cardCode: body.CardCode }),
+    //                 },
+    //             }
+    //         );
+    //
+    //         // 10) usage log (ONE record)
+    //         const actor = {
+    //             type: 'user',
+    //             id: String(req.user?._id || req.user?.id || null),
+    //             cardCode: body.CardCode,
+    //             name:null,
+    //             jshshir: body.jshshir,
+    //             passportId: body.passportId,
+    //         };
+    //
+    //         await LeadLimitUsageModel.create({
+    //             leadId,
+    //             usedType,                 // ✅ finalLimit | percentage | internalLimit
+    //             usedAmount: financedAmount, // ✅ doim (total - firstPayment)
+    //             month:body?.NumberOfInstallments || 1,
+    //             firstPayment:firstPayment,
+    //             snapshot: {
+    //                 finalLimit: annualMaxLimit, // ✅ doim maxLimit*12 cap
+    //                 internalLimit: body.internalLimit != null ? Number(body.internalLimit) : null,
+    //                 percentage: Number(finalPercentage.toFixed(2)),
+    //                 currency: 'UZS',
+    //             },
+    //
+    //             actor,
+    //             reason: 'invoice_created',
+    //         });
+    //
+    //         return res.status(201).json({
+    //             status: true,
+    //             invoiceDocEntry,
+    //             invoiceDocNum,
+    //             paymentsCreated: parsed.payments.length,
+    //             usedType,
+    //             usedAmount: financedAmount,
+    //             snapshot: {
+    //                 finalLimit: annualMaxLimit,
+    //                 internalLimit: body.internalLimit != null ? Number(body.internalLimit) : null,
+    //                 percentage: Number((finalPercentage || 0).toFixed(2)),
+    //                 currency: 'UZS',
+    //             },
+    //             raw: response.data,
+    //         });
+    //     } catch (err) {
+    //         console.log('Batch SAP Error:', err?.response?.data || err);
+    //
+    //         if (get(err, 'response.status') == 401) {
+    //             const token = await this.auth();
+    //             if (token.status) return this.createInvoiceAndPayment(req, res, next);
+    //             return res.status(401).json({ status: false, message: token.message });
+    //         }
+    //         console.log(err)
+    //         const sapErr = get(err, 'response.data.error.message.value', 'SAP error');
+    //         return res.status(400).json({
+    //             status: false,
+    //             message: sapErr,
+    //         });
+    //     }
+    // };
 
     createPurchaseDraft = async (req, res, next) => {
         try {
