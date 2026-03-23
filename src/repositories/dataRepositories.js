@@ -547,7 +547,9 @@ OFFSET ${Number(offset) || 0};
             searchCondition = `
             AND (
                 LOWER(TOSRI."IntrSerial") LIKE LOWER('%${search}%') OR
-                LOWER(T2."CardName") LIKE LOWER('%${search}%')
+                LOWER(T2."CardName") LIKE LOWER('%${search}%') OR
+                LOWER(T2."U_jshshir") LIKE LOWER('%${search}%') OR
+                LOWER(T2."Cellular") LIKE LOWER('%${search}%')
             )
             `;
         }
@@ -675,12 +677,15 @@ OFFSET ${Number(offset) || 0};
 
         const INVOICE_TYPE = 13;
 
+
         let searchCondition = '';
         if (search) {
             searchCondition = `
             AND (
                 LOWER(TOSRI."IntrSerial") LIKE LOWER('%${search}%') OR
-                LOWER(T2."CardName") LIKE LOWER('%${search}%')
+                LOWER(T2."CardName") LIKE LOWER('%${search}%') OR
+                LOWER(T2."U_jshshir") LIKE LOWER('%${search}%') OR
+                LOWER(T2."Cellular") LIKE LOWER('%${search}%')
             )
             `;
         }
