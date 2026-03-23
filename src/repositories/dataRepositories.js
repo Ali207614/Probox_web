@@ -544,12 +544,15 @@ OFFSET ${Number(offset) || 0};
 
         let searchCondition = '';
         if (search) {
+            const cleanNumericSearch = search.replace(/[\s+]/g, '');
+
             searchCondition = `
             AND (
-                LOWER(TOSRI."IntrSerial") LIKE LOWER('%${search}%') OR
-                LOWER(T2."CardName") LIKE LOWER('%${search}%') OR
-                LOWER(T2."U_jshshir") LIKE LOWER('%${search}%') OR
-                LOWER(T2."Cellular") LIKE LOWER('%${search}%')
+                LOWER(CAST(TOSRI."IntrSerial" AS VARCHAR(100))) LIKE LOWER('%${search}%') OR
+                LOWER(CAST(T2."CardName" AS VARCHAR(250))) LIKE LOWER('%${search}%') OR
+                CAST(T2."U_jshshir" AS VARCHAR(50)) LIKE '%${cleanNumericSearch}%' OR
+                CAST(T2."Cellular" AS VARCHAR(50)) LIKE '%${cleanNumericSearch}%' OR
+                CAST(T2."Cellular" AS VARCHAR(50)) LIKE '%${search}%'
             )
             `;
         }
@@ -680,12 +683,15 @@ OFFSET ${Number(offset) || 0};
 
         let searchCondition = '';
         if (search) {
+            const cleanNumericSearch = search.replace(/[\s+]/g, '');
+
             searchCondition = `
             AND (
-                LOWER(TOSRI."IntrSerial") LIKE LOWER('%${search}%') OR
-                LOWER(T2."CardName") LIKE LOWER('%${search}%') OR
-                LOWER(T2."U_jshshir") LIKE LOWER('%${search}%') OR
-                LOWER(T2."Cellular") LIKE LOWER('%${search}%')
+                LOWER(CAST(TOSRI."IntrSerial" AS VARCHAR(100))) LIKE LOWER('%${search}%') OR
+                LOWER(CAST(T2."CardName" AS VARCHAR(250))) LIKE LOWER('%${search}%') OR
+                CAST(T2."U_jshshir" AS VARCHAR(50)) LIKE '%${cleanNumericSearch}%' OR
+                CAST(T2."Cellular" AS VARCHAR(50)) LIKE '%${cleanNumericSearch}%' OR
+                CAST(T2."Cellular" AS VARCHAR(50)) LIKE '%${search}%'
             )
             `;
         }
@@ -763,6 +769,7 @@ GROUP BY
 LIMIT ${limit} OFFSET ${offset};
         `;
     }
+
     getSalesPersons({ exclude = [], include = [], branch, SlpCode } = {}) {
         let whereClause = `WHERE T0."U_role" IS NOT NULL`;
 
