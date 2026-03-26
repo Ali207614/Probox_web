@@ -130,7 +130,9 @@ async function handleOnlinePbxPayload(payload , io) {
                     'callCount',
                     'source',
                     'isMissedSmsSent',
-                    'isNoAnswerSmsSent'
+                    'isNoAnswerSmsSent',
+                    'missedSmsCount',
+                    'noAnswerSmsCount'
                 ].join(' ')
             )
             .lean();
@@ -283,31 +285,35 @@ async function handleOnlinePbxPayload(payload , io) {
                 delete update.$setOnInsert.status;
             }
 
-            if (isMissedBase && !leadBefore.isMissedSmsSent) {
+            if (isMissedBase) {
+                update.$set.status = 'Missed';
+                delete update.$setOnInsert.status;
+            }
 
-                const clientName = leadBefore.clientName || leadBefore.cardName || null;
+            // ✅ Eski boolean o'rniga Count tekshiruvi (< 5)
+            const missedCount = Number(leadBefore?.missedSmsCount || 0);
+            if (isMissedBase && missedCount < 5) {
 
-                // Funksiyani chaqiramiz (kutib turmaymiz, orqa fonda ishlaydi)
+                const clientName = leadBefore?.clientName || leadBefore?.cardName || null;
+
                 sendMissedCallSms(canonicalPhone, clientName, String(leadBefore._id))
                     .then(async (success) => {
                         if (success) {
                             console.log(`[PBX] Missed call SMS muvaffaqiyatli jo'natildi -> ${canonicalPhone}`);
-
                             try {
-                                // 1. Lead'ga SMS ketdi deb belgilab qo'yamiz
+                                // Boolean o'rniga +1 ga oshiramiz
                                 await LeadModel.updateOne(
                                     { _id: leadBefore._id },
-                                    { $set: { isMissedSmsSent: true } }
+                                    { $inc: { missedSmsCount: 1 } }
                                 );
 
-                                // 2. Tarixga (LeadChat) yozib qo'yamiz
                                 await LeadChatModel.create({
                                     leadId: leadBefore._id,
                                     type: 'event',
                                     isSystem: true,
-                                    action: 'sms_sent', // Schema'dagi mavjud enum qiymatiga qarab o'zgartirishingiz mumkin
+                                    action: 'sms_sent',
                                     createdBy: 0,
-                                    message: `Tizim: Mijozga "Javobsiz qo'ng'iroq (Missed call)" SMS xabari jo'natildi.`,
+                                    message: `Tizim: Mijozga "Javobsiz qo'ng'iroq (Missed call)" SMS xabari jo'natildi. (Sanoq: ${missedCount + 1})`,
                                     createdAt: new Date(),
                                     updatedAt: new Date()
                                 });
@@ -318,32 +324,30 @@ async function handleOnlinePbxPayload(payload , io) {
                     });
             }
 
-            // Eski Missed SMS kodini o'chirib, o'rniga buni qo'shamiz:
-            if (shouldMoveToNoAnswer && !leadBefore.isNoAnswerSmsSent) {
+            // ✅ NoAnswer SMS logikasi
+            const noAnswerSmsCount = Number(leadBefore?.noAnswerSmsCount || 0);
+            if (shouldMoveToNoAnswer && noAnswerSmsCount < 5) {
 
-                const clientName = leadBefore.clientName || leadBefore.cardName || null;
+                const clientName = leadBefore?.clientName || leadBefore?.cardName || null;
 
-                // Funksiyani chaqiramiz (kutib turmaymiz, orqa fonda ishlaydi)
                 sendNoAnswerSms(canonicalPhone, clientName, String(leadBefore._id))
                     .then(async (success) => {
                         if (success) {
                             console.log(`[PBX] NoAnswer SMS muvaffaqiyatli jo'natildi -> ${canonicalPhone}`);
-
                             try {
-                                // 1. Lead'ga SMS ketdi deb belgilab qo'yamiz
+                                // Boolean o'rniga +1 ga oshiramiz
                                 await LeadModel.updateOne(
                                     { _id: leadBefore._id },
-                                    { $set: { isNoAnswerSmsSent: true } }
+                                    { $inc: { noAnswerSmsCount: 1 } }
                                 );
 
-                                // 2. Tarixga (LeadChat) yozib qo'yamiz
                                 await LeadChatModel.create({
                                     leadId: leadBefore._id,
                                     type: 'event',
                                     isSystem: true,
                                     action: 'sms_sent',
                                     createdBy: 0,
-                                    message: `Tizim: Mijozga "Javobsiz qolgan qo'ng'iroq (No Answer)" SMS xabari jo'natildi.`,
+                                    message: `Tizim: Mijozga "Javobsiz qolgan qo'ng'iroq (No Answer)" SMS xabari jo'natildi. (Sanoq: ${noAnswerSmsCount + 1})`,
                                     createdAt: new Date(),
                                     updatedAt: new Date()
                                 });

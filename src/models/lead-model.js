@@ -157,6 +157,17 @@ const LeadSchema = new Schema(
         isRatingSmsSent: { type: Boolean, default: false, index: true },
         isMissedSmsSent: { type: Boolean, default: false, index: true },
         isNoAnswerSmsSent: { type: Boolean, default: false, index: true },
+
+        missedSmsCount: {
+            type: Number,
+            default: 0,
+            index: true
+        },
+        noAnswerSmsCount: {
+            type: Number,
+            default: 0,
+            index: true
+        },
         // Lead status mapping (EN -> UZ)
 // Active          -> Yange lead
 // Blocked         -> Bloklangan
