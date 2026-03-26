@@ -192,6 +192,7 @@ class b1HANA {
     onlinePbxWebhook = async (req, res, next) => {
         try {
             const payload = this.normalizeOnlinePbxPayload(req.body);
+            console.log('onlinePbxWebhook', payload);
             const io = req.app.get('io'); // ✅ haqiqiy io
             const result = await handleOnlinePbxPayload(payload, io);
             return res.status(200).json(result);
