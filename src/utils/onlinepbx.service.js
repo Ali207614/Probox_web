@@ -28,6 +28,7 @@ function digitsOnly(v = '') {
     return String(v ?? '').replace(/\D/g, '');
 }
 
+
 function canonicalizePhone(raw) {
     const d = digitsOnly(raw);
     if (!d) return null;
@@ -70,7 +71,6 @@ function buildLoosePhoneRegexFromLocal9(local9) {
     return new RegExp(pat);
 }
 
-
 async function getOperatorsMapCached() {
     const now = Date.now();
     if (OPS_CACHE.map && now - OPS_CACHE.at < OPS_TTL_MS) return OPS_CACHE.map;
@@ -93,11 +93,8 @@ function buildDedupFilter({ phoneCandidates, legacyRegex, local9 }) {
     };
 }
 
-
 async function handleOnlinePbxPayload(payload , io) {
     try {
-        // 1) gateway check
-
         if (payload?.gateway && !COMPANY_GATEWAYS.includes(String(payload.gateway))) {
             return { ok: true, skipped: 'wrong_gateway' };
         }

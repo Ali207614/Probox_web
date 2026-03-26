@@ -41,7 +41,7 @@ function buildLeadPhoneVariants(raw) {
 /**
  * Lead bo'yicha gaplashilgan (user_talk_time_from:1) call'lar ichidan eng oxirgisini topadi.
  */
-async function getLastTalkedCallUuidForLead({ pbxClient, trunkName, lead }) {
+async function getLastTalkedCallUuidForLead({ pbxClient, trunkNames, lead }) {
     if (!pbxClient) throw new Error('pbxClient is required');
     if (!lead?.clientPhone) return null;
 
@@ -69,7 +69,7 @@ async function getLastTalkedCallUuidForLead({ pbxClient, trunkName, lead }) {
             user_talk_time_from: 1,
             sort_by: 'start_stamp',
             sort_order: 'asc',
-            trunk_names: trunkName,
+            trunk_names: trunkNames,
         });
 
         const calls = normalizePbxCallsArray(res);

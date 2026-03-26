@@ -91,7 +91,17 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
             const body = new URLSearchParams();
             Object.entries(paramsObj || {}).forEach(([k, v]) => {
                 if (v === undefined || v === null || v === '') return;
-                body.append(k, String(v));
+
+                // Massiv bo'lsa, har birini alohida qo'shish
+                if (Array.isArray(v)) {
+                    v.forEach((item) => {
+                        if (item !== undefined && item !== null && item !== '') {
+                            body.append(k, String(item));
+                        }
+                    });
+                } else {
+                    body.append(k, String(v));
+                }
             });
 
             const { data } = await api.post(path, body, {
@@ -99,8 +109,10 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
             });
 
             return data;
-        }catch (e){
-            return e
+        } catch (e) {
+            // Xatoni aniq ko'rish uchun log qiling va tepaga uzating
+            console.error(`[OnlinePBX] API Error on ${path}:`, e?.response?.data || e.message);
+            throw e; // Xatoni chaqiruvchi funksiya ushlab olishi kerak
         }
     };
 

@@ -2,7 +2,10 @@ const LeadModel = require('../models/lead-model');
 const DataRepositories = require('../repositories/dataRepositories');
 const dbService = require('./dbService');
 
-const TRUNK_NAME = 'f6813980348e52891f64fa3ce451de69';
+const TRUNK_NAMES = [
+    'f6813980348e52891f64fa3ce451de69',
+    '97b29d03fde1b1d31e5f02bb23d0e537'
+];
 
 function digitsOnly(v = '') {
     return String(v ?? '').replace(/\D/g, '');
@@ -91,6 +94,11 @@ function normalizePbxCallsArray(res) {
  * PBX'dan leadga tegishli calllarni olib keladi va frontend chat formatiga map qiladi
  * DBga write qilmaydi
  */
+/**
+ * ✅ Main function:
+ * PBX'dan leadga tegishli calllarni olib keladi va frontend chat formatiga map qiladi
+ * DBga write qilmaydi
+ */
 async function fetchLeadPbxChats({ pbxClient, leadId }) {
     if (!pbxClient) throw new Error('pbxClient is required');
     if (!leadId) return [];
@@ -117,6 +125,15 @@ async function fetchLeadPbxChats({ pbxClient, leadId }) {
 
     const operatorData = await dbService.execute(query);
 
+    // Optimizatsiya: Operatorlarni tezkor qidiruv (O(1)) uchun lug'atga (map) o'tkazish
+    const operatorMap = {};
+    for (const op of operatorData) {
+        const opNum = Number(op?.U_onlinepbx);
+        if (Number.isFinite(opNum)) {
+            operatorMap[opNum] = op;
+        }
+    }
+
     const allCalls = [];
     let cursorFrom = pbxRange.start_stamp_from;
     const finalTo = pbxRange.start_stamp_to;
@@ -124,21 +141,23 @@ async function fetchLeadPbxChats({ pbxClient, leadId }) {
     while (cursorFrom <= finalTo) {
         const chunkTo = Math.min(cursorFrom + MAX_RANGE_SEC - 1, finalTo);
 
-        const res = await pbxClient.searchCalls({
-            // ✅ sub_phone_numbers sizda ishonchli ishlayapti
-            sub_phone_numbers: leadPhones.local || digitsOnly(lead.clientPhone),
+        try {
+            const res = await pbxClient.searchCalls({
+                sub_phone_numbers: leadPhones.local || digitsOnly(lead.clientPhone),
+                start_stamp_from: cursorFrom,
+                start_stamp_to: chunkTo,
+                user_talk_time_from: 1, // faqat gaplashilgan
+                sort_by: 'start_stamp',
+                sort_order: 'asc',
+                trunk_names: TRUNK_NAMES, // Massiv uzatilyapti
+            });
 
-            start_stamp_from: cursorFrom,
-            start_stamp_to: chunkTo,
-
-            user_talk_time_from: 1, // faqat gaplashilgan
-            sort_by: 'start_stamp',
-            sort_order: 'asc',
-            trunk_names: TRUNK_NAME,
-        });
-
-        const chunkCalls = normalizePbxCallsArray(res);
-        if (chunkCalls.length) allCalls.push(...chunkCalls);
+            const chunkCalls = normalizePbxCallsArray(res);
+            if (chunkCalls.length) allCalls.push(...chunkCalls);
+        } catch (error) {
+            // Bir interval xato qilsa ham tsikl to'xtab qolmasligi uchun
+            console.error(`[PBX Search] Chunk xatosi (${cursorFrom}-${chunkTo}):`, error.message);
+        }
 
         cursorFrom = chunkTo + 1;
     }
@@ -165,12 +184,10 @@ async function fetchLeadPbxChats({ pbxClient, leadId }) {
         const createdAt = new Date(startStamp * 1000);
 
         const duration = Number(c?.user_talk_time ?? c?.duration ?? 0);
-        const createdByNum = Number(operatorExt);
 
-        const operator =
-            Number.isFinite(createdByNum)
-                ? operatorData.find((el) => Number(el?.U_onlinepbx) === createdByNum)
-                : null;
+        // Tezkor qidiruvdan foydalanish
+        const createdByNum = Number(operatorExt);
+        const operator = operatorMap[createdByNum] || null;
 
         return {
             _id: `pbx_${c.uuid}`, // fake id (mongo _id emas)
@@ -193,8 +210,6 @@ async function fetchLeadPbxChats({ pbxClient, leadId }) {
             isDeleted: false,
             createdAt,
             updatedAt: createdAt,
-
-            // debug uchun (xohlasangiz olib tashlang)
             _source: 'pbx_live',
         };
     });

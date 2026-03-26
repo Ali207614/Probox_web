@@ -21,7 +21,7 @@ const MIN_AGE_INCLUSIVE = Number(process.env.CLOSED_MIN_AGE_INCLUSIVE || 21);
 const CONTEXT_BUFFER_MIN = Number(process.env.GEMINI_CONTEXT_BUFFER_MIN || 180); // 3 soat
 const CONTEXT_LIMIT = Number(process.env.GEMINI_CONTEXT_LIMIT || 80);
 
-async function getGeminiClosedAnalysisLine({ pbxClient, trunkName, leadId, reason, now = new Date() }) {
+async function getGeminiClosedAnalysisLine({ pbxClient, trunkNames, leadId, reason, now = new Date() }) {
     const lead = await LeadModel.findById(leadId)
         .select('clientPhone time newTime clientName n closedGeminiAt closedGeminiUuid closedGeminiText')
         .lean();
@@ -33,8 +33,8 @@ async function getGeminiClosedAnalysisLine({ pbxClient, trunkName, leadId, reaso
     const cachedOk = lead.closedGeminiText && cachedAt && (Date.now() - cachedAt) < GEMINI_CACHE_TTL_MS;
     if (cachedOk) return `🤖 <b>GEMINI:</b> ${escapeHtml(lead.closedGeminiText)}`;
 
-    // 2) last talked uuid
-    const lastUuid = await getLastTalkedCallUuidForLead({ pbxClient, trunkName, lead });
+    // 2) last talked uuid (trunkNames uzatildi)
+    const lastUuid = await getLastTalkedCallUuidForLead({ pbxClient, trunkNames, lead });
     if (!lastUuid) {
         const text = 'audio topilmadi (talk_time > 0 yo‘q)';
         await LeadModel.updateOne(
@@ -49,23 +49,33 @@ async function getGeminiClosedAnalysisLine({ pbxClient, trunkName, leadId, reaso
         return `🤖 <b>GEMINI:</b> ${escapeHtml(lead.closedGeminiText)}`;
     }
 
-    // 4) ✅ context window (audioTime ↔ closedAt) + history
+    // 4) ✅ context window (trunkNames uzatildi)
     const ctx = await buildClosedContextWindow({
         pbxClient,
-        trunkName,
+        trunkNames,
         leadId,
         uuid: lastUuid,
-        bufferMin: Number(process.env.GEMINI_CONTEXT_BUFFER_MIN || 180),
-        limit: Number(process.env.GEMINI_CONTEXT_LIMIT || 80),
+        bufferMin: CONTEXT_BUFFER_MIN,
+        limit: CONTEXT_LIMIT,
         now,
     });
 
-    // 5) audio yuklash
-    const audio = await downloadRecordingAsBase64({
-        pbxClient,
-        uuid: lastUuid,
-        maxMb: GEMINI_MAX_AUDIO_MB,
-    });
+    // 5) audio yuklash (Edge-case tekshiruvi bilan)
+    let audio;
+    try {
+        audio = await downloadRecordingAsBase64({
+            pbxClient,
+            uuid: lastUuid,
+            maxMb: GEMINI_MAX_AUDIO_MB,
+        });
+    } catch (err) {
+        console.error(`[Gemini Audio Error] Lead: ${leadId}`, err.message);
+        return `🤖 GEMINI: Audio faylni yuklab olishda xatolik yuz berdi.`;
+    }
+
+    if (!audio || !audio.base64) {
+        return `🤖 GEMINI: Audio fayl yaroqsiz yoki topilmadi.`;
+    }
 
     // 6) prompt
     const prompt = buildClosedDiagnosisPrompt({
@@ -78,24 +88,31 @@ async function getGeminiClosedAnalysisLine({ pbxClient, trunkName, leadId, reaso
         meta: { audioStart: ctx.audioStart, closedAt: ctx.closedAt, from: ctx.from, to: ctx.to },
     });
 
-    const geminiText = await geminiGenerateContent({
-        apiKey: GEMINI_API_KEY,
-        model: GEMINI_MODEL,
-        contents: [
-            {
-                role: 'user',
-                parts: [
-                    { text: prompt },
-                    { inlineData: { mimeType: audio.mimeType, data: audio.base64 } },
-                ],
-            },
-        ],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 280 },
-    });
+    // 7) API chaqiruv (Edge-case xatoliklarni ushlab qolish bilan)
+    let geminiText;
+    try {
+        geminiText = await geminiGenerateContent({
+            apiKey: GEMINI_API_KEY,
+            model: GEMINI_MODEL,
+            contents: [
+                {
+                    role: 'user',
+                    parts: [
+                        { text: prompt },
+                        { inlineData: { mimeType: audio.mimeType, data: audio.base64 } },
+                    ],
+                },
+            ],
+            generationConfig: { temperature: 0.2, maxOutputTokens: 280 },
+        });
+    } catch (err) {
+        console.error(`[Gemini API Error] Lead: ${leadId}`, err.message);
+        return `🤖 GEMINI: AI analiz jarayonida xatolik yuz berdi.`;
+    }
 
     const finalText = (geminiText || '').trim() || 'Analiz qaytmadi.';
 
-    // 7) cache yozish
+    // 8) cache yozish
     await LeadModel.updateOne(
         { _id: leadId },
         { $set: { closedGeminiAt: new Date(), closedGeminiUuid: lastUuid, closedGeminiText: finalText } }

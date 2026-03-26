@@ -336,7 +336,7 @@ async function processNoPurchaseEscalation(now) {
 }
 
 // ---- Closed -> nazorat + Gemini
-async function processClosedEscalation(now, { pbxClient, trunkName }) {
+async function processClosedEscalation(now, { pbxClient, trunkNames }) {
     if (!QA_GROUP_CHAT_ID) return 0;
 
     const { opMap } = await getActiveOperatorsCached(); // operatorName uchun
@@ -421,7 +421,7 @@ async function processClosedEscalation(now, { pbxClient, trunkName }) {
             try {
                 geminiLine = await getGeminiClosedAnalysisLine({
                     pbxClient,
-                    trunkName,
+                    trunkNames,
                     leadId: lead._id,
                     reason,
                     now, // ✅ muhim: dinamik sana va window fallback uchun
@@ -464,7 +464,7 @@ async function processClosedEscalation(now, { pbxClient, trunkName }) {
     return escalated;
 }
 
-function startLeadBumpNotifyCron({ pbxClient, trunkName }) {
+function startLeadBumpNotifyCron({ pbxClient, trunkNames }) {
     cron.schedule(
         CRON_INTERVAL,
         async () => {
@@ -476,7 +476,7 @@ function startLeadBumpNotifyCron({ pbxClient, trunkName }) {
                 const notified = await processNotifyStage(now);
                 const escalated = await processEscalateStage(now);
                 const noPurchase = await processNoPurchaseEscalation(now);
-                const closed = await processClosedEscalation(now, { pbxClient, trunkName });
+                const closed = await processClosedEscalation(now, { pbxClient, trunkNames });
 
                 console.log(
                     `[CRON:bump-notify] done | now=${now.toISOString()} notified=${notified} escalated=${escalated} noPurchase=${noPurchase} closed=${closed}`

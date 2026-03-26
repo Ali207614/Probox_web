@@ -2586,7 +2586,7 @@ class b1HANA {
 
             const isStatusChanging =
                 nextStatus != null && nextStatus !== '';
-// ✅ Final statuslar
+
             const HARD_LOCKED_STATUSES = new Set(['Purchased', 'NoPurchase']); // Manager'dan tashqari hech kim o'zgartira olmaydi
             const SOFT_LOCKED_STATUS = 'Closed'; // faqat ayrim rollar o'zgartira oladi
 

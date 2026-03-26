@@ -10,7 +10,7 @@ function normalizeCalls(res) {
     return [];
 }
 
-async function getCallTimeRangeByUuid({ pbxClient, trunkName, uuid, leadPhoneLocal }) {
+async function getCallTimeRangeByUuid({ pbxClient, trunkNames, uuid, leadPhoneLocal }) {
     if (!pbxClient) throw new Error('pbxClient is required');
     if (!uuid) return { start: null, end: null };
 
@@ -18,7 +18,7 @@ async function getCallTimeRangeByUuid({ pbxClient, trunkName, uuid, leadPhoneLoc
     try {
         const res = await pbxClient.searchCalls({
             uuid: String(uuid),
-            trunk_names: trunkName,
+            trunk_names: trunkNames,
             sort_by: 'start_stamp',
             sort_order: 'asc',
             limit: 1,
@@ -48,7 +48,7 @@ async function getCallTimeRangeByUuid({ pbxClient, trunkName, uuid, leadPhoneLoc
         start_stamp_to: nowSec,
         sort_by: 'start_stamp',
         sort_order: 'asc',
-        trunk_names: trunkName,
+        trunk_names: trunkNames,
     });
 
     const calls2 = normalizeCalls(res2);
@@ -117,7 +117,7 @@ async function getHistoryBetween({ leadId, from, to, limit = 80 }) {
 
 async function buildClosedContextWindow({
                                             pbxClient,
-                                            trunkName,
+                                            trunkNames,
                                             leadId,
                                             uuid,
                                             closedStatus = 'Closed',
@@ -136,7 +136,7 @@ async function buildClosedContextWindow({
     try {
         const range = await getCallTimeRangeByUuid({
             pbxClient,
-            trunkName,
+            trunkNames,
             uuid,
             leadPhoneLocal: leadPhones.local || leadPhones.full,
         });

@@ -25,7 +25,11 @@ const {startScoringBumpNotifyCron} = require("./utils/scoring-bump-notify.cron")
 const {pbxClient} = require("./integrations/pbx");
 const {startRatingSmsCron} = require("./utils/rating-sms.cron");
 const startMehrliCallJob = require("./utils/mehrli-call-job");
-const TRUNK_NAME = process.env.PBX_TRUNK_NAME || 'f6813980348e52891f64fa3ce451de69';
+
+const TRUNK_NAMES = [
+    'f6813980348e52891f64fa3ce451de69',
+    '97b29d03fde1b1d31e5f02bb23d0e537'
+];
 
 //require('./utils/cronBusinessPartners');
 app.use(express.urlencoded({ extended: false }));
@@ -86,7 +90,7 @@ startMehrliCallJob()
 
 startLeadBumpNotifyCron({
     pbxClient,
-    trunkName: TRUNK_NAME,
+    trunkNames: TRUNK_NAMES
 });
 // === SERVER ===
 const port = PORT || 3019;
