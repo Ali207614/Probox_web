@@ -46,7 +46,7 @@ const LeadChatSchema = new Schema(
                 // optional
                 'note',
                 'telegram_bot_image_upload_failed',
-
+                'sms_sent',
                 // ✅ REYTING UCHUN YANGI ACTION QO'SHILDI
                 'rating_added'
             ],
