@@ -2596,7 +2596,7 @@ class b1HANA {
             const CLOSED_OVERRIDE_ROLES = new Set(['OperatorM', 'CEO', 'Manager' , 'SellerM']);
             const canOverrideClosed = CLOSED_OVERRIDE_ROLES.has(U_role);
 
-            const HARD_LOCKED_OVERRIDE_ROLES = new Set(['Manager']); // Agar xohlasangiz 'CEO' ni ham qo'shishingiz mumkin
+            const HARD_LOCKED_OVERRIDE_ROLES = new Set(['CEO', 'Manager' , 'SellerM']); // Agar xohlasangiz 'CEO' ni ham qo'shishingiz mumkin
             const canOverrideHardLocked = HARD_LOCKED_OVERRIDE_ROLES.has(U_role);
 
             const prevStatusHardLocked = HARD_LOCKED_STATUSES.has(prevStatus);
