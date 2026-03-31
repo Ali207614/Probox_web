@@ -2913,10 +2913,18 @@ class b1HANA {
             }
 
             if (prevStatus !== 'VisitedStore' && updated.status === 'VisitedStore') {
-                await sendCouponStatusWebhook({
-                    leadId: updated._id,
-                    phoneNumber: updated.clientPhone,
-                });
+                try {
+                    await sendCouponStatusWebhook({
+                        leadId: updated._id,
+                        phoneNumber: updated.clientPhone,
+                        status: updated.status,
+                    });
+                } catch (webhookError) {
+                    console.error(
+                        `[coupon-webhook] failed for lead ${updated._id}:`,
+                        webhookError?.response?.data || webhookError.message
+                    );
+                }
             }
 
             // ✅ event payload (sizdagi helper)

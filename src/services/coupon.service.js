@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-async function sendCouponStatusWebhook({ leadId, phoneNumber }) {
+async function sendCouponStatusWebhook({ leadId, phoneNumber , status}) {
     try {
         if (!phoneNumber) {
             console.warn('[coupon-webhook] skipped: phone_number is empty');
@@ -11,7 +11,7 @@ async function sendCouponStatusWebhook({ leadId, phoneNumber }) {
             process.env.COUPON_API_URL,
             {
                 phone_number: phoneNumber,
-                status: 'VisitedStore',
+                status: status,
                 lead_id: String(leadId),
             },
             {
