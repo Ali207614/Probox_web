@@ -199,6 +199,7 @@ router.get('/lead-analytics', authMiddleware, analyticsController.getLeadsAnalyt
 router.get('/leads/analytics/funnel-by-operators', authMiddleware ,analyticsController.getLeadsFunnelByOperators);
 
 router.get('/analytics/operators', authMiddleware, analyticsController.getOperatorPerformance);
+router.get('/analytics/source', authMiddleware, analyticsController.getSourcePerformance);
 router.get('/analytics/statuses', authMiddleware, analyticsController.getGeneralStatusStats);
 router.get('/analytics/sources', authMiddleware, analyticsController.getSourceDailyStats);
 router.get('/analytics/source-distribution', authMiddleware, analyticsController.getSourceStatusDistribution);

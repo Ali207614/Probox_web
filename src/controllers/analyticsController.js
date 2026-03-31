@@ -213,6 +213,60 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
+
+    async getSourcePerformance(req, res, next) {
+        try {
+            const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
+
+            const stats = await Lead.aggregate([
+                ...getTimePipeline(),
+                {
+                    $match: {
+                        actualTime: { $gte: startDate, $lte: endDate },
+                        source: { $ne: null }
+                    }
+                },
+                {
+                    $group: {
+                        _id: { source: "$source", status: "$status" },
+                        count: { $sum: 1 }
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$_id.source",
+                        foundStatuses: {
+                            $push: { k: "$_id.status", v: "$count" }
+                        },
+                        total: { $sum: "$count" }
+                    }
+                },
+                { $sort: { total: -1 } }
+            ]);
+
+            const result = stats.map(item => {
+                const statusMap = Object.fromEntries(
+                    item.foundStatuses.map(s => [s.k, s.v])
+                );
+
+                return {
+                    source: item._id || "Noma'lum",
+                    total: item.total,
+                    details: this.allPossibleStatuses.map(st => ({
+                        status: st,
+                        count: statusMap[st] || 0,
+                        percentage: percent(statusMap[st] || 0, item.total)
+                    }))
+                };
+            });
+
+            res.json({ status: true, data: result });
+        } catch (err) {
+            next(err);
+        }
+    }
+
     // 4. Umumiy Status Stats
     async getGeneralStatusStats(req, res, next) {
         try {

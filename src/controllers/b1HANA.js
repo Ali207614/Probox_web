@@ -63,7 +63,6 @@ const RATE_TTL_MS = 5 * 60 * 60 * 1000;
 
 
 class b1HANA {
-
     async assignScoringOperator() {
         const scoringQuery = DataRepositories.getSalesPersons({
             include: ['Scoring'],
