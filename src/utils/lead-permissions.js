@@ -40,7 +40,8 @@ const permissions = {
         'address2',
         'seen',
         'status',
-        'recallDate'
+        'recallDate',
+        'referral'
     ],
     Operator2: [
 
@@ -69,6 +70,7 @@ const permissions = {
         'status',
         'clientName',
         'clientFullName',
+        'referral'
     ],
     SellerM: [
         'meetingConfirmed',
@@ -94,6 +96,7 @@ const permissions = {
         'status',
         'clientName',
         'clientFullName',
+        'referral'
     ],
     Scoring: [
         'clientFullName',
@@ -122,7 +125,8 @@ const permissions = {
         'neighborhood',
         'street',
         'house',
-        'address2'
+        'address2',
+        'referral'
     ],
 };
 
@@ -168,6 +172,7 @@ permissions.Manager = [
     'purchase',
     'purchaseDate',
     'source',
+    'referral'
 ];
 
 
