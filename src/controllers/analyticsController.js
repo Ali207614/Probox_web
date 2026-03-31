@@ -53,6 +53,7 @@ class AnalyticsController {
         this.getSourceStatusDistribution = this.getSourceStatusDistribution.bind(this);
         this.getBranchPerformance = this.getBranchPerformance.bind(this);
         this.getBranchSourceStats = this.getBranchSourceStats.bind(this);
+        this.getSourcePerformance = this.getSourcePerformance.bind(this);
     }
 
     async getOperatorsMap() {
