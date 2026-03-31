@@ -193,9 +193,6 @@ class b1HANA {
     onlinePbxWebhook = async (req, res, next) => {
         try {
             const payload = this.normalizeOnlinePbxPayload(req.body);
-            if(payload?.gateway === '555134774'){
-                console.log('onlinePbxWebhook', payload);
-            }
             const io = req.app.get('io'); // ✅ haqiqiy io
             const result = await handleOnlinePbxPayload(payload, io);
             return res.status(200).json(result);
@@ -2916,6 +2913,7 @@ class b1HANA {
                 try {
                     await sendCouponStatusWebhook({
                         leadId: updated._id,
+                        fullName: updated.clientName,
                         phoneNumber: updated.clientPhone,
                         status: updated.status,
                     });
