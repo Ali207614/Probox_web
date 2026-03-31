@@ -9,7 +9,7 @@ const LegalDocument = require('../models/LegalDocument');
 class LegalDocumentController {
     uploadLegalDocument = async (req, res, next) => {
         try {
-            const { id, doc_name } = req.body;
+            const { id, doc_name, template_id } = req.body;
             const file = req.file;
 
             if (!file) {
@@ -20,21 +20,39 @@ class LegalDocumentController {
                 return res.status(400).json({ message: 'id majburiy' });
             }
 
+            if (!template_id || !String(template_id).trim()) {
+                return res.status(400).json({ message: 'template_id majburiy' });
+            }
+
             if (!doc_name || !String(doc_name).trim()) {
                 return res.status(400).json({ message: 'doc_name majburiy' });
             }
 
-            const uploaded = await uploadService.uploadFile('legal-documents', String(id).trim(), file, {
+            const slpCode = req.user?.SlpCode ?? req.user?.id;
+            const slpName = req.user?.SlpName ?? req.user?.name;
+
+            if (!slpCode || !slpName) {
+                return res.status(401).json({ message: 'Foydalanuvchi ma’lumoti topilmadi' });
+            }
+
+            const entityId = String(id).trim();
+
+            const uploaded = await uploadService.uploadFile('legal-documents', entityId, file, {
                 maxSizeMb: 20,
             });
 
             const saved = await LegalDocument.create({
-                entityId: String(id).trim(),
+                entityId,
+                template_id: String(template_id).trim(),
                 doc_name: String(doc_name).trim(),
                 fileName: file.originalname,
                 mimeType: file.mimetype,
                 size: file.size,
                 key: uploaded.key,
+                createdBy: {
+                    SlpCode: String(slpCode),
+                    SlpName: String(slpName),
+                },
             });
 
             return res.status(201).json({
@@ -50,16 +68,25 @@ class LegalDocumentController {
     getLegalDocuments = async (req, res, next) => {
         try {
             const { id } = req.params;
-            const { doc_name } = req.query;
-
-            if (!id) {
-                return res.status(400).json({ message: 'id majburiy' });
-            }
+            const { doc_name, template_id } = req.query;
 
             const query = {
-                entityId: String(id).trim(),
                 deletedAt: null,
             };
+
+            if (id && String(id).trim()) {
+                query.entityId = String(id).trim();
+            }
+
+            if (template_id && String(template_id).trim()) {
+                query.template_id = String(template_id).trim();
+            }
+
+            if (!query.entityId && !query.template_id) {
+                return res.status(400).json({
+                    message: 'id yoki template_id majburiy',
+                });
+            }
 
             if (doc_name && String(doc_name).trim()) {
                 query.doc_name = String(doc_name).trim();
@@ -116,6 +143,52 @@ class LegalDocumentController {
 
             const buf = Buffer.from(await out.Body.transformToByteArray());
             return res.end(buf);
+        } catch (err) {
+            next(err);
+        }
+    };
+
+    deleteMultipleLegalDocuments = async (req, res, next) => {
+        try {
+            const { documentIds } = req.body;
+
+            if (!Array.isArray(documentIds) || !documentIds.length) {
+                return res.status(400).json({ message: 'documentIds majburiy array bo‘lishi kerak' });
+            }
+
+            const ids = documentIds.map(String);
+
+            const docs = await LegalDocument.find({
+                _id: { $in: ids },
+                deletedAt: null,
+            });
+
+            if (!docs.length) {
+                return res.status(404).json({ message: 'Hujjatlar topilmadi' });
+            }
+
+            const keys = docs
+                .map((item) => item.key)
+                .filter(Boolean);
+
+            if (keys.length) {
+                await uploadService.deleteImages(keys).catch(() => null);
+            }
+
+            await LegalDocument.updateMany(
+                {
+                    _id: { $in: docs.map((d) => d._id) },
+                },
+                {
+                    $set: { deletedAt: new Date() },
+                }
+            );
+
+            return res.json({
+                status: true,
+                message: 'Hujjatlar muvaffaqiyatli o‘chirildi',
+                deletedCount: docs.length,
+            });
         } catch (err) {
             next(err);
         }

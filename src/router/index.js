@@ -61,6 +61,7 @@ router.get(
 
 router.post(
     '/legal-documents/upload',
+    authMiddleware,
     upload.single('file'),
     legalDocumentController.uploadLegalDocument
 );
@@ -76,8 +77,9 @@ router.get(
 );
 
 router.delete(
-    '/legal-documents/:documentId',
-    legalDocumentController.deleteLegalDocument
+    '/legal-documents/multiple',
+    authMiddleware,
+    legalDocumentController.deleteMultipleLegalDocuments
 );
 
 router.use('/google-sheet', googleSheetWebhook);
