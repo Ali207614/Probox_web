@@ -4,6 +4,7 @@ const b1SL1 = require('../controllers/b1SL1');
 const b1HANA = require('../controllers/b1HANA');
 const leadController = require('../controllers/leadController');
 const analyticsController = require('../controllers/analyticsController');
+const legalDocumentController = require('../controllers/legalController');
 const authMiddleware = require('../middlewares/auth-middleware');
 const googleSheetWebhook = require('./googleSheetWebhook');
 const purchasePdfControllerFactory = require('../controllers/purchasePdfController');
@@ -56,6 +57,27 @@ router.post(
 router.get(
     "/audio/:id/chats/recordings/:uuid.mp3",
     b1HANA.getChatRecording
+);
+
+router.post(
+    '/legal-documents/upload',
+    upload.single('file'),
+    legalDocumentController.uploadLegalDocument
+);
+
+router.get(
+    '/legal-documents/:id',
+    legalDocumentController.getLegalDocuments
+);
+
+router.get(
+    '/legal-documents/download/:documentId',
+    legalDocumentController.downloadLegalDocument
+);
+
+router.delete(
+    '/legal-documents/:documentId',
+    legalDocumentController.deleteLegalDocument
 );
 
 router.use('/google-sheet', googleSheetWebhook);

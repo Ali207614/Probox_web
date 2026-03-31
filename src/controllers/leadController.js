@@ -1,15 +1,13 @@
+
 const LeadModel = require('../models/lead-model');
 const LeadImage = require('../models/lead-image-model');
 const UploadService = require('../minio');
 const multer = require('multer');
 const moment = require('moment');
 const { GetObjectCommand } = require("@aws-sdk/client-s3");
-
-const upload = multer({ storage: multer.memoryStorage() });
 const uploadService = new UploadService();
 
 class LeadController {
-
     uploadLeadImage = async (req, res, next) => {
         try {
             const { leadId, cardCode, docNum } = req.body;
@@ -59,6 +57,34 @@ class LeadController {
             });
         } catch (err) {
             next(err);
+        }
+    };
+
+    downloadContract = async (req, res, next) => {
+        try {
+            const { key } = req.params;
+
+            const query = { docNum: key, isPdf: true };
+
+            const doc = await LeadImage.findOne(query).lean();
+            if (!doc?.pdfKey) return res.status(404).json({ message: 'Shartnoma topilmadi' });
+
+            const out = await uploadService.client.send(
+                new GetObjectCommand({ Bucket: uploadService.bucket, Key: doc.pdfKey })
+            );
+
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="contract-${key}.pdf"`);
+
+            if (out?.Body?.pipe) {
+                out.Body.on('error', next);
+                return out.Body.pipe(res);
+            }
+
+            const buf = Buffer.from(await out.Body.transformToByteArray());
+            return res.end(buf);
+        } catch (e) {
+            next(e);
         }
     };
 
@@ -260,33 +286,7 @@ class LeadController {
         }
     };
 
-    downloadContract = async (req, res, next) => {
-        try {
-            const { key } = req.params;
 
-            const query = { docNum: key, isPdf: true };
-
-            const doc = await LeadImage.findOne(query).lean();
-            if (!doc?.pdfKey) return res.status(404).json({ message: 'Shartnoma topilmadi' });
-
-            const out = await uploadService.client.send(
-                new GetObjectCommand({ Bucket: uploadService.bucket, Key: doc.pdfKey })
-            );
-
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', `attachment; filename="contract-${key}.pdf"`);
-
-            if (out?.Body?.pipe) {
-                out.Body.on('error', next);
-                return out.Body.pipe(res);
-            }
-
-            const buf = Buffer.from(await out.Body.transformToByteArray());
-            return res.end(buf);
-        } catch (e) {
-            next(e);
-        }
-    };
 }
 
 module.exports = new LeadController();

@@ -180,6 +180,23 @@ class UploadService {
 
         return getSignedUrl(this.client, cmd, { expiresIn });
     }
+
+    async deleteFiles(keys = []) {
+        const validKeys = keys.filter(Boolean);
+
+        if (!validKeys.length) return;
+
+        await Promise.all(
+            validKeys.map((key) =>
+                this.client.send(
+                    new DeleteObjectCommand({
+                        Bucket: this.bucket,
+                        Key: key,
+                    })
+                )
+            )
+        );
+    }
 }
 
 module.exports = UploadService;
