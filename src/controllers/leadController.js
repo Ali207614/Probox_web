@@ -194,6 +194,7 @@ class LeadController {
                 id: lead._id,
                 n: lead.n ?? null,
                 status: lead?.status,
+                referral: lead?.referral || null,
                 purchaseDate: lead.purchaseDate ? moment(lead.purchaseDate).format('YYYY.MM.DD HH:mm') : null,
                 generalRating: lead?.generalRating || null,
                 sellerRating: lead?.sellerRating || null,

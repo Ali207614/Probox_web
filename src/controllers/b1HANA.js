@@ -1217,6 +1217,7 @@ class b1HANA {
                 purchaseDate: item.purchaseDate ? moment(item.purchaseDate).format('YYYY.MM.DD HH:mm') : null,
                 generalRating: item?.generalRating || null,
                 sellerRating: item?.sellerRating || null,
+                referral: item?.referral || null,
                 ratingComment: item?.ratingComment || null,
                 ratingSmsError: item?.ratingSmsError || null,
                 consideringBumped: ['Closed', 'Purchased'].includes(item.status)
@@ -2915,6 +2916,7 @@ class b1HANA {
                         fullName: updated.clientName,
                         phoneNumber: updated.clientPhone,
                         status: updated.status,
+                        referral: updated.referral,
                     });
                 } catch (webhookError) {
                     console.error(

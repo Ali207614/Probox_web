@@ -149,6 +149,11 @@ const LeadSchema = new Schema(
             default: null,
             description: "Mijozning baholash vaqtidagi izohi"
         },
+        referral: {
+            type: String,
+            default: null,
+            description: "Mijozning tavsiyeleri"
+        },
         ratedAt: {
             type: Date,
             default: null,

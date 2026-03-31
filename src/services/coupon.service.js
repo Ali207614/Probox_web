@@ -6,6 +6,7 @@ async function sendCouponStatusWebhook({
                                            status,
                                            fullName,
                                            productName,
+                                           referral
                                        }) {
     try {
         if (!phoneNumber) {
@@ -22,6 +23,10 @@ async function sendCouponStatusWebhook({
 
         if (productName) {
             payload.product_name = productName;
+        }
+
+        if (referral) {
+            payload.referral = referral;
         }
 
         await axios.post(
