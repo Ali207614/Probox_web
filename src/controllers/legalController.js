@@ -10,6 +10,7 @@ class LegalDocumentController {
     uploadLegalDocument = async (req, res, next) => {
         try {
             const { id, doc_name, template_id } = req.body;
+            console.log(req.body , " bu updload")
             const file = req.file;
 
             if (!file) {
@@ -116,7 +117,7 @@ class LegalDocumentController {
     downloadLegalDocument = async (req, res, next) => {
         try {
             const { documentId } = req.params;
-
+            console.log(documentId , " bu document id ")
             if (!documentId) {
                 return res.status(400).json({ message: 'documentId majburiy' });
             }
