@@ -68,7 +68,11 @@ class LegalDocumentController {
     getLegalDocuments = async (req, res, next) => {
         try {
             const { id } = req.params;
-            const { doc_name, template_id } = req.query;
+            const { doc_name, template_id, page = 1, limit = 10 } = req.query;
+
+            const pageNumber = Math.max(1, Number(page) || 1);
+            const limitNumber = Math.max(1, Math.min(100, Number(limit) || 10));
+            const skip = (pageNumber - 1) * limitNumber;
 
             const query = {
                 deletedAt: null,
@@ -82,22 +86,25 @@ class LegalDocumentController {
                 query.template_id = String(template_id).trim();
             }
 
-            if (!query.entityId && !query.template_id) {
-                return res.status(400).json({
-                    message: 'id yoki template_id majburiy',
-                });
-            }
-
             if (doc_name && String(doc_name).trim()) {
                 query.doc_name = String(doc_name).trim();
             }
 
-            const docs = await LegalDocument.find(query)
-                .sort({ createdAt: -1 })
-                .lean();
+            const [docs, total] = await Promise.all([
+                LegalDocument.find(query)
+                    .sort({ createdAt: -1 })
+                    .skip(skip)
+                    .limit(limitNumber)
+                    .lean(),
+                LegalDocument.countDocuments(query),
+            ]);
 
             return res.json({
                 status: true,
+                page: pageNumber,
+                limit: limitNumber,
+                total,
+                totalPages: Math.ceil(total / limitNumber),
                 count: docs.length,
                 documents: docs,
             });
