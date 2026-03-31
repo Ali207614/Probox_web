@@ -67,7 +67,7 @@ router.post(
 );
 
 router.get(
-    '/legal-documents/:id',
+    '/legal-documents',
     legalDocumentController.getLegalDocuments
 );
 
