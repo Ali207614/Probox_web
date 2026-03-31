@@ -42,6 +42,7 @@ require('dotenv').config();
 const { createOnlinePbx } = require('./pbx.client');
 const {fetchLeadPbxChats} = require("../services/lead_pbx_sync.service");
 const axios = require("axios");
+const {sendCouponStatusWebhook} = require("../services/coupon.service");
 
 
 const pbxClient = createOnlinePbx({
@@ -2575,8 +2576,6 @@ class b1HANA {
             // ✅ STATUS CHANGE LOGIC (passportVisit olib tashlandi)
             // =========================================================
             // =========================================================
-// ✅ STATUS CHANGE LOGIC (passportVisit olib tashlandi)
-// =========================================================
             const now = new Date();
 
             const nextStatus =
@@ -2889,6 +2888,8 @@ class b1HANA {
                 validData.limitDate = new Date();
             }
 
+
+
             // =========================================================
             // ✅ History
             // =========================================================
@@ -2909,6 +2910,13 @@ class b1HANA {
 
             if (!updated) {
                 return res.status(404).json({ message: 'Lead not found' });
+            }
+
+            if (prevStatus !== 'VisitedStore' && updated.status === 'VisitedStore') {
+                await sendCouponStatusWebhook({
+                    leadId: updated._id,
+                    phoneNumber: updated.clientPhone,
+                });
             }
 
             // ✅ event payload (sizdagi helper)
