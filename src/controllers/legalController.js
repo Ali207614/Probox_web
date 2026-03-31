@@ -122,7 +122,7 @@ class LegalDocumentController {
             }
 
             const doc = await LegalDocument.findOne({
-                _id: documentId,
+                entityId: documentId,
                 deletedAt: null,
             }).lean();
 
