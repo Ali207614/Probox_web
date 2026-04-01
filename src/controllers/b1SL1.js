@@ -654,7 +654,7 @@ class b1SL {
 
             await sendCouponStatusWebhook({
                 leadId,
-                phoneNumber: normalizedPhone ? `+998${normalizedPhone}` : rawPhone,
+                phoneNumber: normalizedPhone ? `${normalizedPhone}` : rawPhone,
                 status: 'Purchased',
                 fullName: req.body.clientName || null,
                 productName: firstLine?.ItemName || firstLine?.Dscription || null,
