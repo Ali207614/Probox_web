@@ -806,16 +806,6 @@ LIMIT ${limit} OFFSET ${offset};
     getRate({ currency = 'UZS', date = '' }) {
         const cur = this.sqlStr(currency);
 
-    //     if (date) {
-    //         return `
-    //   SELECT T0."RateDate", T0."Currency", T0."Rate"
-    //   FROM ${this.db}."ORTT" T0
-    //   WHERE T0."Currency" = '${cur}'
-    //     AND T0."RateDate" = '${this.sqlStr(date)}'
-    //   LIMIT 1
-    // `;
-    //     }
-
         return `
             SELECT T0."RateDate", T0."Currency", T0."Rate"
             FROM ${this.db}."ORTT" T0

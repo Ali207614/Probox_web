@@ -106,8 +106,12 @@ server.listen(port, () => {
 
         connection.connect(conn_params, async (err) => {
             if (err) {
+
+                console.log(conn_params ," bu conn err")
                 console.error('❌ SAP HANA ulanishda xatolik:', err);
             } else {
+                console.log(conn_params ," bu conn success")
+
                 console.log('🟢 Hanaga ulanish muvaffaqiyatli amalga oshirildi');
                 global.connection = connection;
                 if (process.env.LEAD === 'true') {
