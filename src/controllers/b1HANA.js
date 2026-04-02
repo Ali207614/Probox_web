@@ -454,7 +454,7 @@ class b1HANA {
     login = async (req, res, next) => {
         try {
             const { login, password } = req.body;
-
+            console.log(req.body);
             if (!login || !password) {
                 return next(ApiError.BadRequest('Некорректный login или password'));
             }
@@ -497,6 +497,7 @@ class b1HANA {
             });
         }
         catch (e) {
+            console.log(e ," bu ee")
             return next(ApiError.UnauthorizedError());
         }
     };
