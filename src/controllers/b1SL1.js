@@ -740,7 +740,7 @@ class b1SL {
                 if (token.status) return this.createInvoiceAndPayment(req, res, next);
                 return res.status(401).json({ status: false, message: token.message });
             }
-            console.log(err);
+            console.log(err ,' Bu eerrrr');
             const sapErr = get(err, 'response.data.error.message.value', 'SAP error');
             return res.status(400).json({
                 status: false,
