@@ -1,6 +1,7 @@
 const moment = require("moment-timezone");
 const Lead = require("../models/lead-model");
 const Branch = require("../models/branch-model");
+const LeadChat = require("../models/lead-chat-model");
 const dbService = require('../services/dbService');
 const DataRepositories = require('../repositories/dataRepositories');
 
@@ -42,7 +43,7 @@ class AnalyticsController {
             'Ignored',          // 2. E'tiborsiz
             'Missed',           // 3. O'tkazib yuborildi
             'NoAnswer',         // 4. Javob bermadi
-            'FollowUp',         // 5. Qayta aloqa
+            'FollowUp',        // 5. Qayta aloqa
             'Considering',      // 6. O'ylab ko'radi
             'WillVisitStore',   // 7. Do'konga boradi
             'WillSendPassport', // 8. Pasport yuboradi
@@ -67,28 +68,14 @@ class AnalyticsController {
         this.getSourcePerformance = this.getSourcePerformance.bind(this);
     }
 
-    async getGeneralStatusStats(req, res, next) {
-        try {
-            const { start, end } = req.query;
-            const { startDate, endDate } = this._parseRange(start, end);
-
-            const stats = await Lead.aggregate([
-                ...getTimePipeline(),
-                { $match: { actualTime: { $gte: startDate, $lte: endDate } } },
-                { $group: { _id: "$status", count: { $sum: 1 } } }
-            ]);
-
-            const total = stats.reduce((acc, curr) => acc + curr.count, 0);
-            const statsMap = Object.fromEntries(stats.map(s => [s._id, s.count]));
-
-            const result = this.allPossibleStatuses.map(st => ({
-                status: st,
-                count: statsMap[st] || 0,
-                percentage: percent(statsMap[st] || 0, total)
-            }));
-
-            res.json({ status: true, total, data: result });
-        } catch (err) { next(err); }
+    // ✅ Umumiy yordamchi: bir marta VisitedStore'ga tushgan barcha leadlar
+    async _getVisitedEverSet(startDate, endDate) {
+        const visitedEver = await LeadChat.distinct('leadId', {
+            action: 'status_changed',
+            statusTo: 'VisitedStore',
+            createdAt: { $gte: startDate, $lte: endDate }
+        });
+        return new Set(visitedEver.map(id => String(id)));
     }
 
     async getOperatorsMap() {
@@ -162,7 +149,7 @@ class AnalyticsController {
                 range: { start, end },
                 funnel: [
                     { no: 1, name: 'Leads', count: funnel.leads, cr: 100 },
-                    { no: 2, name: 'Qo‘ng‘iroq qilindi', count: funnel.called, cr: percent(funnel.called, funnel.leads) },
+                    { no: 2, name: 'Qo\'ng\'iroq qilindi', count: funnel.called, cr: percent(funnel.called, funnel.leads) },
                     { no: 3, name: 'Javob berdi', count: funnel.answered, cr: percent(funnel.answered, funnel.leads) },
                     { no: 4, name: 'Qiziqish bildirdi', count: funnel.interested, cr: percent(funnel.interested, funnel.leads) },
                     { no: 5, name: 'Pasport', count: funnel.passport, cr: percent(funnel.passport, funnel.leads) },
@@ -216,27 +203,43 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-    // 3. Operator Performance (Statuslar)
+    // 3. Operator Performance (Statuslar) + visitedOverall
     async getOperatorPerformance(req, res, next) {
         try {
             const { start, end } = req.query;
             const { startDate, endDate } = this._parseRange(start, end);
             const opMap = await this.getOperatorsMap();
 
-            const stats = await Lead.aggregate([
-                ...getTimePipeline(),
-                { $match: { actualTime: { $gte: startDate, $lte: endDate }, operator: { $ne: null } } },
-                { $group: { _id: { operator: "$operator", status: "$status" }, count: { $sum: 1 } } },
-                { $group: { _id: "$_id.operator", foundStatuses: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } },
-                { $sort: { total: -1 } }
+            const [stats, operatorLeads, visitedEverSet] = await Promise.all([
+                Lead.aggregate([
+                    ...getTimePipeline(),
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, operator: { $ne: null } } },
+                    { $group: { _id: { operator: "$operator", status: "$status" }, count: { $sum: 1 } } },
+                    { $group: { _id: "$_id.operator", foundStatuses: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } },
+                    { $sort: { total: -1 } }
+                ]),
+                Lead.aggregate([
+                    ...getTimePipeline(),
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, operator: { $ne: null } } },
+                    { $group: { _id: "$operator", leadIds: { $push: "$_id" } } }
+                ]),
+                this._getVisitedEverSet(startDate, endDate)
             ]);
+
+            const operatorLeadMap = Object.fromEntries(
+                operatorLeads.map(o => [String(o._id), o.leadIds.map(id => String(id))])
+            );
 
             const result = stats.map(item => {
                 const statusMap = Object.fromEntries(item.foundStatuses.map(s => [s.k, s.v]));
+                const myLeadIds = operatorLeadMap[String(item._id)] || [];
+                const visitedOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
+
                 return {
                     slpCode: item._id,
                     operatorName: opMap.get(String(item._id)) || "Noma'lum",
                     total: item.total,
+                    visitedOverall,
                     details: this.allPossibleStatuses.map(st => ({
                         status: st,
                         count: statusMap[st] || 0,
@@ -249,46 +252,41 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-
+    // 4. Source Performance + visitedOverall
     async getSourcePerformance(req, res, next) {
         try {
             const { start, end } = req.query;
             const { startDate, endDate } = this._parseRange(start, end);
 
-            const stats = await Lead.aggregate([
-                ...getTimePipeline(),
-                {
-                    $match: {
-                        actualTime: { $gte: startDate, $lte: endDate },
-                        source: { $ne: null }
-                    }
-                },
-                {
-                    $group: {
-                        _id: { source: "$source", status: "$status" },
-                        count: { $sum: 1 }
-                    }
-                },
-                {
-                    $group: {
-                        _id: "$_id.source",
-                        foundStatuses: {
-                            $push: { k: "$_id.status", v: "$count" }
-                        },
-                        total: { $sum: "$count" }
-                    }
-                },
-                { $sort: { total: -1 } }
+            const [stats, sourceLeads, visitedEverSet] = await Promise.all([
+                Lead.aggregate([
+                    ...getTimePipeline(),
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $ne: null } } },
+                    { $group: { _id: { source: "$source", status: "$status" }, count: { $sum: 1 } } },
+                    { $group: { _id: "$_id.source", foundStatuses: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } },
+                    { $sort: { total: -1 } }
+                ]),
+                Lead.aggregate([
+                    ...getTimePipeline(),
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $ne: null } } },
+                    { $group: { _id: "$source", leadIds: { $push: "$_id" } } }
+                ]),
+                this._getVisitedEverSet(startDate, endDate)
             ]);
 
+            const sourceLeadMap = Object.fromEntries(
+                sourceLeads.map(s => [String(s._id), s.leadIds.map(id => String(id))])
+            );
+
             const result = stats.map(item => {
-                const statusMap = Object.fromEntries(
-                    item.foundStatuses.map(s => [s.k, s.v])
-                );
+                const statusMap = Object.fromEntries(item.foundStatuses.map(s => [s.k, s.v]));
+                const myLeadIds = sourceLeadMap[String(item._id)] || [];
+                const visitedOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
 
                 return {
                     source: item._id || "Noma'lum",
                     total: item.total,
+                    visitedOverall,
                     details: this.allPossibleStatuses.map(st => ({
                         status: st,
                         count: statusMap[st] || 0,
@@ -298,12 +296,46 @@ class AnalyticsController {
             });
 
             res.json({ status: true, data: result });
-        } catch (err) {
-            next(err);
-        }
+        } catch (err) { next(err); }
     }
 
-    // 5. Source Daily Stats
+    // 5. Umumiy Status Stats + visitedOverall
+    async getGeneralStatusStats(req, res, next) {
+        try {
+            const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
+
+            const [stats, allLeadIds, visitedEverSet] = await Promise.all([
+                Lead.aggregate([
+                    ...getTimePipeline(),
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate } } },
+                    { $group: { _id: "$status", count: { $sum: 1 } } }
+                ]),
+                Lead.aggregate([
+                    ...getTimePipeline(),
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate } } },
+                    { $group: { _id: null, leadIds: { $push: "$_id" } } }
+                ]),
+                this._getVisitedEverSet(startDate, endDate)
+            ]);
+
+            const total = stats.reduce((acc, curr) => acc + curr.count, 0);
+            const statsMap = Object.fromEntries(stats.map(s => [s._id, s.count]));
+
+            const ids = (allLeadIds[0]?.leadIds || []).map(id => String(id));
+            const visitedOverall = ids.filter(id => visitedEverSet.has(id)).length;
+
+            const result = this.allPossibleStatuses.map(st => ({
+                status: st,
+                count: statsMap[st] || 0,
+                percentage: percent(statsMap[st] || 0, total)
+            }));
+
+            res.json({ status: true, total, visitedOverall, data: result });
+        } catch (err) { next(err); }
+    }
+
+    // 6. Source Daily Stats
     async getSourceDailyStats(req, res, next) {
         try {
             const { start, end } = req.query;
@@ -336,27 +368,42 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-    // 6. Source Distribution
+    // 7. Source Status Distribution + visitedOverall
     async getSourceStatusDistribution(req, res, next) {
         try {
             const { start, end } = req.query;
             const { startDate, endDate } = this._parseRange(start, end);
 
-            const stats = await Lead.aggregate([
-                ...getTimePipeline(),
-                { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $in: this.sourcesList } } },
-                { $group: { _id: { source: "$source", status: "$status" }, count: { $sum: 1 } } },
-                { $group: { _id: "$_id.source", foundStats: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } }
+            const [stats, sourceLeads, visitedEverSet] = await Promise.all([
+                Lead.aggregate([
+                    ...getTimePipeline(),
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $in: this.sourcesList } } },
+                    { $group: { _id: { source: "$source", status: "$status" }, count: { $sum: 1 } } },
+                    { $group: { _id: "$_id.source", foundStats: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } }
+                ]),
+                Lead.aggregate([
+                    ...getTimePipeline(),
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $in: this.sourcesList } } },
+                    { $group: { _id: "$source", leadIds: { $push: "$_id" } } }
+                ]),
+                this._getVisitedEverSet(startDate, endDate)
             ]);
 
             const statsMap = Object.fromEntries(stats.map(s => [s._id, s]));
+            const sourceLeadMap = Object.fromEntries(
+                sourceLeads.map(s => [String(s._id), s.leadIds.map(id => String(id))])
+            );
 
             const result = this.sourcesList.map(sourceName => {
                 const dbData = statsMap[sourceName] || { total: 0, foundStats: [] };
                 const foundMap = Object.fromEntries(dbData.foundStats.map(f => [f.k, f.v]));
+                const myLeadIds = sourceLeadMap[sourceName] || [];
+                const visitedOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
+
                 return {
                     source: sourceName,
                     total: dbData.total,
+                    visitedOverall,
                     details: this.allPossibleStatuses.map(st => ({
                         status: st,
                         count: foundMap[st] || 0,
@@ -369,36 +416,51 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-    // 7. Branch Performance
+    // 8. Branch Performance + visitedOverall
     async getBranchPerformance(req, res, next) {
         try {
             const { start, end } = req.query;
             const { startDate, endDate } = this._parseRange(start, end);
             const allBranches = await Branch.find({}).lean();
 
-            const stats = await Lead.aggregate([
-                ...getTimePipeline(),
-                { $match: { actualTime: { $gte: startDate, $lte: endDate }, branch2: { $ne: null } } },
-                {
-                    $group: {
-                        _id: "$branch2",
-                        visitedCount: { $sum: { $cond: [{ $or: [{ $eq: ["$status", "VisitedStore"] }, { $eq: ["$meetingHappened", true] }]}, 1, 0] } },
-                        purchasedCount: { $sum: { $cond: ["$purchase", 1, 0] } },
-                        totalLeads: { $sum: 1 }
+            const [stats, branchLeads, visitedEverSet] = await Promise.all([
+                Lead.aggregate([
+                    ...getTimePipeline(),
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, branch2: { $ne: null } } },
+                    {
+                        $group: {
+                            _id: "$branch2",
+                            visitedCount: { $sum: { $cond: [{ $or: [{ $eq: ["$status", "VisitedStore"] }, { $eq: ["$meetingHappened", true] }] }, 1, 0] } },
+                            purchasedCount: { $sum: { $cond: ["$purchase", 1, 0] } },
+                            totalLeads: { $sum: 1 }
+                        }
                     }
-                }
+                ]),
+                Lead.aggregate([
+                    ...getTimePipeline(),
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, branch2: { $ne: null } } },
+                    { $group: { _id: "$branch2", leadIds: { $push: "$_id" } } }
+                ]),
+                this._getVisitedEverSet(startDate, endDate)
             ]);
 
             const statsMap = Object.fromEntries(stats.map(s => [String(s._id), s]));
+            const branchLeadMap = Object.fromEntries(
+                branchLeads.map(b => [String(b._id), b.leadIds.map(id => String(id))])
+            );
 
             const result = allBranches.map(branch => {
                 const data = statsMap[String(branch.id)] || { visitedCount: 0, purchasedCount: 0, totalLeads: 0 };
+                const myLeadIds = branchLeadMap[String(branch.id)] || [];
+                const visitedOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
+
                 return {
                     branchName: branch.name,
                     totalLeads: data.totalLeads,
                     visitedCount: data.visitedCount,
+                    visitedOverall,
                     purchasedCount: data.purchasedCount,
-                    conversionToPurchase: percent(data.purchasedCount, data.visitedCount),
+                    conversionToPurchase: percent(data.purchasedCount, visitedOverall),
                     totalConversion: percent(data.purchasedCount, data.totalLeads)
                 };
             }).sort((a, b) => b.purchasedCount - a.purchasedCount);
@@ -407,14 +469,12 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-    // 8. Do'konlar kesimida manbalar statistikasi
+    // 9. Do'konlar kesimida manbalar statistikasi
     async getBranchSourceStats(req, res, next) {
         try {
             const { start, end } = req.query;
             const { startDate, endDate } = this._parseRange(start, end);
-
-            // 1. Barcha branchlarni va source listni tayyorlaymiz
-            const allBranches = await require('../models/branch-model').find({}).lean();
+            const allBranches = await Branch.find({}).lean();
 
             const stats = await Lead.aggregate([
                 ...getTimePipeline(),
@@ -425,30 +485,16 @@ class AnalyticsController {
                         source: { $in: this.sourcesList }
                     }
                 },
-                {
-                    $group: {
-                        _id: { branch: "$branch2", source: "$source" },
-                        count: { $sum: 1 }
-                    }
-                },
-                {
-                    $group: {
-                        _id: "$_id.branch",
-                        sources: { $push: { k: "$_id.source", v: "$count" } },
-                        totalLeads: { $sum: "$count" }
-                    }
-                }
+                { $group: { _id: { branch: "$branch2", source: "$source" }, count: { $sum: 1 } } },
+                { $group: { _id: "$_id.branch", sources: { $push: { k: "$_id.source", v: "$count" } }, totalLeads: { $sum: "$count" } } }
             ]);
 
-            // 2. Agregatsiya natijasini Map ko'rinishiga keltiramiz
             const statsMap = Object.fromEntries(stats.map(s => [String(s._id), s]));
 
-            // 3. Natijani shakllantiramiz
             const result = allBranches.map(branch => {
                 const dbData = statsMap[String(branch.id)] || { totalLeads: 0, sources: [] };
                 const foundSourcesMap = Object.fromEntries(dbData.sources.map(s => [s.k, s.v]));
 
-                // Har bir branch ichida barcha sourcelarni 0 bo'lsa ham ko'rsatamiz
                 const sourceDetails = this.sourcesList.map(srcName => {
                     const count = foundSourcesMap[srcName] || 0;
                     return {
@@ -466,11 +512,7 @@ class AnalyticsController {
                 };
             }).sort((a, b) => b.totalLeads - a.totalLeads);
 
-            res.json({
-                status: true,
-                range: { start, end },
-                data: result
-            });
+            res.json({ status: true, range: { start, end }, data: result });
         } catch (err) { next(err); }
     }
 }
