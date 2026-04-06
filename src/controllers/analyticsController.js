@@ -202,7 +202,7 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-    // 3. Operator Performance (Statuslar) + visitedStoreOverall
+    // 3. Operator Performance (Statuslar) + VisitedStoreOverall
     async getOperatorPerformance(req, res, next) {
         try {
             const { start, end } = req.query;
@@ -232,7 +232,7 @@ class AnalyticsController {
             const result = stats.map(item => {
                 const statusMap = Object.fromEntries(item.foundStatuses.map(s => [s.k, s.v]));
                 const myLeadIds = operatorLeadMap[String(item._id)] || [];
-                const visitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
+                const VisitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
 
                 const details = this.allPossibleStatuses.flatMap(st => {
                     const item_ = {
@@ -244,9 +244,9 @@ class AnalyticsController {
                         return [
                             item_,
                             {
-                                status: 'visitedStoreOverall',
-                                count: visitedStoreOverall,
-                                percentage: percent(visitedStoreOverall, item.total)
+                                status: 'VisitedStoreOverall',
+                                count: VisitedStoreOverall,
+                                percentage: percent(VisitedStoreOverall, item.total)
                             }
                         ];
                     }
@@ -265,7 +265,7 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-    // 4. Source Performance + visitedStoreOverall
+    // 4. Source Performance + VisitedStoreOverall
     async getSourcePerformance(req, res, next) {
         try {
             const { start, end } = req.query;
@@ -294,7 +294,7 @@ class AnalyticsController {
             const result = stats.map(item => {
                 const statusMap = Object.fromEntries(item.foundStatuses.map(s => [s.k, s.v]));
                 const myLeadIds = sourceLeadMap[String(item._id)] || [];
-                const visitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
+                const VisitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
 
                 const details = this.allPossibleStatuses.flatMap(st => {
                     const item_ = {
@@ -306,9 +306,9 @@ class AnalyticsController {
                         return [
                             item_,
                             {
-                                status: 'visitedStoreOverall',
-                                count: visitedStoreOverall,
-                                percentage: percent(visitedStoreOverall, item.total)
+                                status: 'VisitedStoreOverall',
+                                count: VisitedStoreOverall,
+                                percentage: percent(VisitedStoreOverall, item.total)
                             }
                         ];
                     }
@@ -326,7 +326,7 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-    // 5. Umumiy Status Stats + visitedStoreOverall
+    // 5. Umumiy Status Stats + VisitedStoreOverall
     async getGeneralStatusStats(req, res, next) {
         try {
             const { start, end } = req.query;
@@ -350,7 +350,7 @@ class AnalyticsController {
             const statsMap = Object.fromEntries(stats.map(s => [s._id, s.count]));
 
             const ids = (allLeadIds[0]?.leadIds || []).map(id => String(id));
-            const visitedStoreOverall = ids.filter(id => visitedEverSet.has(id)).length;
+            const VisitedStoreOverall = ids.filter(id => visitedEverSet.has(id)).length;
 
             const result = this.allPossibleStatuses.flatMap(st => {
                 const item = {
@@ -362,9 +362,9 @@ class AnalyticsController {
                     return [
                         item,
                         {
-                            status: 'visitedStoreOverall',
-                            count: visitedStoreOverall,
-                            percentage: percent(visitedStoreOverall, total)
+                            status: 'VisitedStoreOverall',
+                            count: VisitedStoreOverall,
+                            percentage: percent(VisitedStoreOverall, total)
                         }
                     ];
                 }
@@ -408,7 +408,7 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-    // 7. Source Status Distribution + visitedStoreOverall
+    // 7. Source Status Distribution + VisitedStoreOverall
     async getSourceStatusDistribution(req, res, next) {
         try {
             const { start, end } = req.query;
@@ -438,7 +438,7 @@ class AnalyticsController {
                 const dbData = statsMap[sourceName] || { total: 0, foundStats: [] };
                 const foundMap = Object.fromEntries(dbData.foundStats.map(f => [f.k, f.v]));
                 const myLeadIds = sourceLeadMap[sourceName] || [];
-                const visitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
+                const VisitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
 
                 const details = this.allPossibleStatuses.flatMap(st => {
                     const item = {
@@ -450,9 +450,9 @@ class AnalyticsController {
                         return [
                             item,
                             {
-                                status: 'visitedStoreOverall',
-                                count: visitedStoreOverall,
-                                percentage: percent(visitedStoreOverall, dbData.total)
+                                status: 'VisitedStoreOverall',
+                                count: VisitedStoreOverall,
+                                percentage: percent(VisitedStoreOverall, dbData.total)
                             }
                         ];
                     }
@@ -470,7 +470,7 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-    // 8. Branch Performance + visitedStoreOverall
+    // 8. Branch Performance + VisitedStoreOverall
     async getBranchPerformance(req, res, next) {
         try {
             const { start, end } = req.query;
@@ -506,15 +506,15 @@ class AnalyticsController {
             const result = allBranches.map(branch => {
                 const data = statsMap[String(branch.id)] || { visitedCount: 0, purchasedCount: 0, totalLeads: 0 };
                 const myLeadIds = branchLeadMap[String(branch.id)] || [];
-                const visitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
+                const VisitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
 
                 return {
                     branchName: branch.name,
                     totalLeads: data.totalLeads,
                     visitedCount: data.visitedCount,
-                    visitedStoreOverall,
+                    VisitedStoreOverall,
                     purchasedCount: data.purchasedCount,
-                    conversionToPurchase: percent(data.purchasedCount, visitedStoreOverall),
+                    conversionToPurchase: percent(data.purchasedCount, VisitedStoreOverall),
                     totalConversion: percent(data.purchasedCount, data.totalLeads)
                 };
             }).sort((a, b) => b.purchasedCount - a.purchasedCount);
