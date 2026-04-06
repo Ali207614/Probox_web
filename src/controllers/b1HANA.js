@@ -1220,6 +1220,7 @@ class b1HANA {
                 sellerRating: item?.sellerRating || null,
                 referral: item?.referral || null,
                 ratingComment: item?.ratingComment || null,
+                saleType: item?.saleType || null,
                 ratingSmsError: item?.ratingSmsError || null,
                 consideringBumped: ['Closed', 'Purchased'].includes(item.status)
                     ? false
