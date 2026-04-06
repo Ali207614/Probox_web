@@ -69,11 +69,10 @@ class AnalyticsController {
     }
 
     // ✅ Umumiy yordamchi: bir marta VisitedStore'ga tushgan barcha leadlar
-    async _getVisitedEverSet(startDate, endDate) {
+    async _getVisitedEverSet() {
         const visitedEver = await LeadChat.distinct('leadId', {
             action: 'status_changed',
-            statusTo: 'VisitedStore',
-            createdAt: { $gte: startDate, $lte: endDate }
+            statusTo: 'VisitedStore'
         });
         return new Set(visitedEver.map(id => String(id)));
     }
@@ -223,7 +222,7 @@ class AnalyticsController {
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, operator: { $ne: null } } },
                     { $group: { _id: "$operator", leadIds: { $push: "$_id" } } }
                 ]),
-                this._getVisitedEverSet(startDate, endDate)
+                this._getVisitedEverSet()
             ]);
 
             const operatorLeadMap = Object.fromEntries(
@@ -235,16 +234,30 @@ class AnalyticsController {
                 const myLeadIds = operatorLeadMap[String(item._id)] || [];
                 const visitedOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
 
+                const details = this.allPossibleStatuses.flatMap(st => {
+                    const item_ = {
+                        status: st,
+                        count: statusMap[st] || 0,
+                        percentage: percent(statusMap[st] || 0, item.total)
+                    };
+                    if (st === 'VisitedStore') {
+                        return [
+                            item_,
+                            {
+                                status: 'VisitedOverall',
+                                count: visitedOverall,
+                                percentage: percent(visitedOverall, item.total)
+                            }
+                        ];
+                    }
+                    return [item_];
+                });
+
                 return {
                     slpCode: item._id,
                     operatorName: opMap.get(String(item._id)) || "Noma'lum",
                     total: item.total,
-                    visitedOverall,
-                    details: this.allPossibleStatuses.map(st => ({
-                        status: st,
-                        count: statusMap[st] || 0,
-                        percentage: percent(statusMap[st] || 0, item.total)
-                    }))
+                    details
                 };
             });
 
@@ -271,7 +284,7 @@ class AnalyticsController {
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $ne: null } } },
                     { $group: { _id: "$source", leadIds: { $push: "$_id" } } }
                 ]),
-                this._getVisitedEverSet(startDate, endDate)
+                this._getVisitedEverSet()
             ]);
 
             const sourceLeadMap = Object.fromEntries(
@@ -283,15 +296,29 @@ class AnalyticsController {
                 const myLeadIds = sourceLeadMap[String(item._id)] || [];
                 const visitedOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
 
-                return {
-                    source: item._id || "Noma'lum",
-                    total: item.total,
-                    visitedOverall,
-                    details: this.allPossibleStatuses.map(st => ({
+                const details = this.allPossibleStatuses.flatMap(st => {
+                    const item_ = {
                         status: st,
                         count: statusMap[st] || 0,
                         percentage: percent(statusMap[st] || 0, item.total)
-                    }))
+                    };
+                    if (st === 'VisitedStore') {
+                        return [
+                            item_,
+                            {
+                                status: 'VisitedOverall',
+                                count: visitedOverall,
+                                percentage: percent(visitedOverall, item.total)
+                            }
+                        ];
+                    }
+                    return [item_];
+                });
+
+                return {
+                    source: item._id || "Noma'lum",
+                    total: item.total,
+                    details
                 };
             });
 
@@ -316,7 +343,7 @@ class AnalyticsController {
                     { $match: { actualTime: { $gte: startDate, $lte: endDate } } },
                     { $group: { _id: null, leadIds: { $push: "$_id" } } }
                 ]),
-                this._getVisitedEverSet(startDate, endDate)
+                this._getVisitedEverSet()
             ]);
 
             const total = stats.reduce((acc, curr) => acc + curr.count, 0);
@@ -325,13 +352,26 @@ class AnalyticsController {
             const ids = (allLeadIds[0]?.leadIds || []).map(id => String(id));
             const visitedOverall = ids.filter(id => visitedEverSet.has(id)).length;
 
-            const result = this.allPossibleStatuses.map(st => ({
-                status: st,
-                count: statsMap[st] || 0,
-                percentage: percent(statsMap[st] || 0, total)
-            }));
+            const result = this.allPossibleStatuses.flatMap(st => {
+                const item = {
+                    status: st,
+                    count: statsMap[st] || 0,
+                    percentage: percent(statsMap[st] || 0, total)
+                };
+                if (st === 'VisitedStore') {
+                    return [
+                        item,
+                        {
+                            status: 'VisitedOverall',
+                            count: visitedOverall,
+                            percentage: percent(visitedOverall, total)
+                        }
+                    ];
+                }
+                return [item];
+            });
 
-            res.json({ status: true, total, visitedOverall, data: result });
+            res.json({ status: true, total, data: result });
         } catch (err) { next(err); }
     }
 
@@ -386,7 +426,7 @@ class AnalyticsController {
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $in: this.sourcesList } } },
                     { $group: { _id: "$source", leadIds: { $push: "$_id" } } }
                 ]),
-                this._getVisitedEverSet(startDate, endDate)
+                this._getVisitedEverSet()
             ]);
 
             const statsMap = Object.fromEntries(stats.map(s => [s._id, s]));
@@ -400,15 +440,29 @@ class AnalyticsController {
                 const myLeadIds = sourceLeadMap[sourceName] || [];
                 const visitedOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
 
-                return {
-                    source: sourceName,
-                    total: dbData.total,
-                    visitedOverall,
-                    details: this.allPossibleStatuses.map(st => ({
+                const details = this.allPossibleStatuses.flatMap(st => {
+                    const item = {
                         status: st,
                         count: foundMap[st] || 0,
                         percentage: percent(foundMap[st] || 0, dbData.total)
-                    }))
+                    };
+                    if (st === 'VisitedStore') {
+                        return [
+                            item,
+                            {
+                                status: 'VisitedOverall',
+                                count: visitedOverall,
+                                percentage: percent(visitedOverall, dbData.total)
+                            }
+                        ];
+                    }
+                    return [item];
+                });
+
+                return {
+                    source: sourceName,
+                    total: dbData.total,
+                    details
                 };
             }).sort((a, b) => b.total - a.total);
 
@@ -441,7 +495,7 @@ class AnalyticsController {
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, branch2: { $ne: null } } },
                     { $group: { _id: "$branch2", leadIds: { $push: "$_id" } } }
                 ]),
-                this._getVisitedEverSet(startDate, endDate)
+                this._getVisitedEverSet()
             ]);
 
             const statsMap = Object.fromEntries(stats.map(s => [String(s._id), s]));
