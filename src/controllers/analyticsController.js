@@ -38,13 +38,24 @@ class AnalyticsController {
         ];
 
         this.allPossibleStatuses = [
-            'Active', 'Blocked', 'Purchased', 'Returned', 'Missed',
-            'Ignored', 'NoAnswer', 'FollowUp', 'Considering',
-            'WillVisitStore', 'WillSendPassport', 'Scoring',
-            'ScoringResult', 'VisitedStore', 'NoPurchase', 'Closed', 'Talked'
+            'Active',           // 1. Yangi lead
+            'Ignored',          // 2. E'tiborsiz
+            'Missed',           // 3. O'tkazib yuborildi
+            'NoAnswer',         // 4. Javob bermadi
+            'FollowUp',         // 5. Qayta aloqa
+            'Considering',      // 6. O'ylab ko'radi
+            'WillVisitStore',   // 7. Do'konga boradi
+            'WillSendPassport', // 8. Pasport yuboradi
+            'Scoring',          // 9. Skoring
+            'ScoringResult',    // 10. Skoring natija
+            'VisitedStore',     // 11. Do'konga keldi
+            'Purchased',        // 12. Xarid bo'ldi
+            'NoPurchase',       // 13. Xarid bo'lmadi
+            'Closed',           // 14. Sifatsiz
+            'Talked',           // 15. Suhbatlashildi
+            'Blocked',          // 16. Bloklangan
         ];
 
-        // ✅ Barcha metodlarni bog'lash
         this.getLeadsAnalytics = this.getLeadsAnalytics.bind(this);
         this.getLeadsFunnelByOperators = this.getLeadsFunnelByOperators.bind(this);
         this.getOperatorPerformance = this.getOperatorPerformance.bind(this);
@@ -54,6 +65,30 @@ class AnalyticsController {
         this.getBranchPerformance = this.getBranchPerformance.bind(this);
         this.getBranchSourceStats = this.getBranchSourceStats.bind(this);
         this.getSourcePerformance = this.getSourcePerformance.bind(this);
+    }
+
+    async getGeneralStatusStats(req, res, next) {
+        try {
+            const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
+
+            const stats = await Lead.aggregate([
+                ...getTimePipeline(),
+                { $match: { actualTime: { $gte: startDate, $lte: endDate } } },
+                { $group: { _id: "$status", count: { $sum: 1 } } }
+            ]);
+
+            const total = stats.reduce((acc, curr) => acc + curr.count, 0);
+            const statsMap = Object.fromEntries(stats.map(s => [s._id, s.count]));
+
+            const result = this.allPossibleStatuses.map(st => ({
+                status: st,
+                count: statsMap[st] || 0,
+                percentage: percent(statsMap[st] || 0, total)
+            }));
+
+            res.json({ status: true, total, data: result });
+        } catch (err) { next(err); }
     }
 
     async getOperatorsMap() {
@@ -266,31 +301,6 @@ class AnalyticsController {
         } catch (err) {
             next(err);
         }
-    }
-
-    // 4. Umumiy Status Stats
-    async getGeneralStatusStats(req, res, next) {
-        try {
-            const { start, end } = req.query;
-            const { startDate, endDate } = this._parseRange(start, end);
-
-            const stats = await Lead.aggregate([
-                ...getTimePipeline(),
-                { $match: { actualTime: { $gte: startDate, $lte: endDate } } },
-                { $group: { _id: "$status", count: { $sum: 1 } } }
-            ]);
-
-            const total = stats.reduce((acc, curr) => acc + curr.count, 0);
-            const statsMap = Object.fromEntries(stats.map(s => [s._id, s.count]));
-
-            const result = this.allPossibleStatuses.map(st => ({
-                status: st,
-                count: statsMap[st] || 0,
-                percentage: percent(statsMap[st] || 0, total)
-            })).sort((a, b) => b.count - a.count);
-
-            res.json({ status: true, total, data: result });
-        } catch (err) { next(err); }
     }
 
     // 5. Source Daily Stats
