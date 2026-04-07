@@ -45,6 +45,7 @@ const router = new Router();
 
 const invoiceRouter = require("./invoice")
 const {telegramBotBasicAuth} = require("../middlewares/basic-auth-telegram");
+const {purchasePdfBasicAuth} = require("../middlewares/basic-auth-purchase-pdf");
 const verifyCodeController = require("../controllers/verification-controller");
 
 router.post('/login', b1HANA.login);
@@ -157,6 +158,12 @@ router.get(
 router.get(
     '/public/purchases/pdfs/:docEntry',
     purchasePdfController.downloadPurchasePdfByDocEntry
+);
+
+router.get(
+    '/basic/purchases/pdfs/:docEntry',
+    purchasePdfBasicAuth,
+    purchasePdfController.downloadPurchasePdfBasicAuth
 );
 
 router.delete(

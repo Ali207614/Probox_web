@@ -18,7 +18,6 @@ function safeNumber(v) {
 }
 
 module.exports = ({ uploadService }) => ({
-
     uploadPurchasePdf: async (req, res, next) => {
         try {
             const { docEntry, cardCode, docNum } = req.body;
@@ -78,7 +77,7 @@ module.exports = ({ uploadService }) => ({
                 return res.status(400).json({ message: 'docEntry noto‘g‘ri' });
             }
 
-            const items = await PurchasePdf.find({ docEntry: docEntryNum })
+            const items = await PurchasePdf.find({ docEntry: docEntryNum, deletedAt: null })
                 .sort({ createdAt: -1 })
                 .lean();
 
@@ -104,7 +103,7 @@ module.exports = ({ uploadService }) => ({
                 return res.status(400).json({ message: 'docEntry noto‘g‘ri' });
             }
 
-            const pdf = await PurchasePdf.findOne({ docEntry: docEntryNum })
+            const pdf = await PurchasePdf.findOne({ docEntry: docEntryNum, deletedAt: null })
                 .sort({ createdAt: -1 })
                 .lean();
 
@@ -130,15 +129,41 @@ module.exports = ({ uploadService }) => ({
     },
 
 
+    downloadPurchasePdfBasicAuth: async (req, res, next) => {
+        try {
+            const docEntryNum = Number(req.params.docEntry);
+            if (!Number.isFinite(docEntryNum) || docEntryNum <= 0) {
+                return res.status(400).json({ message: 'docEntry noto‘g‘ri' });
+            }
+
+            const pdf = await PurchasePdf.findOne({ docEntry: docEntryNum, deletedAt: null })
+                .sort({ createdAt: -1 })
+                .lean();
+
+            if (!pdf) return res.status(404).json({ message: 'PDF topilmadi' });
+
+            const url = await uploadService.getSignedUrl(pdf.pdfKey, 3600);
+
+            return res.json({
+                status: true,
+                docEntry: docEntryNum,
+                fileName: pdf.fileName,
+                url,
+            });
+        } catch (err) {
+            next(err);
+        }
+    },
+
     deletePurchasePdf: async (req, res, next) => {
         try {
             const { id } = req.params;
 
-            const pdf = await PurchasePdf.findById(id);
+            const pdf = await PurchasePdf.findOne({ _id: id, deletedAt: null });
             if (!pdf) return res.status(404).json({ message: 'PDF topilmadi' });
 
-            await uploadService.deleteImages([pdf.pdfKey]);
-            await pdf.deleteOne();
+            pdf.deletedAt = new Date();
+            await pdf.save();
 
             return res.json({ status: true });
         } catch (err) {

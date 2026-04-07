@@ -28,6 +28,12 @@ const PurchasePdfSchema = new Schema(
         fileName: { type: String, required: true },
         mimeType: { type: String, required: true }, // application/pdf
         size: { type: Number, required: true },
+
+        deletedAt: {
+            type: Date,
+            default: null,
+            index: true,
+        },
     },
     { timestamps: true }
 );
