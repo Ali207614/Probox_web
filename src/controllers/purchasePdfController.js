@@ -20,7 +20,17 @@ function safeNumber(v) {
 module.exports = ({ uploadService }) => ({
     uploadPurchasePdf: async (req, res, next) => {
         try {
-            const { docEntry, cardCode, docNum } = req.body;
+            const {
+                docEntry,
+                cardCode,
+                docNum,
+                fio,
+                invoiceSum,
+                term,
+                productName,
+                downPayment,
+                monthlyPayment,
+            } = req.body;
             const file = req.file;
 
             if (!file) return res.status(400).json({ message: 'PDF yuklanmadi' });
@@ -47,14 +57,30 @@ module.exports = ({ uploadService }) => ({
                 }
             );
 
+            const invoiceSumNum = safeNumber(invoiceSum);
+            const termNum = safeNumber(term);
+            const downPaymentNum = safeNumber(downPayment);
+            const monthlyPaymentNum = safeNumber(monthlyPayment);
+
+            const termMonths =
+                Number.isFinite(termNum) && termNum >= 1 && termNum <= 60
+                    ? Math.trunc(termNum)
+                    : null;
+
             const saved = await PurchasePdf.create({
                 docEntry: docEntryNum,
                 cardCode: cardCode ? String(cardCode).trim() : null,
                 docNum: docNum ? String(docNum).trim() : null,
+                fio: fio ? String(fio).trim() : null,
                 pdfKey: uploaded.key,
                 fileName: uploaded.filename,
                 mimeType: uploaded.mimetype,
                 size: uploaded.size,
+                invoiceSum: Number.isFinite(invoiceSumNum) ? invoiceSumNum : null,
+                term: termMonths,
+                productName: productName ? String(productName).trim() : null,
+                downPayment: Number.isFinite(downPaymentNum) ? downPaymentNum : null,
+                monthlyPayment: Number.isFinite(monthlyPaymentNum) ? monthlyPaymentNum : null,
             });
 
             const pdfUrl = `public/purchases/pdfs/${saved._id}.pdf`;
