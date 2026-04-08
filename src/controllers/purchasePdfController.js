@@ -162,7 +162,7 @@ module.exports = ({ uploadService }) => ({
                 return res.status(400).json({ message: 'docEntry noto‘g‘ri' });
             }
 
-            const pdf = await PurchasePdf.findOne({ docEntry: docEntryNum, deletedAt: null })
+            const pdf = await PurchasePdf.findOne({ docEntry: docEntryNum, })
                 .sort({ createdAt: -1 })
                 .lean();
 
@@ -195,7 +195,7 @@ module.exports = ({ uploadService }) => ({
                 return res.status(400).json({ message: 'docEntry noto‘g‘ri' });
             }
 
-            const pdf = await PurchasePdf.findOne({ docEntry: docEntryNum, deletedAt: null })
+            const pdf = await PurchasePdf.findOne({ docEntry: docEntryNum })
                 .sort({ createdAt: -1 })
                 .lean();
 
