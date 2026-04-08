@@ -8,6 +8,13 @@ const PurchasePdfSchema = new Schema(
             index: true,
         },
 
+        leadId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Lead',
+            default: null,
+            index: true,
+        },
+
         cardCode: {
             type: String,
             index: true,

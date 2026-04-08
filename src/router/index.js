@@ -156,6 +156,12 @@ router.get(
 );
 
 router.get(
+    '/purchase/pdf/lead/:leadId',
+    authMiddleware,
+    purchasePdfController.getPurchasePdfsByLeadId
+);
+
+router.get(
     '/public/purchases/pdfs/:docEntry',
     purchasePdfController.downloadPurchasePdfByDocEntry
 );

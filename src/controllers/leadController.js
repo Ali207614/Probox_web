@@ -286,8 +286,6 @@ class LeadController {
             next(e);
         }
     };
-
-
 }
 
 module.exports = new LeadController();

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const PurchasePdf = require('../models/purchase-image-model');
 const { GetObjectCommand } = require('@aws-sdk/client-s3');
 
@@ -30,6 +31,7 @@ module.exports = ({ uploadService }) => ({
                 productName,
                 downPayment,
                 monthlyPayment,
+                leadId
             } = req.body;
             const file = req.file;
 
@@ -67,8 +69,12 @@ module.exports = ({ uploadService }) => ({
                     ? Math.trunc(termNum)
                     : null;
 
+            const leadIdValid =
+                leadId && mongoose.Types.ObjectId.isValid(leadId) ? leadId : null;
+
             const saved = await PurchasePdf.create({
                 docEntry: docEntryNum,
+                leadId: leadIdValid,
                 cardCode: cardCode ? String(cardCode).trim() : null,
                 docNum: docNum ? String(docNum).trim() : null,
                 fio: fio ? String(fio).trim() : null,
@@ -115,6 +121,33 @@ module.exports = ({ uploadService }) => ({
             return res.json({
                 status: true,
                 docEntry: docEntryNum,
+                items: out,
+            });
+        } catch (err) {
+            next(err);
+        }
+    },
+
+    getPurchasePdfsByLeadId: async (req, res, next) => {
+        try {
+            const { leadId } = req.params;
+
+            if (!leadId || !mongoose.Types.ObjectId.isValid(leadId)) {
+                return res.status(400).json({ message: 'leadId noto‘g‘ri' });
+            }
+
+            const items = await PurchasePdf.find({ leadId, deletedAt: null })
+                .sort({ createdAt: -1 })
+                .lean();
+
+            const out = items.map((pdf) => ({
+                ...pdf,
+                pdfUrl: `/public/purchases/pdfs/${pdf.docEntry}`,
+            }));
+
+            return res.json({
+                status: true,
+                leadId,
                 items: out,
             });
         } catch (err) {
