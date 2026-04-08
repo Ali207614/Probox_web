@@ -89,7 +89,9 @@ module.exports = ({ uploadService }) => ({
                 monthlyPayment: Number.isFinite(monthlyPaymentNum) ? monthlyPaymentNum : null,
             });
 
-            const pdfUrl = `public/purchases/pdfs/${saved._id}.pdf`;
+            const pdfUrl = saved.docNum
+                ? `/public/purchases/pdfs/${saved.docNum}`
+                : null;
 
             return res.json({
                 status: true,
@@ -115,7 +117,7 @@ module.exports = ({ uploadService }) => ({
 
             const out = items.map((pdf) => ({
                 ...pdf,
-                pdfUrl: `/public/purchases/pdfs/${docEntryNum}`,
+                pdfUrl: pdf.docNum ? `/public/purchases/pdfs/${pdf.docNum}` : null,
             }));
 
             return res.json({
@@ -136,13 +138,13 @@ module.exports = ({ uploadService }) => ({
                 return res.status(400).json({ message: 'leadId noto‘g‘ri' });
             }
 
-            const items = await PurchasePdf.find({ leadId })
+            const items = await PurchasePdf.find({ leadId, deletedAt: null })
                 .sort({ createdAt: -1 })
                 .lean();
 
             const out = items.map((pdf) => ({
                 ...pdf,
-                pdfUrl: `/public/purchases/pdfs/${pdf.docEntry}`,
+                pdfUrl: pdf.docNum ? `/public/purchases/pdfs/${pdf.docNum}` : null,
             }));
 
             return res.json({
@@ -155,14 +157,14 @@ module.exports = ({ uploadService }) => ({
         }
     },
 
-    downloadPurchasePdfByDocEntry: async (req, res, next) => {
+    downloadPurchasePdfByDocNum: async (req, res, next) => {
         try {
-            const docEntryNum = Number(req.params.docEntry);
-            if (!Number.isFinite(docEntryNum) || docEntryNum <= 0) {
-                return res.status(400).json({ message: 'docEntry noto‘g‘ri' });
+            const docNum = req.params.docNum ? String(req.params.docNum).trim() : '';
+            if (!docNum) {
+                return res.status(400).json({ message: 'docNum noto‘g‘ri' });
             }
 
-            const pdf = await PurchasePdf.findOne({ docEntry: docEntryNum, })
+            const pdf = await PurchasePdf.findOne({ docNum, deletedAt: null })
                 .sort({ createdAt: -1 })
                 .lean();
 
@@ -178,7 +180,7 @@ module.exports = ({ uploadService }) => ({
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader(
                 'Content-Disposition',
-                `inline; filename="${encodeURIComponent(pdf.fileName || `purchase-${docEntryNum}.pdf`)}"`
+                `inline; filename="${encodeURIComponent(pdf.fileName || `purchase-${docNum}.pdf`)}"`
             );
 
             data.Body.pipe(res);
@@ -190,12 +192,12 @@ module.exports = ({ uploadService }) => ({
 
     downloadPurchasePdfBasicAuth: async (req, res, next) => {
         try {
-            const docEntryNum = Number(req.params.docEntry);
-            if (!Number.isFinite(docEntryNum) || docEntryNum <= 0) {
-                return res.status(400).json({ message: 'docEntry noto‘g‘ri' });
+            const docNum = req.params.docNum ? String(req.params.docNum).trim() : '';
+            if (!docNum) {
+                return res.status(400).json({ message: 'docNum noto‘g‘ri' });
             }
 
-            const pdf = await PurchasePdf.findOne({ docEntry: docEntryNum })
+            const pdf = await PurchasePdf.findOne({ docNum, deletedAt: null })
                 .sort({ createdAt: -1 })
                 .lean();
 
@@ -205,7 +207,7 @@ module.exports = ({ uploadService }) => ({
 
             return res.json({
                 status: true,
-                docEntry: docEntryNum,
+                docNum,
                 fileName: pdf.fileName,
                 url,
             });

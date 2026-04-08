@@ -162,12 +162,12 @@ router.get(
 );
 
 router.get(
-    '/public/purchases/pdfs/:docEntry',
-    purchasePdfController.downloadPurchasePdfByDocEntry
+    '/public/purchases/pdfs/:docNum',
+    purchasePdfController.downloadPurchasePdfByDocNum
 );
 
 router.get(
-    '/basic/purchases/pdfs/:docEntry',
+    '/basic/purchases/pdfs/:docNum',
     purchasePdfBasicAuth,
     purchasePdfController.downloadPurchasePdfBasicAuth
 );
