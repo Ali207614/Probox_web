@@ -136,7 +136,7 @@ module.exports = ({ uploadService }) => ({
                 return res.status(400).json({ message: 'leadId noto‘g‘ri' });
             }
 
-            const items = await PurchasePdf.find({ leadId, deletedAt: null })
+            const items = await PurchasePdf.find({ leadId })
                 .sort({ createdAt: -1 })
                 .lean();
 
