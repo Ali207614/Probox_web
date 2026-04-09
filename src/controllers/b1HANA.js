@@ -2763,7 +2763,7 @@ class b1HANA {
             }
 
             const bodyRecall = req.body.recallDate;
-            const keepRecallStatuses = new Set(['FollowUp', 'WillVisitStore', 'WillSendPassport']);
+            const keepRecallStatuses = new Set(['FollowUp', 'WillVisitStore', 'WillSendPassport' , 'Considering']);
 
             if (bodyRecall) {
                 const parsed = parseRecallDate(bodyRecall);
