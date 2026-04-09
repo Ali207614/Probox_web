@@ -14,7 +14,7 @@ const TARGET_OPERATOR_CODE = 58;
  */
 function startMehrliCallJob() {
     cron.schedule(
-        '0 10 * * *',
+        '0 12 * * *',
         async () => {
             try {
                 console.log('[CRON] Mehrli Qongiroq job started');
