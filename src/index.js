@@ -107,13 +107,27 @@ io.on('connection', async (socket) => {
                 socket.emit('force-refresh', {
                     message: 'Iltimos, sahifani yangilang',
                 });
-                flag.force_refresh = false;
-                await flag.save();
+                // ❗ flagni bu yerda o'chirmaymiz — frontend ACK kutamiz
             }
         } catch (err) {
             console.error('❌ force-refresh tekshirishda xatolik:', err.message);
         }
     }
+
+    // Frontend sahifani yangilaganda yuboradi
+    socket.on('force-refresh:done', async () => {
+        try {
+            const slp = socket.user?.SlpCode;
+            if (slp != null) {
+                await RefreshFlag.updateOne(
+                    { slpCode: slp },
+                    { $set: { force_refresh: false } }
+                );
+            }
+        } catch (err) {
+            console.error('❌ force-refresh:done xatolik:', err.message);
+        }
+    });
 
     socket.on('disconnect', () => console.log('🔴 Client disconnected:', socket.id));
 });
