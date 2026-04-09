@@ -25,6 +25,8 @@ const {startScoringBumpNotifyCron} = require("./utils/scoring-bump-notify.cron")
 const {pbxClient} = require("./integrations/pbx");
 const {startRatingSmsCron} = require("./utils/rating-sms.cron");
 const startMehrliCallJob = require("./utils/mehrli-call-job");
+const tokenService = require('./services/tokenService');
+const RefreshFlag = require('./models/refresh-flag-model');
 
 const TRUNK_NAMES = [
     'f6813980348e52891f64fa3ce451de69',
@@ -71,9 +73,48 @@ mongoose
     .then(() => console.log('🟢 MongoDB connected'))
     .catch((err) => console.error('❌ MongoDB connection error:', err));
 
+// === SOCKET.IO AUTH ===
+io.use((socket, next) => {
+    try {
+        const token =
+            socket.handshake.auth?.token ||
+            socket.handshake.headers?.authorization ||
+            socket.handshake.query?.token;
+
+        if (!token) return next();
+
+        const userData = tokenService.validateAccessToken(token);
+        if (userData) {
+            socket.user = userData;
+        }
+        return next();
+    } catch (e) {
+        return next();
+    }
+});
+
 // === SOCKET.IO EVENTS ===
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
     console.log('🟣 Client connected:', socket.id);
+
+    const slpCode = socket.user?.SlpCode;
+    if (slpCode != null) {
+        socket.join(`slp:${slpCode}`);
+
+        try {
+            const flag = await RefreshFlag.findOne({ slpCode });
+            if (flag?.force_refresh) {
+                socket.emit('force-refresh', {
+                    message: 'Iltimos, sahifani yangilang',
+                });
+                flag.force_refresh = false;
+                await flag.save();
+            }
+        } catch (err) {
+            console.error('❌ force-refresh tekshirishda xatolik:', err.message);
+        }
+    }
+
     socket.on('disconnect', () => console.log('🔴 Client disconnected:', socket.id));
 });
 

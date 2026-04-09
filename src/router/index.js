@@ -47,6 +47,7 @@ const invoiceRouter = require("./invoice")
 const {telegramBotBasicAuth} = require("../middlewares/basic-auth-telegram");
 const {purchasePdfBasicAuth} = require("../middlewares/basic-auth-purchase-pdf");
 const verifyCodeController = require("../controllers/verification-controller");
+const forceRefreshController = require("../controllers/forceRefreshController");
 
 router.post('/login', b1HANA.login);
 
@@ -224,6 +225,9 @@ router.get('/leads/:id/chat', authMiddleware, b1HANA.getChats);
 router.put('/leads/chat/:chatId', authMiddleware, b1HANA.updateChat);
 router.delete('/leads/chat/:chatId', authMiddleware, b1HANA.deleteChat);
 
+
+router.post('/force-refresh/user', authMiddleware, forceRefreshController.setForUser);
+router.post('/force-refresh/all', authMiddleware, forceRefreshController.setForAll);
 
 router.get('/test', (req, res) => {
     res.json({ message: 'ok' });

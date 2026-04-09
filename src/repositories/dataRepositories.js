@@ -99,6 +99,11 @@ OFFSET ${Number(offset) || 0};
         SELECT T0."SlpCode", T0."SlpName", T0."GroupCode", T0."Telephone", T0."U_login", T0."U_password",T0."U_role" , T0."U_branch" FROM ${this.db}.OSLP T0 where T0."U_login"= '${login}' and T0."U_password"='${password}'`;
     }
 
+    async getAllSalesManagers() {
+        return `
+        SELECT T0."SlpCode", T0."SlpName", T0."GroupCode", T0."Telephone", T0."U_login", T0."U_password", T0."U_role", T0."U_branch" FROM ${this.db}.OSLP T0`;
+    }
+
     async getInvoice({ startDate, endDate, limit, offset, paymentStatus, cardCode, serial, phone, search, inInv = [], notInv = [], phoneConfiscated, partial }) {
 
         let statusCondition = '';
