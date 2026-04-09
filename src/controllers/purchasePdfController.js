@@ -140,13 +140,20 @@ module.exports = ({ uploadService }) => ({
             }
 
             const lead = await LeadModel.findOne({ _id: leadId })
-                .select('invoiceDocEntry')
+                .select('invoiceDocEntry invoiceDocNum')
                 .lean();
 
             const docEntryNum = safeNumber(lead?.invoiceDocEntry);
+            const docNumStr = lead?.invoiceDocNum
+                ? String(lead.invoiceDocNum).trim()
+                : null;
+
             const or = [{ leadId }];
             if (Number.isFinite(docEntryNum) && docEntryNum > 0) {
                 or.push({ docEntry: docEntryNum });
+            }
+            if (docNumStr) {
+                or.push({ docNum: docNumStr });
             }
 
             const items = await PurchasePdf.find({ $or: or, deletedAt: null })
