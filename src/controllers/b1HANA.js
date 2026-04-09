@@ -1050,6 +1050,9 @@ class b1HANA {
                             status: 'Purchased',
                             $or: [{ purchaseDate: dateQuery }, { purchaseDate: null, invoiceCreatedAt: dateQuery }]
                         });
+                    }
+                    else if (meeting === 'meetingDate') {
+                        addAndCondition(filter, { recallDate: dateQuery });
                     } else {
                         filter.meetingDate = dateQuery;
                     }
