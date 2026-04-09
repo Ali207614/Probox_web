@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const PurchasePdf = require('../models/purchase-image-model');
+const LeadModel = require('../models/lead-model');
 const { GetObjectCommand } = require('@aws-sdk/client-s3');
 
 function assertPdf(file) {
@@ -138,14 +139,31 @@ module.exports = ({ uploadService }) => ({
                 return res.status(400).json({ message: 'leadId noto‘g‘ri' });
             }
 
-            const items = await PurchasePdf.find({ leadId, deletedAt: null })
+            const lead = await LeadModel.findOne({ _id: leadId })
+                .select('invoiceDocEntry')
+                .lean();
+
+            const docEntryNum = safeNumber(lead?.invoiceDocEntry);
+            const or = [{ leadId }];
+            if (Number.isFinite(docEntryNum) && docEntryNum > 0) {
+                or.push({ docEntry: docEntryNum });
+            }
+
+            const items = await PurchasePdf.find({ $or: or, deletedAt: null })
                 .sort({ createdAt: -1 })
                 .lean();
 
-            const out = items.map((pdf) => ({
-                ...pdf,
-                pdfUrl: pdf.docNum ? `/public/purchases/pdfs/${pdf.docNum}` : null,
-            }));
+            const seen = new Set();
+            const out = [];
+            for (const pdf of items) {
+                const key = String(pdf._id);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                out.push({
+                    ...pdf,
+                    pdfUrl: pdf.docNum ? `/public/purchases/pdfs/${pdf.docNum}` : null,
+                });
+            }
 
             return res.json({
                 status: true,
