@@ -209,16 +209,38 @@ class AnalyticsController {
             const { startDate, endDate } = this._parseRange(start, end);
             const opMap = await this.getOperatorsMap();
 
+            const statusTimePipeline = [
+                {
+                    $addFields: {
+                        actualTime: {
+                            $switch: {
+                                branches: [
+                                    {
+                                        case: { $eq: ["$status", "VisitedStore"] },
+                                        then: { $ifNull: ["$time", "$createdAt"] }
+                                    },
+                                    {
+                                        case: { $eq: ["$status", "Purchased"] },
+                                        then: "$purchaseDate"
+                                    }
+                                ],
+                                default: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
+                            }
+                        }
+                    }
+                }
+            ];
+
             const [stats, operatorLeads, visitedEverSet] = await Promise.all([
                 Lead.aggregate([
-                    ...getTimePipeline(),
+                    ...statusTimePipeline,
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, operator: { $ne: null } } },
                     { $group: { _id: { operator: "$operator", status: "$status" }, count: { $sum: 1 } } },
                     { $group: { _id: "$_id.operator", foundStatuses: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } },
                     { $sort: { total: -1 } }
                 ]),
                 Lead.aggregate([
-                    ...getTimePipeline(),
+                    ...statusTimePipeline,
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, operator: { $ne: null } } },
                     { $group: { _id: "$operator", leadIds: { $push: "$_id" } } }
                 ]),
