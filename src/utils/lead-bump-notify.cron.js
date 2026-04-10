@@ -231,7 +231,7 @@ async function processEscalateStage(now) {
         const clientInfo = lead.clientName || lead.clientPhone || lead.n || "Noma'lum";
 
         const escalationText =
-            `🚨 <b>Escalation!</b>\n\n` +
+            `🚨 <b>Muddati o'tgan vazifa!</b>\n\n` +
             `${mentionTag}, <b>${escapeHtml(operatorName)}</b> — <b>${escapeHtml(statusLabel)}</b> uchun kelgan leadga qayta aloqaga chiqmadi.\n\n` +
             `👤 Mijoz: <b>${escapeHtml(clientInfo)}</b>\n` +
             `📋 Lead: <a href="${link}">${escapeHtml(lead.n || lead._id)}</a>\n\n` +
