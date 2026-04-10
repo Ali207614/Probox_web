@@ -70,6 +70,7 @@ const LeadSchema = new Schema(
         purchase: { type: Boolean, description: 'Xarid amalga oshdimi? (Sotuvchi ozgaradi)' },
         purchaseDate: { type: Date, description: 'Xarid sanasi' },
         saleType: { type: String, description: 'Savdo turi (naqd, kredit, muddatli...) (Sotuvchi ozgaradi)' },
+        usedType: { type: String, description: 'Savdo turi (naqd, kredit, muddatli...) (Sotuvchi ozgaradi)' },
         passportId: { type: String, description: 'Pasport ID (Sotuvchi ozgaradi)' },
         jshshir2: { type: String, description: 'Qo‘shimcha JSHSHIR raqami (Sotuvchi ozgaradi)' },
         clientFullName: { type: String, description: 'Client F.I.O (Scoring)' },

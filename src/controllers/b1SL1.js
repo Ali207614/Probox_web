@@ -643,7 +643,7 @@ class b1SL {
                         // ✨ Faqat kod va ID (Frontend map qiladi)
                         seller: sellerId,
                         branch: branchCode,
-                        saleType: usedType, // yoki sxemangizdagi sotuv turi maydoni
+                        usedType: usedType, // yoki sxemangizdagi sotuv turi maydoni
 
                         ...(createdBP && { cardCode: body.CardCode }),
                     },
@@ -709,7 +709,7 @@ class b1SL {
                         { field: 'purchase', from: false, to: true },
                         { field: 'branch', from: null, to: branchCode },
                         { field: 'seller', from: null, to: sellerId },
-                        { field: 'saleType', from: null, to: usedType }
+                        { field: 'usedType', from: null, to: usedType }
                     ]
                 });
             } catch (eventErr) {
