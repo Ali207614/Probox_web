@@ -297,16 +297,42 @@ class AnalyticsController {
             const { start, end } = req.query;
             const { startDate, endDate } = this._parseRange(start, end);
 
+            const statusTimePipeline = [
+                {
+                    $addFields: {
+                        actualTime: {
+                            $switch: {
+                                branches: [
+                                    {
+                                        case: { $eq: ["$status", "VisitedStore"] },
+                                        then: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
+                                    },
+                                    {
+                                        case: { $eq: ["$status", "Purchased"] },
+                                        then: "$purchaseDate"
+                                    },
+                                    {
+                                        case: { $eq: ["$status", "Talked"] },
+                                        then: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
+                                    }
+                                ],
+                                default: { $ifNull: ["$time", "$createdAt"] }
+                            }
+                        }
+                    }
+                }
+            ];
+
             const [stats, sourceLeads, visitedEverSet] = await Promise.all([
                 Lead.aggregate([
-                    ...getTimePipeline(),
+                    ...statusTimePipeline,
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $ne: null } } },
                     { $group: { _id: { source: "$source", status: "$status" }, count: { $sum: 1 } } },
                     { $group: { _id: "$_id.source", foundStatuses: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } },
                     { $sort: { total: -1 } }
                 ]),
                 Lead.aggregate([
-                    ...getTimePipeline(),
+                    ...statusTimePipeline,
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, source: { $ne: null } } },
                     { $group: { _id: "$source", leadIds: { $push: "$_id" } } }
                 ]),
