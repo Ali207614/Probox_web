@@ -217,14 +217,18 @@ class AnalyticsController {
                                 branches: [
                                     {
                                         case: { $eq: ["$status", "VisitedStore"] },
-                                        then: { $ifNull: ["$time", "$createdAt"] }
+                                        then: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
                                     },
                                     {
                                         case: { $eq: ["$status", "Purchased"] },
                                         then: "$purchaseDate"
+                                    },
+                                    {
+                                        case: { $eq: ["$status", "Talked"] },
+                                        then: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
                                     }
                                 ],
-                                default: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
+                                default: { $ifNull: ["$time", "$createdAt"] }
                             }
                         }
                     }
