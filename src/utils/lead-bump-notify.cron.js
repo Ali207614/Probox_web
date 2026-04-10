@@ -18,6 +18,8 @@ const {
 
 const {
     QA_GROUP_CHAT_ID,
+    QA_TOPIC_SIFATSIZ,
+    QA_TOPIC_VAZIFALAR,
     escapeHtml,
     isWithinWorkingHours,
     buildLeadLink,
@@ -42,10 +44,12 @@ const ESCALATE_BATCH_SIZE = Number(process.env.BUMP_ESCALATE_BATCH_SIZE || 30);
 const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE_NOTIFY || '2026-03-01T00:00:00+05:00');
 
 // ---- helpers
-async function sendTelegramMessage(chatId, text) {
+async function sendTelegramMessage(chatId, text, messageThreadId) {
     if (!chatId) return false;
     try {
-        await bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
+        const opts = { parse_mode: 'HTML' };
+        if (messageThreadId) opts.message_thread_id = messageThreadId;
+        await bot.sendMessage(chatId, text, opts);
         return true;
     } catch (err) {
         console.error(`[CRON:bump-notify] TG send error (chat_id=${chatId}):`, err?.message || err);
@@ -242,7 +246,7 @@ async function processEscalateStage(now) {
 
         let sentToGroup = false;
         if (QA_GROUP_CHAT_ID) {
-            sentToGroup = await sendTelegramMessage(QA_GROUP_CHAT_ID, escalationText);
+            sentToGroup = await sendTelegramMessage(QA_GROUP_CHAT_ID, escalationText, QA_TOPIC_VAZIFALAR);
             if (sentToGroup) escalated++;
         }
 
@@ -316,7 +320,7 @@ async function processNoPurchaseEscalation(now) {
             `📋 Lead: <a href="${link}">${escapeHtml(lead.n || lead._id)}</a>\n\n` +
             `Iltimos, sababini aniqlang!`;
 
-        const sent = await sendTelegramMessage(QA_GROUP_CHAT_ID, text);
+        const sent = await sendTelegramMessage(QA_GROUP_CHAT_ID, text, QA_TOPIC_VAZIFALAR);
         if (sent) {
             escalated++;
             idsToUpdate.push(lead._id);
@@ -440,7 +444,7 @@ async function processClosedEscalation(now, { pbxClient, trunkNames }) {
                 `\n${geminiLine}\n\n` +
                 `Iltimos, sababini aniqlang!`;
 
-            const sent = await sendTelegramMessage(QA_GROUP_CHAT_ID, text);
+            const sent = await sendTelegramMessage(QA_GROUP_CHAT_ID, text, QA_TOPIC_SIFATSIZ);
             if (sent) {
                 escalated++;
                 idsToUpdate.push(lead._id);

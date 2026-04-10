@@ -9,6 +9,8 @@ const WORK_HOUR_END = Number(process.env.WORK_HOUR_END || 21);
 const LEAD_LINK_BASE = process.env.LEAD_LINK_BASE || 'https://yourdomain.com/leads';
 
 const QA_GROUP_CHAT_ID = process.env.QA_GROUP_CHAT_ID || null;
+const QA_TOPIC_SIFATSIZ = Number(process.env.QA_TOPIC_SIFATSIZ || 6086);
+const QA_TOPIC_VAZIFALAR = Number(process.env.QA_TOPIC_VAZIFALAR || 6082);
 const QA_MENTION_USER_ID = process.env.QA_MENTION_USER_ID || null;
 const QA_MENTION_NAME = process.env.QA_MENTION_NAME || 'Aloqa markazi';
 
@@ -30,6 +32,8 @@ function buildMentionTag() {
 
 module.exports = {
     QA_GROUP_CHAT_ID,
+    QA_TOPIC_SIFATSIZ,
+    QA_TOPIC_VAZIFALAR,
     escapeHtml,
     isWithinWorkingHours,
     buildLeadLink,
