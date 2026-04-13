@@ -1740,9 +1740,13 @@ class b1HANA {
                     isSystem: true,
                     type: 'event',
                     action: 'lead_updated',
-                    message: 'Lead bumped (Web)',
+                    message: `Web saytdan qayta murojaat: ${clientName} (${cleanedPhone})`,
                     changes: [
                         { field: 'newTime', from: null, to: existingLead.newTime },
+                        { field: 'source', from: null, to: 'Web' },
+                        { field: 'clientName', from: null, to: clientName },
+                        { field: 'clientPhone', from: null, to: cleanedPhone },
+                        ...(comment ? [{ field: 'comment', from: null, to: comment }] : []),
                     ],
                 });
 
