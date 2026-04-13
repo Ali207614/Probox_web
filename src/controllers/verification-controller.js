@@ -19,8 +19,12 @@ const sendVerificationCode = async (req, res) => {
             ? devices.map(d => d.name).join(', ')
             : "Tanlangan mahsulotlar";
 
-       // const text = `Assalomu alaykum! Bu Probox jamoasi.\n\t\n ${deviceNames} sizniki bo'lishiga bir qadam qoldi. Xaridingizni xavfsiz tasdiqlash uchun menejerga ushbu maxsus kodni taqdim eting:\n\t\nKod: ${code}\n\t\nTexnikangiz uzoq vaqt xizmatingizda bo'lsin!`;
-        const text = `Probox telegram botida ro'yxatdan o'tishni tasdiqlash kodi - ${code}`;
+        const local9 = cleanPhone.slice(-9);
+        const isUcell = local9.startsWith('93') || local9.startsWith('94') || local9.startsWith('50') || local9.startsWith('04');
+
+        const text = isUcell
+            ? `Probox telegram botida ro'yxatdan o'tishni tasdiqlash kodi - ${code}`
+            : `Assalomu alaykum! Bu Probox jamoasi.\n\n${deviceNames} sizniki bo'lishiga bir qadam qoldi. Xaridingizni xavfsiz tasdiqlash uchun menejerga ushbu maxsus kodni taqdim eting:\n\nKod: ${code}\n\nTexnikangiz uzoq vaqt xizmatingizda bo'lsin!`;
 
         // 4. Eskisi bo'lsa o'chirib, yangisini bazaga saqlaymiz
         await VerificationCodeModel.deleteMany({ phone: cleanPhone });
