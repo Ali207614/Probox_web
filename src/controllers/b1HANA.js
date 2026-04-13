@@ -39,6 +39,8 @@ const uploadService = new UploadServiceClass();
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 require('dotenv').config();
 
+const PERSONAL_CHAT_ID = Number(process.env.PERSONAL_CHAT_ID || process.env.PERSONAL_CHATID || 0);
+
 const { createOnlinePbx } = require('./pbx.client');
 const {fetchLeadPbxChats} = require("../services/lead_pbx_sync.service");
 const axios = require("axios");
@@ -3072,18 +3074,43 @@ class b1HANA {
 
             if (prevStatus !== 'VisitedStore' && updated.status === 'VisitedStore') {
                 try {
-                    await sendCouponStatusWebhook({
+                    const couponResponse = await sendCouponStatusWebhook({
                         leadId: updated._id,
                         fullName: updated.clientName,
                         phoneNumber: updated.clientPhone,
                         status: updated.status,
                         referral: updated.referral,
                     });
+
+                    const responseData = couponResponse
+                        ? JSON.stringify(couponResponse).substring(0, 3500)
+                        : 'No response data';
+
+                    const successMessage =
+                        `<b>✅ Coupon Webhook muvaffaqiyatli!</b>\n\n` +
+                        `<b>Vaqt:</b> ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' })}\n` +
+                        `<b>Lead ID:</b> ${updated._id}\n` +
+                        `<b>Phone:</b> ${updated.clientPhone}\n` +
+                        `<b>Status:</b> VisitedStore\n\n` +
+                        `<b>Response:</b>\n` +
+                        `<pre><code>${responseData}</code></pre>`;
+
+                    await bot.sendMessage(PERSONAL_CHAT_ID, successMessage, { parse_mode: 'HTML' }).catch(() => {});
                 } catch (webhookError) {
-                    console.error(
-                        `[coupon-webhook] failed for lead ${updated._id}:`,
-                        webhookError?.response?.data || webhookError.message
-                    );
+                    const errData = webhookError?.response?.data
+                        ? JSON.stringify(webhookError.response.data).substring(0, 3500)
+                        : webhookError.message;
+
+                    const errorMessage =
+                        `<b>🚨 Coupon Webhook xatolik!</b>\n\n` +
+                        `<b>Vaqt:</b> ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' })}\n` +
+                        `<b>Lead ID:</b> ${updated._id}\n` +
+                        `<b>Phone:</b> ${updated.clientPhone}\n` +
+                        `<b>Status:</b> VisitedStore\n\n` +
+                        `<b>Xatolik:</b>\n` +
+                        `<pre><code>${errData}</code></pre>`;
+
+                    await bot.sendMessage(PERSONAL_CHAT_ID, errorMessage, { parse_mode: 'HTML' }).catch(() => {});
                 }
             }
 

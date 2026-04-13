@@ -653,7 +653,7 @@ class b1SL {
             const firstLine = Array.isArray(req.body?.DocumentLines) ? req.body.DocumentLines[0] : null;
 
             try {
-                await sendCouponStatusWebhook({
+                const couponResponse = await sendCouponStatusWebhook({
                     leadId,
                     phoneNumber: normalizedPhone ? `${normalizedPhone}` : rawPhone,
                     status: 'Purchased',
@@ -661,12 +661,18 @@ class b1SL {
                     productName: firstLine?.ItemName || firstLine?.Dscription || null,
                 });
 
+                const responseData = couponResponse
+                    ? JSON.stringify(couponResponse).substring(0, 3500)
+                    : 'No response data';
+
                 const successMessage =
                     `<b>✅ Coupon Webhook muvaffaqiyatli!</b>\n\n` +
                     `<b>Vaqt:</b> ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' })}\n` +
                     `<b>Lead ID:</b> ${leadId}\n` +
                     `<b>Phone:</b> ${normalizedPhone || rawPhone}\n` +
-                    `<b>Status:</b> Purchased`;
+                    `<b>Status:</b> Purchased\n\n` +
+                    `<b>Response:</b>\n` +
+                    `<pre><code>${responseData}</code></pre>`;
 
                 await bot.sendMessage(PERSONAL_CHAT_ID, successMessage, { parse_mode: 'HTML' }).catch(() => {});
             } catch (couponErr) {

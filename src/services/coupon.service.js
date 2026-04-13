@@ -31,7 +31,7 @@ async function sendCouponStatusWebhook({
             payload.referral = referral;
         }
 
-        await axios.post(
+        const response = await axios.post(
             process.env.COUPON_API_URL,
             payload,
             {
@@ -44,11 +44,14 @@ async function sendCouponStatusWebhook({
         );
 
         console.log(`[coupon-webhook] sent successfully for lead ${leadId}`);
+
+        return response.data;
     } catch (error) {
         console.error(
             '[coupon-webhook] failed:',
             error?.response?.data || error.message
         );
+        throw error;
     }
 }
 
