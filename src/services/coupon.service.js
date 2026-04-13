@@ -23,9 +23,7 @@ async function sendCouponStatusWebhook({
             lead_id: String(leadId),
         };
 
-        if (productName) {
-            payload.product_name = productName;
-        }
+        payload.product_name = productName || 'Unknown';
 
         if (referral) {
             payload.referral = referral;

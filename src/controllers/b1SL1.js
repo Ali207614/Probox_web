@@ -650,7 +650,8 @@ class b1SL {
                 }
             );
 
-            const firstLine = Array.isArray(req.body?.DocumentLines) ? req.body.DocumentLines[0] : null;
+            const firstDevice = Array.isArray(req.body?.selectedDevices) ? req.body.selectedDevices[0] : null;
+            const productName = firstDevice?.name || firstDevice?.raw?.ItemName || null;
 
             try {
                 const couponResponse = await sendCouponStatusWebhook({
@@ -658,7 +659,7 @@ class b1SL {
                     phoneNumber: normalizedPhone ? `${normalizedPhone}` : rawPhone,
                     status: 'Purchased',
                     fullName: req.body.clientName || null,
-                    productName: firstLine?.ItemName || firstLine?.Dscription || null,
+                    productName,
                 });
 
                 const responseData = couponResponse
