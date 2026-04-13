@@ -652,13 +652,30 @@ class b1SL {
 
             const firstLine = Array.isArray(req.body?.DocumentLines) ? req.body.DocumentLines[0] : null;
 
-            await sendCouponStatusWebhook({
-                leadId,
-                phoneNumber: normalizedPhone ? `${normalizedPhone}` : rawPhone,
-                status: 'Purchased',
-                fullName: req.body.clientName || null,
-                productName: firstLine?.ItemName || firstLine?.Dscription || null,
-            });
+            try {
+                await sendCouponStatusWebhook({
+                    leadId,
+                    phoneNumber: normalizedPhone ? `${normalizedPhone}` : rawPhone,
+                    status: 'Purchased',
+                    fullName: req.body.clientName || null,
+                    productName: firstLine?.ItemName || firstLine?.Dscription || null,
+                });
+            } catch (couponErr) {
+                const errData = couponErr?.response?.data
+                    ? JSON.stringify(couponErr.response.data).substring(0, 3500)
+                    : couponErr.message;
+
+                const errorMessage =
+                    `<b>🚨 Coupon Webhook xatolik!</b>\n\n` +
+                    `<b>Vaqt:</b> ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' })}\n` +
+                    `<b>Lead ID:</b> ${leadId}\n` +
+                    `<b>Phone:</b> ${normalizedPhone || rawPhone}\n` +
+                    `<b>Status:</b> Purchased\n\n` +
+                    `<b>Xatolik:</b>\n` +
+                    `<pre><code>${errData}</code></pre>`;
+
+                await bot.sendMessage(PERSONAL_CHAT_ID, errorMessage, { parse_mode: 'HTML' }).catch(() => {});
+            }
 
             // 10) usage log (ONE record)
             const actor = {
