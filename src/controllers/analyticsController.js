@@ -238,14 +238,14 @@ class AnalyticsController {
             const [stats, operatorLeads, visitedEverSet] = await Promise.all([
                 Lead.aggregate([
                     ...statusTimePipeline,
-                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, operator: { $ne: null } } },
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, $and: [{ operator: { $ne: null } }, { operator: { $ne: "" } }, { operator: { $exists: true } }] } },
                     { $group: { _id: { operator: "$operator", status: "$status" }, count: { $sum: 1 } } },
                     { $group: { _id: "$_id.operator", foundStatuses: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } },
                     { $sort: { total: -1 } }
                 ]),
                 Lead.aggregate([
                     ...statusTimePipeline,
-                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, operator: { $ne: null } } },
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, $and: [{ operator: { $ne: null } }, { operator: { $ne: "" } }, { operator: { $exists: true } }] } },
                     { $group: { _id: "$operator", leadIds: { $push: "$_id" } } }
                 ]),
                 this._getVisitedEverSet()
