@@ -1659,6 +1659,162 @@ class b1HANA {
         }
     };
 
+    createLeadFromWeb = async (req, res, next) => {
+        try {
+            const {
+                clientName,
+                clientPhone,
+                comment,
+            } = req.body;
+
+            const source = 'Web';
+
+            function buildLoosePhoneRegexFromDigits12(phone12) {
+                const local9 = String(phone12).slice(-9);
+                const pat = local9.split('').join('\\D*');
+                return new RegExp(pat);
+            }
+
+            function validatePhone(phone) {
+                if (!phone) return false;
+                let digits = String(phone).replace(/\D/g, '');
+
+                if (digits.length === 9 && digits.startsWith('9')) digits = '998' + digits;
+
+                const isValid = /^998\d{9}$/.test(digits);
+                return isValid ? digits : false;
+            }
+
+            const missing = [];
+            if (!clientName || !String(clientName).trim()) missing.push('clientName');
+            if (!clientPhone || !String(clientPhone).trim()) missing.push('clientPhone');
+
+            if (missing.length) {
+                return res.status(400).json({
+                    message: `Majburiy maydonlar: ${missing.join(', ')}`,
+                    location: 'web_lead_required_fields',
+                });
+            }
+
+            const cleanedPhone = validatePhone(clientPhone);
+            if (!cleanedPhone) {
+                return res.status(400).json({
+                    message: "Telefon raqam formati noto'g'ri",
+                    location: 'web_lead_invalid_phone',
+                });
+            }
+
+            const local9 = cleanedPhone.slice(-9);
+            const legacyRegex = new RegExp(`${local9}$`);
+            const looseRegex = buildLoosePhoneRegexFromDigits12(cleanedPhone);
+
+            const duplicateQuery = {
+                status: { $in: ALLOWED_STATUSES },
+                $or: [
+                    { clientPhone: cleanedPhone },
+                    { clientPhone: local9 },
+                    { clientPhone: { $regex: legacyRegex } },
+                    { clientPhone: { $regex: looseRegex } },
+                ],
+            };
+
+            const exists = await LeadModel.exists(duplicateQuery);
+
+            if (exists) {
+                return res.status(409).json({
+                    message: "Bu lead allaqachon mavjud",
+                    location: 'web_lead_duplicate',
+                });
+            }
+
+            let operator = null;
+            try {
+                operator = await assignBalancedOperator();
+            } catch (e) {
+                console.warn('assignBalancedOperator failed:', e?.message || e);
+                operator = null;
+            }
+
+            const n = await generateShortId('PRO');
+            const time = new Date();
+
+            const sapRecord = await b1Sl.findOrCreateBusinessPartner(cleanedPhone, clientName);
+
+            const cardCode = sapRecord?.cardCode || null;
+            const cardName = sapRecord?.cardName || null;
+
+            const dataObj = {
+                n,
+                source,
+                status: 'Active',
+                clientName: cardName || clientName,
+                clientPhone: cleanedPhone,
+                comment: comment || null,
+                operator,
+                time,
+                cardCode,
+                cardName,
+                jshshir: sapRecord?.U_jshshir || null,
+                idX: sapRecord?.Cellular || null,
+                passportId: sapRecord?.Cellular || null,
+                jshshir2: sapRecord?.U_jshshir || null,
+            };
+
+            if (cardCode) {
+                const {
+                    score,
+                    totalContracts,
+                    openContracts,
+                    totalAmount,
+                    totalPaid,
+                    overdueDebt,
+                    maxDelay,
+                    avgPaymentDelay,
+                } = await this.calculateLeadPaymentScore(cardCode);
+
+                if (score !== null) {
+                    dataObj.paymentScore = score;
+                    dataObj.totalContracts = totalContracts;
+                    dataObj.openContracts = openContracts;
+                    dataObj.totalAmount = totalAmount;
+                    dataObj.totalPaid = totalPaid;
+                    dataObj.overdueDebt = overdueDebt;
+                    dataObj.maxDelay = maxDelay;
+                    dataObj.avgPaymentDelay = avgPaymentDelay;
+                }
+            }
+
+            const io = req.app.get('io');
+            if (io) {
+                io.emit('new_leads', { ...dataObj, SlpCode: dataObj.operator });
+            }
+
+            const lead = await LeadModel.create(dataObj);
+
+            await writeLeadEvent({
+                leadId: lead._id,
+                reqUser: null,
+                isSystem: true,
+                type: 'event',
+                action: 'lead_created',
+                message: 'Lead created (Web)',
+                changes: [
+                    { field: 'source', from: null, to: lead.source },
+                    { field: 'clientPhone', from: null, to: lead.clientPhone },
+                    { field: 'operator', from: null, to: lead.operator },
+                ],
+            });
+
+            return res.status(201).json({
+                message: 'Lead created successfully',
+                data: lead,
+            });
+        } catch (e) {
+            console.error('Error creating lead from web:', e);
+            next(e);
+        }
+    };
+
     createLead = async (req, res, next) => {
         try {
             const {

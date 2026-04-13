@@ -46,6 +46,7 @@ const router = new Router();
 const invoiceRouter = require("./invoice")
 const {telegramBotBasicAuth} = require("../middlewares/basic-auth-telegram");
 const {purchasePdfBasicAuth} = require("../middlewares/basic-auth-purchase-pdf");
+const {webLeadBasicAuth} = require("../middlewares/basic-auth-web");
 const verifyCodeController = require("../controllers/verification-controller");
 const forceRefreshController = require("../controllers/forceRefreshController");
 
@@ -134,6 +135,12 @@ router.post(
     telegramBotBasicAuth,
     imageUpload.array('files', 10),
     b1HANA.createLeadFromTelegramBotWithImage
+);
+
+router.post(
+    '/leads/web',
+    webLeadBasicAuth,
+    b1HANA.createLeadFromWeb
 );
 
 router.post(
