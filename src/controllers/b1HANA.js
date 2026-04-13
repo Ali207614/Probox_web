@@ -1720,12 +1720,35 @@ class b1HANA {
                 ],
             };
 
-            const exists = await LeadModel.exists(duplicateQuery);
+            const existingLead = await LeadModel.findOne(duplicateQuery);
 
-            if (exists) {
-                return res.status(409).json({
-                    message: "Bu lead allaqachon mavjud",
-                    location: 'web_lead_duplicate',
+            if (existingLead) {
+                existingLead.newTime = new Date();
+                await existingLead.save();
+
+                const io = req.app.get('io');
+                if (io) {
+                    io.emit('new_leads', {
+                        ...existingLead.toObject(),
+                        SlpCode: existingLead.seller || existingLead.operator,
+                    });
+                }
+
+                await writeLeadEvent({
+                    leadId: existingLead._id,
+                    reqUser: null,
+                    isSystem: true,
+                    type: 'event',
+                    action: 'lead_updated',
+                    message: 'Lead bumped (Web)',
+                    changes: [
+                        { field: 'newTime', from: null, to: existingLead.newTime },
+                    ],
+                });
+
+                return res.status(200).json({
+                    message: 'Lead already exists, newTime updated',
+                    data: existingLead,
                 });
             }
 
