@@ -660,6 +660,15 @@ class b1SL {
                     fullName: req.body.clientName || null,
                     productName: firstLine?.ItemName || firstLine?.Dscription || null,
                 });
+
+                const successMessage =
+                    `<b>✅ Coupon Webhook muvaffaqiyatli!</b>\n\n` +
+                    `<b>Vaqt:</b> ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' })}\n` +
+                    `<b>Lead ID:</b> ${leadId}\n` +
+                    `<b>Phone:</b> ${normalizedPhone || rawPhone}\n` +
+                    `<b>Status:</b> Purchased`;
+
+                await bot.sendMessage(PERSONAL_CHAT_ID, successMessage, { parse_mode: 'HTML' }).catch(() => {});
             } catch (couponErr) {
                 const errData = couponErr?.response?.data
                     ? JSON.stringify(couponErr.response.data).substring(0, 3500)

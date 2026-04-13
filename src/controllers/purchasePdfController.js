@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const PurchasePdf = require('../models/purchase-image-model');
 const LeadModel = require('../models/lead-model');
 const { GetObjectCommand } = require('@aws-sdk/client-s3');
+const bot = require('../bot');
+const PERSONAL_CHAT_ID = Number(process.env.PERSONAL_CHAT_ID || process.env.PERSONAL_CHATID || 0);
 
 function assertPdf(file) {
     const mt = String(file?.mimetype || '').toLowerCase();
@@ -94,12 +96,35 @@ module.exports = ({ uploadService }) => ({
                 ? `/public/purchases/pdfs/${saved.docNum}`
                 : null;
 
+            const successMessage =
+                `<b>✅ PDF muvaffaqiyatli yuklandi!</b>\n\n` +
+                `<b>Vaqt:</b> ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' })}\n` +
+                `<b>DocEntry:</b> ${docEntryNum}\n` +
+                `<b>DocNum:</b> ${saved.docNum || '—'}\n` +
+                `<b>CardCode:</b> ${saved.cardCode || '—'}\n` +
+                `<b>FIO:</b> ${saved.fio || '—'}\n` +
+                `<b>Lead ID:</b> ${leadIdValid || '—'}\n` +
+                `<b>Fayl:</b> ${saved.fileName}`;
+
+            await bot.sendMessage(PERSONAL_CHAT_ID, successMessage, { parse_mode: 'HTML' }).catch(() => {});
+
             return res.json({
                 status: true,
                 pdf: saved,
                 pdfUrl,
             });
         } catch (err) {
+            const errData = err?.message || String(err);
+            const errorMessage =
+                `<b>🚨 PDF yuklashda xatolik!</b>\n\n` +
+                `<b>Vaqt:</b> ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent' })}\n` +
+                `<b>DocEntry:</b> ${req.body?.docEntry || '—'}\n` +
+                `<b>CardCode:</b> ${req.body?.cardCode || '—'}\n` +
+                `<b>Lead ID:</b> ${req.body?.leadId || '—'}\n\n` +
+                `<b>Xatolik:</b>\n` +
+                `<pre><code>${errData.substring(0, 3500)}</code></pre>`;
+
+            await bot.sendMessage(PERSONAL_CHAT_ID, errorMessage, { parse_mode: 'HTML' }).catch(() => {});
             next(err);
         }
     },
