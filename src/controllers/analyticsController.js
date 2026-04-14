@@ -243,14 +243,14 @@ class AnalyticsController {
             const [stats, operatorLeads, visitedEverSet] = await Promise.all([
                 Lead.aggregate([
                     ...statusTimePipeline,
-                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, $and: [{ operator: { $ne: null } }, { operator: { $ne: "" } }, { operator: { $exists: true } }] } },
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, $and: [{ operator: { $ne: null } }, { operator: { $ne: "" } }, { operator: { $ne: 0 } }, { operator: { $exists: true } }] } },
                     { $group: { _id: { operator: "$operator", status: "$status" }, count: { $sum: 1 } } },
                     { $group: { _id: "$_id.operator", foundStatuses: { $push: { k: "$_id.status", v: "$count" } }, total: { $sum: "$count" } } },
                     { $sort: { total: -1 } }
                 ]),
                 Lead.aggregate([
                     ...statusTimePipeline,
-                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, $and: [{ operator: { $ne: null } }, { operator: { $ne: "" } }, { operator: { $exists: true } }] } },
+                    { $match: { actualTime: { $gte: startDate, $lte: endDate }, $and: [{ operator: { $ne: null } }, { operator: { $ne: "" } }, { operator: { $ne: 0 } }, { operator: { $exists: true } }] } },
                     { $group: { _id: "$operator", leadIds: { $push: "$_id" } } }
                 ]),
                 this._getVisitedEverSet()
@@ -260,7 +260,7 @@ class AnalyticsController {
                 operatorLeads.map(o => [String(o._id), o.leadIds.map(id => String(id))])
             );
 
-            const result = stats.map(item => {
+            const result = stats.filter(item => opMap.has(String(item._id))).map(item => {
                 const statusMap = Object.fromEntries(item.foundStatuses.map(s => [s.k, s.v]));
                 const myLeadIds = operatorLeadMap[String(item._id)] || [];
                 const VisitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
