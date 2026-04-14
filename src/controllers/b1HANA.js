@@ -1071,7 +1071,22 @@ class b1HANA {
             parseYesNoUnmarked(aliment, 'aliment');
             parseYesNoUnmarked(finalLimit, 'finalLimit', true);
             parseYesNoUnmarked(meetingHappened, 'meetingHappened');
-            parseYesNoUnmarked(consideringBumped, 'consideringBumped');
+            if (consideringBumped !== undefined) {
+                const now = new Date();
+                if (consideringBumped === 'yes') {
+                    addAndCondition(filter, { recallDate: { $exists: true, $ne: null, $lt: now } });
+                } else if (consideringBumped === 'no') {
+                    addAndCondition(filter, {
+                        $or: [
+                            { recallDate: { $exists: false } },
+                            { recallDate: null },
+                            { recallDate: { $gte: now } },
+                        ],
+                    });
+                } else if (consideringBumped === 'unmarked') {
+                    addAndCondition(filter, { recallDate: null });
+                }
+            }
 
             if(isBlocked){
                 if(isBlocked === 'yes'){
