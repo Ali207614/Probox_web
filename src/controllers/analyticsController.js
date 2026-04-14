@@ -202,38 +202,43 @@ class AnalyticsController {
         } catch (err) { next(err); }
     }
 
-    // 3. Operator Performance (Statuslar) + VisitedStoreOverall
-    async getOperatorPerformance(req, res, next) {
-        try {
-            const { start, end } = req.query;
-            const { startDate, endDate } = this._parseRange(start, end);
-            const opMap = await this.getOperatorsMap();
-
-            const statusTimePipeline = [
+    _buildStatusTimePipeline(type) {
+        if (type === 'createdAt') {
+            return [
                 {
                     $addFields: {
-                        actualTime: {
-                            $switch: {
-                                branches: [
-                                    {
-                                        case: { $eq: ["$status", "VisitedStore"] },
-                                        then: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
-                                    },
-                                    {
-                                        case: { $eq: ["$status", "Purchased"] },
-                                        then: "$purchaseDate"
-                                    },
-                                    {
-                                        case: { $eq: ["$status", "Talked"] },
-                                        then: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
-                                    }
-                                ],
-                                default: { $ifNull: ["$time", "$createdAt"] }
-                            }
-                        }
+                        actualTime: { $ifNull: ["$time", "$createdAt"] }
                     }
                 }
             ];
+        }
+        return [
+            {
+                $addFields: {
+                    actualTime: {
+                        $switch: {
+                            branches: [
+                                {
+                                    case: { $eq: ["$status", "Purchased"] },
+                                    then: "$purchaseDate"
+                                }
+                            ],
+                            default: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
+                        }
+                    }
+                }
+            }
+        ];
+    }
+
+    // 3. Operator Performance (Statuslar) + VisitedStoreOverall
+    async getOperatorPerformance(req, res, next) {
+        try {
+            const { start, end, type = 'updatedAt' } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
+            const opMap = await this.getOperatorsMap();
+
+            const statusTimePipeline = this._buildStatusTimePipeline(type);
 
             const [stats, operatorLeads, visitedEverSet] = await Promise.all([
                 Lead.aggregate([
@@ -294,34 +299,10 @@ class AnalyticsController {
     // 4. Source Performance + VisitedStoreOverall
     async getSourcePerformance(req, res, next) {
         try {
-            const { start, end } = req.query;
+            const { start, end, type = 'updatedAt' } = req.query;
             const { startDate, endDate } = this._parseRange(start, end);
 
-            const statusTimePipeline = [
-                {
-                    $addFields: {
-                        actualTime: {
-                            $switch: {
-                                branches: [
-                                    {
-                                        case: { $eq: ["$status", "VisitedStore"] },
-                                        then: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
-                                    },
-                                    {
-                                        case: { $eq: ["$status", "Purchased"] },
-                                        then: "$purchaseDate"
-                                    },
-                                    {
-                                        case: { $eq: ["$status", "Talked"] },
-                                        then: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
-                                    }
-                                ],
-                                default: { $ifNull: ["$time", "$createdAt"] }
-                            }
-                        }
-                    }
-                }
-            ];
+            const statusTimePipeline = this._buildStatusTimePipeline(type);
 
             const [stats, sourceLeads, visitedEverSet] = await Promise.all([
                 Lead.aggregate([
