@@ -32,6 +32,7 @@ const sendVerificationCode = async (req, res) => {
         await VerificationCodeModel.create({ phone: cleanPhone, code });
 
         // 5. SMS jo'natamiz
+        console.log(cleanPhone, text);
         const smsResult = await sendSms(cleanPhone, text, `verif_${Date.now()}`);
 
         if (!smsResult.success) {
