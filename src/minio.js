@@ -148,7 +148,7 @@ class UploadService {
                 Body: file.buffer,
                 ContentType: file.mimetype,
                 Metadata: {
-                    originalname: file.originalname,
+                    originalname: encodeURIComponent(file.originalname || ''),
                 },
             })
         );
