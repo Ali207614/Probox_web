@@ -10,7 +10,7 @@ const sendVerificationCode = async (req, res) => {
 
         // 1. Raqamni tozalaymiz (faqat raqamlar qoladi) va 998 prefiksini qo'shamiz
         let cleanPhone = String(phone).replace(/\D/g, '');
-        if (!cleanPhone.startsWith('998')) {
+        if (cleanPhone.length !== 12 || !cleanPhone.startsWith('998')) {
             cleanPhone = '998' + cleanPhone.slice(-9);
         }
 

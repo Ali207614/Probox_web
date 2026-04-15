@@ -187,7 +187,7 @@ OFFSET ${Number(offset) || 0};
 
         if (phone && phone !== '998') {
             // Agar telefon raqam 998 bilan boshlansa, uni kesib tashlaymiz
-            const trimmedPhone = phone.startsWith('998') ? phone.slice(3) : phone;
+            const trimmedPhone = phone.startsWith('998') && phone.length >= 12 ? phone.slice(3) : phone;
 
             phoneCondition = `AND (T2."Phone1" LIKE '%${trimmedPhone}%' OR T2."Phone2" LIKE '%${trimmedPhone}%')`;
         }
@@ -352,7 +352,7 @@ OFFSET ${Number(offset) || 0};
         }
 
         if (phone && phone !== '998') {
-            const trimmedPhone = phone.startsWith('998') ? phone.slice(3) : phone;
+            const trimmedPhone = phone.startsWith('998') && phone.length >= 12 ? phone.slice(3) : phone;
             phoneCondition = `AND (T2."Phone1" LIKE '%${trimmedPhone}%' OR T2."Phone2" LIKE '%${trimmedPhone}%')`;
         }
 
@@ -563,7 +563,7 @@ OFFSET ${Number(offset) || 0};
         }
 
         if (phone && phone !== '998') {
-            const trimmedPhone = phone.startsWith('998') ? phone.slice(3) : phone;
+            const trimmedPhone = phone.startsWith('998') && phone.length >= 12 ? phone.slice(3) : phone;
 
             searchCondition += `
                 AND (
@@ -702,7 +702,7 @@ OFFSET ${Number(offset) || 0};
         }
 
         if (phone && phone !== '998') {
-            const trimmedPhone = phone.startsWith('998') ? phone.slice(3) : phone;
+            const trimmedPhone = phone.startsWith('998') && phone.length >= 12 ? phone.slice(3) : phone;
 
             searchCondition += `
                 AND (
