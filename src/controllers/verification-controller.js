@@ -8,8 +8,11 @@ const sendVerificationCode = async (req, res) => {
             return res.status(400).json({ status: false, message: "Telefon raqam kiritilmagan" });
         }
 
-        // 1. Raqamni tozalaymiz (faqat raqamlar qoladi)
-        const cleanPhone = String(phone).replace(/\D/g, '');
+        // 1. Raqamni tozalaymiz (faqat raqamlar qoladi) va 998 prefiksini qo'shamiz
+        let cleanPhone = String(phone).replace(/\D/g, '');
+        if (!cleanPhone.startsWith('998')) {
+            cleanPhone = '998' + cleanPhone.slice(-9);
+        }
 
         // 2. 4 xonali kod yaratamiz (1000 dan 9999 gacha)
         const code = Math.floor(1000 + Math.random() * 9000).toString();
@@ -22,9 +25,7 @@ const sendVerificationCode = async (req, res) => {
         const local9 = cleanPhone.slice(-9);
         const isUcell = local9.startsWith('93') || local9.startsWith('94') || local9.startsWith('50') || local9.startsWith('04');
 
-        const text = isUcell
-            ? `Probox telegram botida ro'yxatdan o'tishni tasdiqlash kodi - ${code}`
-            : `Assalomu alaykum! Bu Probox jamoasi.\n\n${deviceNames} sizniki bo'lishiga bir qadam qoldi. Xaridingizni xavfsiz tasdiqlash uchun menejerga ushbu maxsus kodni taqdim eting:\n\nKod: ${code}\n\nTexnikangiz uzoq vaqt xizmatingizda bo'lsin!`;
+        const text =  `Assalomu alaykum, Mijoz! Bu Probox jamoasi.\n\t\nApple sizniki bo'lishiga bir qadam qoldi. Xaridingizni xavfsiz tasdiqlash uchun menejerga ushbu maxsus kodni taqdim eting:\n\t\nKod: ${code}\n\t\nTexnikangiz uzoq vaqt xizmatingizda bo'lsin! Bizni tanlaganingizdan xursandmiz.`;
 
         // 4. Eskisi bo'lsa o'chirib, yangisini bazaga saqlaymiz
         await VerificationCodeModel.deleteMany({ phone: cleanPhone });
