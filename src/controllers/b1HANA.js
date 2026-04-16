@@ -1681,10 +1681,13 @@ class b1HANA {
             const {
                 clientName,
                 clientPhone,
+                clientRegion,
+                clientModel,
                 comment,
             } = req.body;
 
             const source = 'Web';
+            const fullComment = [comment, clientModel].filter(Boolean).join(' | ') || null;
 
             function buildLoosePhoneRegexFromDigits12(phone12) {
                 const local9 = String(phone12).slice(-9);
@@ -1762,6 +1765,7 @@ class b1HANA {
                         { field: 'clientName', from: null, to: clientName },
                         { field: 'clientPhone', from: null, to: cleanedPhone },
                         ...(comment ? [{ field: 'comment', from: null, to: comment }] : []),
+                        ...(clientRegion ? [{ field: 'region', from: null, to: clientRegion }] : []),
                     ],
                 });
 
@@ -1793,7 +1797,8 @@ class b1HANA {
                 status: 'Active',
                 clientName: cardName || clientName,
                 clientPhone: cleanedPhone,
-                comment: comment || null,
+                comment: fullComment,
+                region: clientRegion || null,
                 operator,
                 time,
                 cardCode,
@@ -1846,6 +1851,7 @@ class b1HANA {
                     { field: 'source', from: null, to: lead.source },
                     { field: 'clientPhone', from: null, to: lead.clientPhone },
                     { field: 'operator', from: null, to: lead.operator },
+                    ...(lead.region ? [{ field: 'region', from: null, to: lead.region }] : []),
                 ],
             });
 
