@@ -1054,7 +1054,10 @@ class b1HANA {
                         });
                     }
                     else if (meeting === 'meetingDate') {
-                        addAndCondition(filter, { recallDate: dateQuery });
+                        addAndCondition(filter, {
+                            recallDate: dateQuery,
+                            status: { $nin: ['Purchased', 'Closed', 'No Purchase'] },
+                        });
                     } else {
                         filter.meetingDate = dateQuery;
                     }
