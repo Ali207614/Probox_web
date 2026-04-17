@@ -77,6 +77,15 @@ class AnalyticsController {
         return new Set(visitedEver.map(id => String(id)));
     }
 
+    // ✅ Umumiy yordamchi: bir marta vazifalar statuslariga tushgan barcha leadlar
+    async _getTasksPlanEverSet() {
+        const planEver = await LeadChat.distinct('leadId', {
+            action: 'status_changed',
+            statusTo: { $in: ['FollowUp', 'Considering', 'WillVisitStore', 'WillSendPassport'] }
+        });
+        return new Set(planEver.map(id => String(id)));
+    }
+
     async getOperatorsMap() {
         try {
             const sql = DataRepositories.getSalesPersons({
@@ -240,7 +249,7 @@ class AnalyticsController {
 
             const statusTimePipeline = this._buildStatusTimePipeline(type);
 
-            const [stats, operatorLeads, visitedEverSet] = await Promise.all([
+            const [stats, operatorLeads, visitedEverSet, tasksPlanEverSet] = await Promise.all([
                 Lead.aggregate([
                     ...statusTimePipeline,
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, $and: [{ operator: { $ne: null } }, { operator: { $ne: "" } }, { operator: { $ne: 0 } }, { operator: { $exists: true } }] } },
@@ -253,17 +262,22 @@ class AnalyticsController {
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, $and: [{ operator: { $ne: null } }, { operator: { $ne: "" } }, { operator: { $ne: 0 } }, { operator: { $exists: true } }] } },
                     { $group: { _id: "$operator", leadIds: { $push: "$_id" } } }
                 ]),
-                this._getVisitedEverSet()
+                this._getVisitedEverSet(),
+                this._getTasksPlanEverSet()
             ]);
 
             const operatorLeadMap = Object.fromEntries(
                 operatorLeads.map(o => [String(o._id), o.leadIds.map(id => String(id))])
             );
 
+            const taskStatuses = ['FollowUp', 'Considering', 'WillVisitStore', 'WillSendPassport'];
+
             const result = stats.filter(item => opMap.has(String(item._id))).map(item => {
                 const statusMap = Object.fromEntries(item.foundStatuses.map(s => [s.k, s.v]));
                 const myLeadIds = operatorLeadMap[String(item._id)] || [];
                 const VisitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
+                const TasksPlan = myLeadIds.filter(id => tasksPlanEverSet.has(id)).length;
+                const TasksFact = taskStatuses.reduce((sum, st) => sum + (statusMap[st] || 0), 0);
 
                 const details = this.allPossibleStatuses.flatMap(st => {
                     const item_ = {
@@ -278,6 +292,21 @@ class AnalyticsController {
                                 status: 'VisitedStoreOverall',
                                 count: VisitedStoreOverall,
                                 percentage: percent(VisitedStoreOverall, item.total)
+                            }
+                        ];
+                    }
+                    if (st === 'WillSendPassport') {
+                        return [
+                            item_,
+                            {
+                                status: 'TasksPlan',
+                                count: TasksPlan,
+                                percentage: percent(TasksPlan, item.total)
+                            },
+                            {
+                                status: 'TasksFact',
+                                count: TasksFact,
+                                percentage: percent(TasksFact, item.total)
                             }
                         ];
                     }
