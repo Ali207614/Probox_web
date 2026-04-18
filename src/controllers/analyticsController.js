@@ -248,8 +248,9 @@ class AnalyticsController {
             const opMap = await this.getOperatorsMap();
 
             const statusTimePipeline = this._buildStatusTimePipeline(type);
+            const taskStatuses = ['FollowUp', 'Considering', 'WillVisitStore', 'WillSendPassport'];
 
-            const [stats, operatorLeads, visitedEverSet, tasksPlanEverSet] = await Promise.all([
+            const [stats, operatorLeads, visitedEverSet, tasksPlanEverSet, tasksByRecallDate] = await Promise.all([
                 Lead.aggregate([
                     ...statusTimePipeline,
                     { $match: { actualTime: { $gte: startDate, $lte: endDate }, $and: [{ operator: { $ne: null } }, { operator: { $ne: "" } }, { operator: { $ne: 0 } }, { operator: { $exists: true } }] } },
@@ -263,21 +264,37 @@ class AnalyticsController {
                     { $group: { _id: "$operator", leadIds: { $push: "$_id" } } }
                 ]),
                 this._getVisitedEverSet(),
-                this._getTasksPlanEverSet()
+                this._getTasksPlanEverSet(),
+                Lead.aggregate([
+                    { $match: { recallDate: { $gte: startDate, $lte: endDate }, $and: [{ operator: { $ne: null } }, { operator: { $ne: "" } }, { operator: { $ne: 0 } }, { operator: { $exists: true } }] } },
+                    {
+                        $group: {
+                            _id: "$operator",
+                            leadIds: { $push: "$_id" },
+                            tasksFact: { $sum: { $cond: [{ $in: ["$status", taskStatuses] }, 1, 0] } }
+                        }
+                    }
+                ])
             ]);
 
             const operatorLeadMap = Object.fromEntries(
                 operatorLeads.map(o => [String(o._id), o.leadIds.map(id => String(id))])
             );
 
-            const taskStatuses = ['FollowUp', 'Considering', 'WillVisitStore', 'WillSendPassport'];
+            const recallTaskMap = Object.fromEntries(
+                tasksByRecallDate.map(o => [String(o._id), {
+                    leadIds: o.leadIds.map(id => String(id)),
+                    tasksFact: o.tasksFact
+                }])
+            );
 
             const result = stats.filter(item => opMap.has(String(item._id))).map(item => {
                 const statusMap = Object.fromEntries(item.foundStatuses.map(s => [s.k, s.v]));
                 const myLeadIds = operatorLeadMap[String(item._id)] || [];
                 const VisitedStoreOverall = myLeadIds.filter(id => visitedEverSet.has(id)).length;
-                const TasksPlan = myLeadIds.filter(id => tasksPlanEverSet.has(id)).length;
-                const TasksFact = taskStatuses.reduce((sum, st) => sum + (statusMap[st] || 0), 0);
+                const recallData = recallTaskMap[String(item._id)] || { leadIds: [], tasksFact: 0 };
+                const TasksPlan = recallData.leadIds.filter(id => tasksPlanEverSet.has(id)).length;
+                const TasksFact = recallData.tasksFact;
 
                 const details = this.allPossibleStatuses.flatMap(st => {
                     const item_ = {
