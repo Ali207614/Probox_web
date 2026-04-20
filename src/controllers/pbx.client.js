@@ -86,33 +86,44 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
         }
     );
 
+    const buildBody = (paramsObj) => {
+        const body = new URLSearchParams();
+        Object.entries(paramsObj || {}).forEach(([k, v]) => {
+            if (v === undefined || v === null || v === '') return;
+            if (Array.isArray(v)) {
+                v.forEach((item) => {
+                    if (item !== undefined && item !== null && item !== '') {
+                        body.append(k, String(item));
+                    }
+                });
+            } else {
+                body.append(k, String(v));
+            }
+        });
+        return body;
+    };
+
     const postForm = async (path, paramsObj) => {
         try {
-            const body = new URLSearchParams();
-            Object.entries(paramsObj || {}).forEach(([k, v]) => {
-                if (v === undefined || v === null || v === '') return;
-
-                // Massiv bo'lsa, har birini alohida qo'shish
-                if (Array.isArray(v)) {
-                    v.forEach((item) => {
-                        if (item !== undefined && item !== null && item !== '') {
-                            body.append(k, String(item));
-                        }
-                    });
-                } else {
-                    body.append(k, String(v));
-                }
-            });
-
-            const { data } = await api.post(path, body, {
+            let { data } = await api.post(path, buildBody(paramsObj), {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             });
 
+            // Body darajasidagi auth failure: PBX HTTP 200 qaytaradi, lekin isNotAuth:true bo'ladi
+            if (data && data.isNotAuth === true) {
+                console.warn(`[OnlinePBX] body-level auth failure on ${path}, re-login & retry`);
+                token = { keyId: null, key: null };
+                await login();
+                const retry = await api.post(path, buildBody(paramsObj), {
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                });
+                data = retry.data;
+            }
+
             return data;
         } catch (e) {
-            // Xatoni aniq ko'rish uchun log qiling va tepaga uzating
             console.error(`[OnlinePBX] API Error on ${path}:`, e?.response?.data || e.message);
-            throw e; // Xatoni chaqiruvchi funksiya ushlab olishi kerak
+            throw e;
         }
     };
 
