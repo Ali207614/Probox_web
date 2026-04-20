@@ -16,7 +16,12 @@ async function downloadRecordingAsBase64({ pbxClient, uuid, maxMb = 8 }) {
 
     const dl = await pbxClient.getDownloadUrl(uuid);
     const onlineUrl = pickOnlineUrl(dl);
-    if (!onlineUrl) throw new Error('Recording url not found');
+    if (!onlineUrl) {
+        let preview;
+        try { preview = JSON.stringify(dl); } catch { preview = String(dl); }
+        if (preview && preview.length > 300) preview = preview.slice(0, 300) + '...';
+        throw new Error(`Recording url not found (uuid=${uuid}, resp=${preview})`);
+    }
 
     const maxBytes = Number(maxMb) * 1024 * 1024;
 
