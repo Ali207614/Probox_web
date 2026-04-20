@@ -381,6 +381,12 @@ class b1HANA {
                 (a, b) => a + Number(b?.InsTotal || 0), 0
             );
 
+            console.log('Sample:', invoiceConfiscated.slice(0, 5).map(i => ({
+                DocEntry: i.DocEntry,
+                InstlmntID: i.InstlmntID,
+                InsTotal: i.InsTotal,
+            })));
+
             const query = await DataRepositories.getAnalytics({
                 isUndistributed: true,
                 startDate,
