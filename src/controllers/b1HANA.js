@@ -47,6 +47,17 @@ const axios = require("axios");
 const {sendCouponStatusWebhook} = require("../services/coupon.service");
 
 
+const {
+    INVOICE_PROJECTION,
+    normalizeDateRange,
+    parseSlpCodes,
+    applyPhoneConfiscatedFilter,
+    groupComments,
+    buildUserLocationMap,
+} = require('../utils/invoice-helpers');
+
+const UNDISTRIBUTED_SLP_CODE = 56;
+
 const pbxClient = createOnlinePbx({
     domain: process.env.PBX_DOMAIN,
     authKey: process.env.PBX_AUTH_KEY,
@@ -65,6 +76,310 @@ const RATE_TTL_MS = 5 * 60 * 60 * 1000;
 
 
 class b1HANA {
+
+    // DI: dataRepositories (HANA builder), executor (HANA runner), Mongo models
+    constructor({ dataRepositories, executor, InvoiceModel, CommentModel, UserModel }) {
+        this.repo = dataRepositories;
+        this.execute = executor;
+        this.InvoiceModel = InvoiceModel;
+        this.CommentModel = CommentModel;
+        this.UserModel = UserModel;
+    }
+
+
+
+
+
+
+    invoice = async (req, res, next) => {
+        try {
+            const {
+                startDate: sdRaw, endDate: edRaw,
+                paymentStatus, cardCode, serial, phone, search, phoneConfiscated,
+            } = req.query;
+
+            const page  = Math.max(1, Number(req.query.page)  || 1);
+            const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 20));
+            const skip  = (page - 1) * limit;
+
+            if (!sdRaw || !edRaw) {
+                return res.status(400).json({ error: 'startDate and endDate are required' });
+            }
+
+            const { startDate, endDate, startMoment, endMoment } = normalizeDateRange(sdRaw, edRaw);
+            const slpCodes = parseSlpCodes(req.query.slpCode);
+            const isDistribution = Array.isArray(slpCodes);
+
+            const baseMongo = { DueDate: { $gte: startMoment, $lte: endMoment } };
+
+            let includeInvoices = [];
+            let excludeInvoices = [];
+            let partialModel    = [];
+            let isUndistributed = false;
+            let invoicesFromMongo = []; // data mapping uchun
+
+            // -------- 1) Distribution rejimi (slpCode berilgan)
+            if (isDistribution) {
+                isUndistributed = String(req.query.slpCode) === String(UNDISTRIBUTED_SLP_CODE);
+
+                if (isUndistributed) {
+                    excludeInvoices = await this.InvoiceModel
+                        .find({ ...baseMongo, SlpCode: { $exists: true } },
+                            { DocEntry: 1, InstlmntID: 1 })
+                        .lean();
+                } else {
+                    const includeFilter = { ...baseMongo, SlpCode: { $in: slpCodes } };
+                    applyPhoneConfiscatedFilter(includeFilter, phoneConfiscated);
+
+                    const statuses = (paymentStatus || '').split(',').map(s => s.trim());
+                    const needsPartial = statuses.includes('paid') || statuses.includes('partial');
+
+                    if (needsPartial) {
+                        const partialFilter = { ...includeFilter, partial: true };
+                        partialModel = await this.InvoiceModel
+                            .find(partialFilter, INVOICE_PROJECTION)
+                            .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+                    }
+
+                    includeInvoices = await this.InvoiceModel
+                        .find(includeFilter, INVOICE_PROJECTION)
+                        .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+
+                    if (includeInvoices.length === 0) {
+                        return res.status(200).json({ total: 0, page, limit, totalPages: 0, data: [] });
+                    }
+                    invoicesFromMongo = includeInvoices;
+                }
+            }
+            // -------- 2) Umumiy rejim (slpCode yo'q)
+            else if (phoneConfiscated === 'true' || phoneConfiscated === 'false') {
+                const confiscated = await this.InvoiceModel
+                    .find({ ...baseMongo, phoneConfiscated: true }, INVOICE_PROJECTION)
+                    .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+
+                if (confiscated.length === 0) {
+                    return res.status(200).json({ total: 0, page, limit, totalPages: 0, data: [] });
+                }
+
+                if (phoneConfiscated === 'true')       includeInvoices = confiscated;
+                else /* 'false' */                     excludeInvoices = confiscated;
+
+                const statuses = (paymentStatus || '').split(',').map(s => s.trim());
+                if (statuses.includes('paid') || statuses.includes('partial')) {
+                    partialModel = await this.InvoiceModel
+                        .find({ ...baseMongo, partial: true }, INVOICE_PROJECTION)
+                        .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+                }
+            } else {
+                const statuses = (paymentStatus || '').split(',').map(s => s.trim());
+                if (statuses.includes('paid') || statuses.includes('partial')) {
+                    partialModel = await this.InvoiceModel
+                        .find({ ...baseMongo, partial: true }, INVOICE_PROJECTION)
+                        .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+                }
+            }
+
+            // -------- 3) HANA query
+            const query = this.repo.buildInvoiceQuery({
+                startDate, endDate,
+                limit, offset: skip,
+                paymentStatus, cardCode, serial, phone, search,
+                includeInvoices, excludeInvoices,
+                partial: partialModel,
+            });
+
+            const invoices = await this.execute(query);
+            const total    = get(invoices, '[0].TOTAL', 0) || 0;
+
+            if (invoices.length === 0) {
+                return res.status(200).json({ total, page, limit, totalPages: 0, data: [] });
+            }
+
+            // -------- 4) Qo'shimcha ma'lumotlar (comments, users, Mongo metadata)
+            const commentFilter = invoices.map(el => ({
+                DocEntry: el.DocEntry, InstlmntID: el.InstlmntID,
+            }));
+            const comments = commentFilter.length
+                ? await this.CommentModel.find({ $or: commentFilter }).sort({ created_at: 1 }).lean()
+                : [];
+            const commentMap = groupComments(comments);
+
+            const cardCodes = [...new Set(invoices.map(el => el.CardCode).filter(Boolean))];
+            const users = cardCodes.length
+                ? await this.UserModel.find({ CardCode: { $in: cardCodes } }).lean()
+                : [];
+            const userLocationMap = buildUserLocationMap(users);
+
+            // invoiceMap: faqat includeInvoices bor bo'lsa (undistributed holatda undefined qoladi)
+            const invoiceMap = new Map();
+            if (!isDistribution) {
+                // Umumiy rejim: qaytarilgan invoys'ga mos Mongo yozuvlarini olamiz
+                const docEntries = [...new Set(invoices.map(el => el.DocEntry))];
+                const rows = docEntries.length
+                    ? await this.InvoiceModel.find(
+                        { DocEntry: { $in: docEntries } },
+                        INVOICE_PROJECTION
+                    ).lean()
+                    : [];
+                for (const r of rows) {
+                    invoiceMap.set(`${r.DocEntry}_${r.InstlmntID}`, r);
+                }
+            } else if (!isUndistributed) {
+                for (const inv of invoicesFromMongo) {
+                    invoiceMap.set(`${inv.DocEntry}_${inv.InstlmntID}`, inv);
+                }
+            }
+
+            const data = invoices.map(el => {
+                const key = `${el.DocEntry}_${el.InstlmntID}`;
+                const inv = invoiceMap.get(key);
+                const loc = userLocationMap.get(el.CardCode) ?? { lat: null, long: null };
+
+                return {
+                    ...el,
+                    SlpCode:          inv?.SlpCode ?? null,
+                    Images:           inv?.images  ?? [],
+                    NewDueDate:       inv?.newDueDate ?? '',
+                    Comments:         commentMap[key] ?? [],
+                    phoneConfiscated: inv?.phoneConfiscated ?? false,
+                    partial:          inv?.partial ?? false,
+                    location:         loc,
+                };
+            });
+
+            return res.status(200).json({
+                total, page, limit,
+                totalPages: Math.ceil(total / limit),
+                data,
+            });
+        } catch (e) {
+            return next(e);
+        }
+    };
+
+    getAnalytics = async (req, res, next) => {
+        try {
+            const { startDate: sdRaw, endDate: edRaw, phoneConfiscated } = req.query;
+
+            if (!sdRaw || !edRaw) {
+                return res.status(400).json({ error: 'startDate and endDate are required' });
+            }
+
+            const { startDate, endDate, startMoment, endMoment } = normalizeDateRange(sdRaw, edRaw);
+            const slpCodes = parseSlpCodes(req.query.slpCode);
+            const isDistribution = Array.isArray(slpCodes);
+
+            const baseMongo = { DueDate: { $gte: startMoment, $lte: endMoment } };
+
+            // -------- 1) Distribution rejimi
+            if (isDistribution) {
+                const isUndistributed = String(req.query.slpCode) === String(UNDISTRIBUTED_SLP_CODE);
+
+                let invoicesModel = [];
+                let excludeModel  = [];
+
+                if (isUndistributed) {
+                    excludeModel = await this.InvoiceModel
+                        .find({ ...baseMongo, SlpCode: { $exists: true } },
+                            { DocEntry: 1, InstlmntID: 1, phoneConfiscated: 1, InsTotal: 1 })
+                        .lean();
+                } else {
+                    invoicesModel = await this.InvoiceModel
+                        .find({ ...baseMongo, SlpCode: { $in: slpCodes } }, INVOICE_PROJECTION)
+                        .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+
+                    if (invoicesModel.length === 0) {
+                        return res.status(200).json({ SumApplied: 0, InsTotal: 0, PaidToDate: 0 });
+                    }
+                }
+
+                const sourceForConfiscated = isUndistributed ? excludeModel : invoicesModel;
+                const nonConfiscated = invoicesModel.filter(i => !i.phoneConfiscated);
+                const confiscatedTotal = sourceForConfiscated
+                    .filter(i => i.phoneConfiscated)
+                    .reduce((a, b) => a + Number(b?.InsTotal || 0), 0);
+
+                // Agar barcha undistributed-bo'lmagan yozuvlar confiscated bo'lsa,
+                // SAP'ga tushmasdan javob beramiz.
+                if (!isUndistributed && nonConfiscated.length === 0) {
+                    return res.status(200).json({
+                        SumApplied: confiscatedTotal,
+                        InsTotal:   confiscatedTotal,
+                        PaidToDate: confiscatedTotal,
+                    });
+                }
+
+                const query = this.repo.buildAnalyticsQuery({
+                    startDate, endDate,
+                    invoices:        nonConfiscated,
+                    excludeInvoices: excludeModel,
+                    isUndistributed,
+                });
+
+                const rows = await this.execute(query);
+                const result = this._reduceAnalytics(rows);
+
+                return res.status(200).json(
+                    this._mergeConfiscated(result, confiscatedTotal, isUndistributed)
+                );
+            }
+
+            // -------- 2) Umumiy rejim (slpCode yo'q) — confiscatedlarni exclude qilib SAP'dan olamiz
+            const confiscated = await this.InvoiceModel
+                .find({ ...baseMongo, phoneConfiscated: true },
+                    { DocEntry: 1, InstlmntID: 1, InsTotal: 1 })
+                .lean();
+
+            const confiscatedTotal = confiscated.reduce((a, b) => a + Number(b?.InsTotal || 0), 0);
+
+            const query = this.repo.buildAnalyticsQuery({
+                startDate, endDate,
+                excludeInvoices: confiscated, // BUG FIX: avval bu yuborilmasdi
+                isUndistributed: true,
+            });
+
+            const rows = await this.execute(query);
+            const result = this._reduceAnalytics(rows);
+
+            // Umumiy rejimda confiscated'lar "fully paid" deb qaraladi (original logikaga mos)
+            return res.status(200).json(
+                this._mergeConfiscated(result, confiscatedTotal, /* isUndistributed */ false)
+            );
+        } catch (e) {
+            return next(e);
+        }
+    };
+
+    _reduceAnalytics(rows) {
+        return rows.reduce(
+            (acc, item) => ({
+                SumApplied: acc.SumApplied + Number(item.SumApplied ?? 0),
+                InsTotal:   acc.InsTotal   + Number(item.InsTotal   ?? 0),
+                PaidToDate: acc.PaidToDate + Number(item.PaidToDate ?? 0),
+            }),
+            { SumApplied: 0, InsTotal: 0, PaidToDate: 0 }
+        );
+    }
+
+    _mergeConfiscated(result, confiscatedTotal, isUndistributed) {
+        // Undistributed holatda confiscated qo'shilmaydi (original xatti-harakat).
+        const add = isUndistributed ? 0 : confiscatedTotal;
+
+        if (result.PaidToDate > result.SumApplied) {
+            const diff = result.PaidToDate - result.SumApplied;
+            return {
+                SumApplied: result.SumApplied + add,
+                InsTotal:   result.InsTotal - diff + add,
+                PaidToDate: result.SumApplied + add,
+            };
+        }
+        return {
+            SumApplied: result.SumApplied + add,
+            InsTotal:   result.InsTotal + add,
+            PaidToDate: result.PaidToDate,
+        };
+    }
+
     async assignScoringOperator() {
         const scoringQuery = DataRepositories.getSalesPersons({
             include: ['Scoring'],
@@ -504,391 +819,7 @@ class b1HANA {
         }
     };
 
-    invoice = async (req, res, next) => {
-        try {
-            let {
-                startDate,
-                endDate,
-                page = 1,
-                limit = 20,
-                slpCode,
-                paymentStatus,
-                cardCode,
-                serial,
-                phone,
-                search,
-                phoneConfiscated
-            } = req.query;
 
-            page = Number(page);
-            limit = Number(limit);
-            const skip = (page - 1) * limit;
-
-            if (!startDate || !endDate) {
-                return res.status(400).json({ error: 'startDate and endDate are required' });
-            }
-
-            const now = moment();
-            if (!moment(startDate, 'YYYY.MM.DD', true).isValid()) {
-                startDate = moment(now).startOf('month').format('YYYY.MM.DD');
-            }
-            if (!moment(endDate, 'YYYY.MM.DD', true).isValid()) {
-                endDate = moment(now).endOf('month').format('YYYY.MM.DD');
-            }
-
-            const startDateMoment = moment(startDate, 'YYYY.MM.DD').startOf('day').toDate();
-            const endDateMoment = moment(endDate, 'YYYY.MM.DD').endOf('day').toDate();
-
-            if (search) {
-                search = search.replace(/'/g, "''");    // SQL injectionni oldini oladi
-            }
-
-            const slpCodeRaw = req.query.slpCode;
-            const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
-
-            let invoicesModel = [];
-
-            if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
-                const isUndistributed = String(slpCode) === '56';
-
-                // 1) Mongo: include/exclude lists
-                let invoicesModel = [];   // include list (oddiy slpCode lar uchun)
-                let excludeModel = [];    // exclude list (slpCode=56 uchun)
-                let partialModel = [];
-
-                // 2) Mongo filters (faqat bo‘linganlar uchun)
-                const baseMongoFilter = {
-                    DueDate: { $gte: startDateMoment, $lte: endDateMoment },
-                };
-
-                // phoneConfiscated filter (sizdagi logika)
-                const applyPhoneConfiscatedFilter = (f) => {
-                    if (phoneConfiscated === 'true') {
-                        f.phoneConfiscated = true;
-                    } else if (phoneConfiscated === 'false') {
-                        f.$or = [
-                            { phoneConfiscated: false },
-                            { phoneConfiscated: { $exists: false } },
-                        ];
-                    }
-                };
-
-                // 3) Undistributed (slpCode=56) => Mongo’dan bo‘linganlarni olib, SAP’da NOT EXISTS qilamiz
-                if (isUndistributed) {
-                    // bu yerda SlpCode IN emas — chunki 56 bo‘linmagan, Mongo’da yo‘q.
-                    // Mongo’da borlari bo‘linganlar, shularni exclude qilamiz.
-                    const excludeFilter = { ...baseMongoFilter };
-
-                    // Siz xohlasangiz bo‘linganlar sharti: SlpCode mavjud bo‘lsin
-                    excludeFilter.SlpCode = { $exists: true };
-
-                    // phoneConfiscated filterini exclude listga qo‘shish shart emas,
-                    // chunki bo‘linmaganlar Mongo’da yo‘q, bu filter SAP natijasiga ta’sir qilmaydi.
-                    // (agar siz 56 uchun ham phoneConfiscated bo‘yicha exclude qilishni xohlasangiz,
-                    // unda bo‘linganlar orasidan phoneConfiscated bo‘yicha ham exclude qilishingiz kerak bo‘ladi.)
-
-                    excludeModel = await InvoiceModel.find(excludeFilter, {
-                        DocEntry: 1,
-                        InstlmntID: 1,
-                    })
-                        .lean();
-                } else {
-                    // 4) Normal case => Mongo’dan bo‘linganlarni olish (include list)
-                    const includeFilter = {
-                        ...baseMongoFilter,
-                        SlpCode: { $in: slpCodeArray },
-                    };
-                    applyPhoneConfiscatedFilter(includeFilter);
-
-                    const partialFilter = {
-                        ...baseMongoFilter,
-                        SlpCode: { $in: slpCodeArray },
-                    };
-                    applyPhoneConfiscatedFilter(partialFilter);
-
-                    // paid/partial bo‘lsa partialModel kerak (sizdagi kabi)
-                    const ps = (paymentStatus || '').split(',').map(s => s.trim());
-                    const needsPartialModel = ps.includes('paid') || ps.includes('partial');
-
-                    if (needsPartialModel) {
-                        partialFilter.partial = true;
-
-                        partialModel = await InvoiceModel.find(partialFilter, {
-                            phoneConfiscated: 1,
-                            DocEntry: 1,
-                            InstlmntID: 1,
-                            SlpCode: 1,
-                            images: 1,
-                            newDueDate: 1,
-                            CardCode: 1,
-                            partial: 1,
-                        })
-                            .sort({ DueDate: 1 })
-                            .hint({ SlpCode: 1, DueDate: 1 })
-                            .lean();
-                    }
-
-                    invoicesModel = await InvoiceModel.find(includeFilter, {
-                        phoneConfiscated: 1,
-                        DocEntry: 1,
-                        InstlmntID: 1,
-                        SlpCode: 1,
-                        images: 1,
-                        newDueDate: 1,
-                        CardCode: 1,
-                        partial: 1,
-                    })
-                        .sort({ DueDate: 1 })
-                        .hint({ SlpCode: 1, DueDate: 1 })
-                        .lean();
-
-                    // Normal case’da include list bo‘sh bo‘lsa — ha, qaytaramiz (sizdagi kabi)
-                    if (invoicesModel.length === 0) {
-                        return res.status(200).json({ total: 0, page, limit, totalPages: 0, data: [] });
-                    }
-                }
-
-                // 5) SAP query (include yoki exclude bilan)
-                const query = await DataRepositories.getDistributionInvoice({
-                    startDate,
-                    endDate,
-                    limit,
-                    offset: skip,
-                    paymentStatus,
-                    cardCode,
-                    serial,
-                    phone,
-                    invoices: invoicesModel,          // include list (normal case)
-                    excludeInvoices: excludeModel,    // exclude list (slpCode=56 case)
-                    partial: partialModel,
-                    search,
-                });
-
-                const invoices = await this.execute(query);
-                const total = get(invoices, '[0].TOTAL', 0) || 0;
-
-                const commentFilter = invoices.map(el => ({
-                    DocEntry: el.DocEntry,
-                    InstlmntID: el.InstlmntID,
-                }));
-
-                const comments = commentFilter.length
-                    ? await CommentModel.find({ $or: commentFilter }).sort({ created_at: 1 })
-                    : [];
-
-                const commentMap = {};
-                for (const c of comments) {
-                    const key = `${c.DocEntry}_${c.InstlmntID}`;
-                    if (!commentMap[key]) commentMap[key] = [];
-                    commentMap[key].push(c);
-                }
-
-                const cardCodes = invoices.map(el => el.CardCode).filter(Boolean);
-                const userModel = cardCodes.length
-                    ? await UserModel.find({ CardCode: { $in: cardCodes } })
-                    : [];
-
-                const userLocationMap = new Map();
-                userModel.forEach(user => {
-                    if (user.CardCode) {
-                        userLocationMap.set(user.CardCode, {
-                            lat: user.lat || null,
-                            long: user.long || null,
-                        });
-                    }
-                });
-
-                const invoiceMap = new Map();
-                if (!isUndistributed) {
-                    for (const inv of invoicesModel) {
-                        invoiceMap.set(`${inv.DocEntry}_${inv.InstlmntID}`, inv);
-                    }
-                }
-
-                const data = invoices.map(el => {
-                    const key = `${el.DocEntry}_${el.InstlmntID}`;
-                    const inv = invoiceMap.get(key); // 56 bo‘lsa undefined bo‘ladi
-                    const userLocation = userLocationMap.get(el.CardCode) || {};
-
-                    return {
-                        ...el,
-                        SlpCode: inv?.SlpCode ?? null,
-                        Images: inv?.images ?? [],
-                        NewDueDate: inv?.newDueDate ?? '',
-                        Comments: commentMap[key] || [],
-                        phoneConfiscated: inv?.phoneConfiscated ?? false,
-                        partial: inv?.partial ?? false,
-                        location: {
-                            lat: userLocation.lat || null,
-                            long: userLocation.long || null,
-                        },
-                    };
-                });
-
-                return res.status(200).json({
-                    total,
-                    page,
-                    limit,
-                    totalPages: Math.ceil(total / limit),
-                    data,
-                });
-            }
-
-
-            // slpCode bo'lmagan holat
-            let baseFilter = {
-                DueDate: {
-                    $gte: startDateMoment,
-                    $lte: endDateMoment
-                }
-            };
-
-            let baseFilterPartial = {
-                DueDate: {
-                    $gte: startDateMoment,
-                    $lte: endDateMoment
-                }
-            };
-            let invoiceConfiscated = [];
-
-            if (phoneConfiscated === 'true' || phoneConfiscated === 'false') {
-                baseFilter.phoneConfiscated = true;
-                invoiceConfiscated = await InvoiceModel.find(baseFilter, {
-                    phoneConfiscated: 1,
-                    DocEntry: 1,
-                    InstlmntID: 1,
-                    SlpCode: 1,
-                    images: 1,
-                    newDueDate: 1,
-                    CardCode: 1
-                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
-                if (invoiceConfiscated.length === 0) {
-                    return res.status(200).json({
-                        total: 0,
-                        page: 0,
-                        limit: 0,
-                        totalPages: 0,
-                        data: []
-                    });
-                }
-            }
-            let inInv = []
-            let notInv = []
-            if (phoneConfiscated === 'true') {
-                inInv = invoiceConfiscated
-            }
-            else if (phoneConfiscated === 'false') {
-                notInv = invoiceConfiscated
-            }
-
-            if (paymentStatus?.split(',').includes('paid') || paymentStatus?.split(',').includes('partial')) {
-                baseFilterPartial.partial = true
-            }
-
-            let partialModel = []
-
-            if (get(baseFilterPartial, 'partial')) {
-                partialModel = await InvoiceModel.find(baseFilterPartial, {
-                    phoneConfiscated: 1,
-                    DocEntry: 1,
-                    InstlmntID: 1,
-                    SlpCode: 1,
-                    images: 1,
-                    newDueDate: 1,
-                    CardCode: 1
-                }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
-            }
-
-            const query = await DataRepositories.getInvoice({
-                startDate,
-                endDate,
-                limit,
-                offset: skip,
-                paymentStatus,
-                cardCode,
-                serial,
-                phone,
-                search,
-                inInv,
-                notInv,
-                phoneConfiscated,
-                partial: partialModel
-            });
-
-            const invoices = await this.execute(query);
-            const total = get(invoices, '[0].TOTAL', 0) || 0;
-
-            const commentFilter = invoices.map(el => ({
-                DocEntry: el.DocEntry,
-                InstlmntID: el.InstlmntID
-            }));
-
-            const comments = await CommentModel.find({ $or: commentFilter }).sort({ created_at: 1 });
-
-            const commentMap = {};
-            for (const c of comments) {
-                const key = `${c.DocEntry}_${c.InstlmntID}`;
-                if (!commentMap[key]) commentMap[key] = [];
-                commentMap[key].push(c);
-            }
-
-            let userModel = await UserModel.find({
-                CardCode: { $in: invoices.map(el => el.CardCode) }
-            });
-
-            const userLocationMap = new Map();
-            userModel.forEach(user => {
-                if (user.CardCode) {
-                    userLocationMap.set(user.CardCode, {
-                        lat: user.lat || null,
-                        long: user.long || null,
-                    });
-                }
-            });
-
-            const docEntrySet = [...new Set(invoices.map(el => el.DocEntry))];
-            invoicesModel = await InvoiceModel.find({
-                DocEntry: { $in: docEntrySet }
-            });
-
-            const invoiceMap = new Map();
-            for (const inv of invoicesModel) {
-                invoiceMap.set(`${inv.DocEntry}_${inv.InstlmntID}`, inv);
-            }
-
-            const data = invoices.map(el => {
-                const key = `${el.DocEntry}_${el.InstlmntID}`;
-                const inv = invoiceMap.get(key);
-                const userLocation = userLocationMap.get(el.CardCode) || {};
-
-                return {
-                    ...el,
-                    SlpCode: inv?.SlpCode || null,
-                    Images: inv?.images || [],
-                    NewDueDate: inv?.newDueDate || '',
-                    Comments: commentMap[key] || [],
-                    phoneConfiscated: inv?.phoneConfiscated || false,
-                    partial: inv?.partial || false,
-                    location:{
-                        lat: userLocation.lat || null,
-                        long: userLocation.long || null,
-                    }
-                };
-            });
-
-            return res.status(200).json({
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
-                data
-            });
-
-        } catch (e) {
-            console.log(e , ' bu eeee')
-            next(e);
-        }
-    };
 
     leads = async (req, res, next) => {
         try {
@@ -3802,71 +3733,6 @@ class b1HANA {
         }
     };
 
-    // distribution = async (req, res, next) => {
-    //     try {
-    //         let { startDate, endDate } = req.query;
-    //
-    //         const executorsQuery = await DataRepositories.getSalesPersons(notIncExecutorRole);
-    //         const executorList = await this.execute(executorsQuery);
-    //         const SalesList = executorList.filter(el => el.U_role === 'Assistant');
-    //
-    //         if (!SalesList.length) {
-    //             return res.status(400).json({ error: 'Assistantlar topilmadi' });
-    //         }
-    //
-    //         // 2. Sanani filterlash (MongoDB formatiga o'tkazish)
-    //         const start = moment(startDate, 'YYYY.MM.DD').startOf('day').toDate();
-    //         const end = moment(endDate, 'YYYY.MM.DD').endOf('day').toDate();
-    //
-    //         // 3. SlpCode null bo'lgan invoice'larni topish
-    //         const nullInvoices = await InvoiceModel.find({
-    //             DueDate: { $gte: start, $lte: end },
-    //             $or: [{ SlpCode: null }, { SlpCode: { $exists: false } }]
-    //         }).lean();
-    //
-    //         if (!nullInvoices.length) {
-    //             return res.status(200).json({ message: 'Taqsimlanmagan invoice-lar topilmadi' });
-    //         }
-    //
-    //         // 4. Taqsimlash logikasi (Bulk operations)
-    //         const bulkOps = [];
-    //         let assistantIndex = 0;
-    //
-    //         for (const inv of nullInvoices) {
-    //             const currentAssistant = SalesList[assistantIndex];
-    //
-    //             bulkOps.push({
-    //                 updateOne: {
-    //                     filter: { _id: inv._id },
-    //                     update: {
-    //                         $set: {
-    //                             SlpCode: currentAssistant.SlpCode,
-    //                             SlpName: currentAssistant.SlpName
-    //                         }
-    //                     }
-    //                 }
-    //             });
-    //
-    //             // Assistantlar bo'ylab navbatga qo'yish
-    //             assistantIndex = (assistantIndex + 1) % SalesList.length;
-    //         }
-    //
-    //         // 5. Bazada ommaviy yangilash
-    //         if (bulkOps.length > 0) {
-    //             await InvoiceModel.bulkWrite(bulkOps);
-    //         }
-    //
-    //         return res.status(200).json({
-    //             message: 'success',
-    //             distributedCount: nullInvoices.length,
-    //             perAssistant: Math.floor(nullInvoices.length / SalesList.length)
-    //         });
-    //
-    //     } catch (e) {
-    //         next(e);
-    //     }
-    // };
-
     async  fetchRateFromDb(execute ,DataRepositories) {
         const query = DataRepositories.getRate({ /* sizning paramlaringiz bo'lsa */ });
         const data = await execute(query);
@@ -3969,184 +3835,6 @@ class b1HANA {
         }
     }
 
-    getAnalytics = async (req, res, next) => {
-        try {
-
-            let { startDate, endDate, slpCode, phoneConfiscated } = req.query
-
-            if (!startDate || !endDate) {
-                return res.status(404).json({ error: 'startDate and endDate are required' });
-            }
-
-            const now = moment();
-
-            if (!moment(startDate, 'YYYY.MM.DD', true).isValid()) {
-                startDate = moment(now).startOf('month').format('YYYY.MM.DD');
-            }
-
-            if (!moment(endDate, 'YYYY.MM.DD', true).isValid()) {
-                endDate = moment(now).endOf('month').format('YYYY.MM.DD');
-            }
-
-            const slpCodeRaw = req.query.slpCode; // "1,4,5"
-            const slpCodeArray = slpCodeRaw?.split(',').map(Number).filter(n => !isNaN(n));
-            const tz = 'Asia/Tashkent'
-            if (slpCode && Array.isArray(slpCodeArray) && slpCodeArray.length > 0) {
-                const isUndistributed = String(slpCode) === '56';
-
-                const startDateMoment = moment(startDate, 'YYYY.MM.DD').startOf('day').toDate();
-                const endDateMoment = moment(endDate, 'YYYY.MM.DD').endOf('day').toDate();
-
-                const baseMongoFilter = {
-                    DueDate: { $gte: startDateMoment, $lte: endDateMoment },
-                };
-
-
-                let invoicesModel = [];
-                let excludeModel = [];
-
-                if (isUndistributed) {
-                    const excludeFilter = { ...baseMongoFilter };
-
-                    excludeFilter.SlpCode = { $exists: true };
-
-                    excludeModel = await InvoiceModel.find(excludeFilter, {
-                        DocEntry: 1,
-                        InstlmntID: 1,
-                        phoneConfiscated: 1,
-                        InsTotal: 1,
-                    })
-                        .lean();
-                } else {
-                    const includeFilter = {
-                        ...baseMongoFilter,
-                        SlpCode: { $in: slpCodeArray },
-                    };
-
-                    invoicesModel = await InvoiceModel.find(includeFilter, {
-                        phoneConfiscated: 1,
-                        DocEntry: 1,
-                        InstlmntID: 1,
-                        SlpCode: 1,
-                        images: 1,
-                        newDueDate: 1,
-                        CardCode: 1,
-                        InsTotal: 1,
-                    })
-                        .sort({ DueDate: 1 })
-                        .hint({ SlpCode: 1, DueDate: 1 })
-                        .lean();
-
-                    if (invoicesModel.length === 0) {
-                        return res.status(200).json({ SumApplied: 0, InsTotal: 0, PaidToDate: 0 });
-                    }
-                }
-
-                const sourceForConfiscated = isUndistributed ? excludeModel : invoicesModel;
-                const phoneConfisList = (isUndistributed ? [] : invoicesModel).filter(item => !item?.phoneConfiscated);
-                const confiscatedTotal =
-                    sourceForConfiscated
-                        .filter(item => item?.phoneConfiscated)
-                        .reduce((a, b) => a + Number(b?.InsTotal || 0), 0) || 0;
-
-
-                if (!isUndistributed && phoneConfisList.length === 0) {
-                    const obj = {
-                        SumApplied: confiscatedTotal,
-                        InsTotal: confiscatedTotal,
-                        PaidToDate: confiscatedTotal,
-                    };
-                    return res.status(200).json(obj);
-                }
-
-                const query = await DataRepositories.getAnalytics({
-                    startDate,
-                    endDate,
-                    invoices: phoneConfisList,
-                    excludeInvoices: excludeModel,
-                    isUndistributed,
-                });
-
-                const data = await this.execute(query);
-
-
-                const result = data.length
-                    ? data.reduce((acc, item) => ({
-                        SumApplied: acc.SumApplied + Number(item.SumApplied || 0),
-                        InsTotal:   acc.InsTotal   + Number(item.InsTotal   || 0),
-                        PaidToDate: acc.PaidToDate + Number(item.PaidToDate || 0),
-                    }), { SumApplied: 0, InsTotal: 0, PaidToDate: 0 })
-                    : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
-
-                if (result.PaidToDate > result.SumApplied) {
-                    const n = result.PaidToDate - result.SumApplied;
-                    result.InsTotal = result.InsTotal - n + (isUndistributed ? 0 :confiscatedTotal);
-                    result.SumApplied = Number(result.SumApplied) + (isUndistributed ? 0 :confiscatedTotal);
-                    result.PaidToDate = result.SumApplied;
-                } else {
-                    result.SumApplied = Number(result.SumApplied) + (isUndistributed ? 0 :confiscatedTotal);
-                    result.InsTotal = Number(result.InsTotal) + (isUndistributed ? 0 :confiscatedTotal);
-                    result.PaidToDate = Number(result.PaidToDate);
-                }
-
-                return res.status(200).json(result);
-            }
-
-
-            let baseFilter = {
-                DueDate: {
-                    $gte: moment(startDate, 'YYYY.MM.DD').startOf('day').toDate(),
-                    $lte: moment(endDate, 'YYYY.MM.DD').endOf('day').toDate()
-                }
-            };
-            let invoiceConfiscated = [];
-
-            baseFilter.phoneConfiscated = true;
-
-            invoiceConfiscated = await InvoiceModel.find(baseFilter, {
-                phoneConfiscated: 1,
-                DocEntry: 1,
-                InstlmntID: 1,
-                SlpCode: 1,
-                images: 1,
-                newDueDate: 1,
-                CardCode: 1,
-                InsTotal: 1
-            }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
-
-
-            let confiscatedTotal = invoiceConfiscated.length ? invoiceConfiscated.reduce((a, b) => a + Number(b?.InsTotal || 0), 0) : 0
-            const query = await DataRepositories.getAnalytics({isUndistributed:true, startDate, endDate, invoices: invoiceConfiscated, phoneConfiscated: 'true' })
-
-            let data = await this.execute(query)
-            let result = data.length
-                ? data.reduce(
-                    (acc, item) => ({
-                        SumApplied: acc.SumApplied + Number(item.SumApplied ?? 0),
-                        InsTotal: acc.InsTotal + Number(item.InsTotal ?? 0),
-                        PaidToDate: acc.PaidToDate + Number(item.PaidToDate ?? 0),
-                    }),
-                    { SumApplied: 0, InsTotal: 0, PaidToDate: 0 }
-                )
-                : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
-
-            if(result.PaidToDate > result.SumApplied){
-                result.SumApplied = Number(result.SumApplied) + confiscatedTotal;
-                result.PaidToDate = result.SumApplied;
-            }
-            else{
-                result.SumApplied = Number(result.SumApplied) + confiscatedTotal ;
-                result.InsTotal = Number(result.InsTotal) ;
-                result.PaidToDate = Number(result.PaidToDate) ;
-            }
-
-            return res.status(200).json(result);
-        }
-        catch (e) {
-            console.log(e)
-            next(e)
-        }
-    }
 
     getAnalyticsByDay = async (req, res, next) => {
         try {
