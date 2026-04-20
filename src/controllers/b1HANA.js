@@ -372,6 +372,11 @@ class b1HANA {
             console.log('Confiscated count:', invoiceConfiscated.length);
             console.log('Confiscated sum:', invoiceConfiscated.reduce((a,b) => a + Number(b?.InsTotal || 0), 0));
 
+            const missing = invoiceConfiscated.filter(i => !i.InsTotal || Number(i.InsTotal) === 0).length;
+            const withValue = invoiceConfiscated.filter(i => Number(i.InsTotal) > 0).length;
+            console.log('InsTotal bo\'sh/0:', missing);
+            console.log('InsTotal qiymatli:', withValue);
+
             const confiscatedTotal = invoiceConfiscated.reduce(
                 (a, b) => a + Number(b?.InsTotal || 0), 0
             );
