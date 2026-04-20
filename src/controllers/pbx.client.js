@@ -116,14 +116,23 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
         return body;
     };
 
+    const doPost = (path, paramsObj) =>
+        api.post(path, buildBody(paramsObj), {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
+
+    const isInternalError = (d) =>
+        d && (d.status === '0' || d.status === 0) && d.errorCode === 'INTERNAL';
+    const isAuthError = (d) => d && d.isNotAuth === true && !isInternalError(d);
+
+    const INTERNAL_RETRY_DELAYS_MS = [2000, 4000];
+
     const postForm = async (path, paramsObj) => {
         try {
-            let { data } = await api.post(path, buildBody(paramsObj), {
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            });
+            let { data } = await doPost(path, paramsObj);
 
-            // Body darajasidagi auth failure: PBX HTTP 200 qaytaradi, lekin isNotAuth:true bo'ladi
-            if (data && data.isNotAuth === true) {
+            // 1) Haqiqiy auth failure: PBX HTTP 200 qaytaradi, isNotAuth:true, INTERNAL emas
+            if (isAuthError(data)) {
                 console.warn(`[OnlinePBX] body-level auth failure on ${path}, re-login & retry`);
                 token = { keyId: null, key: null };
                 try {
@@ -131,16 +140,36 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
                 } catch (loginErr) {
                     throw new Error(`PBX auth olishda xatolik: ${loginErr.message}`);
                 }
-                const retry = await api.post(path, buildBody(paramsObj), {
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                });
+                const retry = await doPost(path, paramsObj);
                 data = retry.data;
 
-                if (data && data.isNotAuth === true) {
+                if (isAuthError(data)) {
                     const comment = data.comment || 'no comment';
                     const code = data.errorCode || 'N/A';
                     throw new Error(
                         `PBX auth olishda xatolik: yangi auth olindi lekin server avtorizatsiyani qabul qilmadi (${comment}, code=${code})`
+                    );
+                }
+            }
+
+            // 2) PBX server ichki xatosi (errorCode=INTERNAL): backoff bilan qayta urinish
+            if (isInternalError(data)) {
+                for (let i = 0; i < INTERNAL_RETRY_DELAYS_MS.length; i++) {
+                    const delay = INTERNAL_RETRY_DELAYS_MS[i];
+                    console.warn(
+                        `[OnlinePBX] INTERNAL error on ${path}, retry ${i + 1}/${INTERNAL_RETRY_DELAYS_MS.length} in ${delay}ms`
+                    );
+                    await new Promise((r) => setTimeout(r, delay));
+                    const retry = await doPost(path, paramsObj);
+                    data = retry.data;
+                    if (!isInternalError(data)) break;
+                }
+
+                if (isInternalError(data)) {
+                    const attempts = INTERNAL_RETRY_DELAYS_MS.length + 1;
+                    const comment = data.comment || 'no comment';
+                    throw new Error(
+                        `PBX server ichki xatoligi (${attempts} marta urinildi): ${comment}`
                     );
                 }
             }
