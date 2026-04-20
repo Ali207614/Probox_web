@@ -77,19 +77,6 @@ const RATE_TTL_MS = 5 * 60 * 60 * 1000;
 
 class b1HANA {
 
-    // DI: dataRepositories (HANA builder), executor (HANA runner), Mongo models
-    constructor({ dataRepositories, executor, InvoiceModel, CommentModel, UserModel }) {
-        this.repo = dataRepositories;
-        this.execute = executor;
-        this.InvoiceModel = InvoiceModel;
-        this.CommentModel = CommentModel;
-        this.UserModel = UserModel;
-    }
-
-
-
-
-
 
     invoice = async (req, res, next) => {
         try {
@@ -112,18 +99,17 @@ class b1HANA {
 
             const baseMongo = { DueDate: { $gte: startMoment, $lte: endMoment } };
 
-            let includeInvoices = [];
-            let excludeInvoices = [];
-            let partialModel    = [];
-            let isUndistributed = false;
-            let invoicesFromMongo = []; // data mapping uchun
+            let includeInvoices   = [];
+            let excludeInvoices   = [];
+            let partialModel      = [];
+            let isUndistributed   = false;
+            let invoicesFromMongo = [];
 
-            // -------- 1) Distribution rejimi (slpCode berilgan)
             if (isDistribution) {
                 isUndistributed = String(req.query.slpCode) === String(UNDISTRIBUTED_SLP_CODE);
 
                 if (isUndistributed) {
-                    excludeInvoices = await this.InvoiceModel
+                    excludeInvoices = await InvoiceModel
                         .find({ ...baseMongo, SlpCode: { $exists: true } },
                             { DocEntry: 1, InstlmntID: 1 })
                         .lean();
@@ -135,13 +121,12 @@ class b1HANA {
                     const needsPartial = statuses.includes('paid') || statuses.includes('partial');
 
                     if (needsPartial) {
-                        const partialFilter = { ...includeFilter, partial: true };
-                        partialModel = await this.InvoiceModel
-                            .find(partialFilter, INVOICE_PROJECTION)
+                        partialModel = await InvoiceModel
+                            .find({ ...includeFilter, partial: true }, INVOICE_PROJECTION)
                             .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
                     }
 
-                    includeInvoices = await this.InvoiceModel
+                    includeInvoices = await InvoiceModel
                         .find(includeFilter, INVOICE_PROJECTION)
                         .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
 
@@ -150,10 +135,8 @@ class b1HANA {
                     }
                     invoicesFromMongo = includeInvoices;
                 }
-            }
-            // -------- 2) Umumiy rejim (slpCode yo'q)
-            else if (phoneConfiscated === 'true' || phoneConfiscated === 'false') {
-                const confiscated = await this.InvoiceModel
+            } else if (phoneConfiscated === 'true' || phoneConfiscated === 'false') {
+                const confiscated = await InvoiceModel
                     .find({ ...baseMongo, phoneConfiscated: true }, INVOICE_PROJECTION)
                     .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
 
@@ -161,26 +144,26 @@ class b1HANA {
                     return res.status(200).json({ total: 0, page, limit, totalPages: 0, data: [] });
                 }
 
-                if (phoneConfiscated === 'true')       includeInvoices = confiscated;
-                else /* 'false' */                     excludeInvoices = confiscated;
+                if (phoneConfiscated === 'true') includeInvoices = confiscated;
+                else                             excludeInvoices = confiscated;
 
                 const statuses = (paymentStatus || '').split(',').map(s => s.trim());
                 if (statuses.includes('paid') || statuses.includes('partial')) {
-                    partialModel = await this.InvoiceModel
+                    partialModel = await InvoiceModel
                         .find({ ...baseMongo, partial: true }, INVOICE_PROJECTION)
                         .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
                 }
             } else {
                 const statuses = (paymentStatus || '').split(',').map(s => s.trim());
                 if (statuses.includes('paid') || statuses.includes('partial')) {
-                    partialModel = await this.InvoiceModel
+                    partialModel = await InvoiceModel
                         .find({ ...baseMongo, partial: true }, INVOICE_PROJECTION)
                         .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
                 }
             }
 
-            // -------- 3) HANA query
-            const query = this.repo.buildInvoiceQuery({
+            // HANA query — DataRepositories da qanday chaqirilsa shunday
+            const query = await DataRepositories.buildInvoiceQuery({
                 startDate, endDate,
                 limit, offset: skip,
                 paymentStatus, cardCode, serial, phone, search,
@@ -195,35 +178,27 @@ class b1HANA {
                 return res.status(200).json({ total, page, limit, totalPages: 0, data: [] });
             }
 
-            // -------- 4) Qo'shimcha ma'lumotlar (comments, users, Mongo metadata)
             const commentFilter = invoices.map(el => ({
                 DocEntry: el.DocEntry, InstlmntID: el.InstlmntID,
             }));
             const comments = commentFilter.length
-                ? await this.CommentModel.find({ $or: commentFilter }).sort({ created_at: 1 }).lean()
+                ? await CommentModel.find({ $or: commentFilter }).sort({ created_at: 1 }).lean()
                 : [];
             const commentMap = groupComments(comments);
 
             const cardCodes = [...new Set(invoices.map(el => el.CardCode).filter(Boolean))];
             const users = cardCodes.length
-                ? await this.UserModel.find({ CardCode: { $in: cardCodes } }).lean()
+                ? await UserModel.find({ CardCode: { $in: cardCodes } }).lean()
                 : [];
             const userLocationMap = buildUserLocationMap(users);
 
-            // invoiceMap: faqat includeInvoices bor bo'lsa (undistributed holatda undefined qoladi)
             const invoiceMap = new Map();
             if (!isDistribution) {
-                // Umumiy rejim: qaytarilgan invoys'ga mos Mongo yozuvlarini olamiz
                 const docEntries = [...new Set(invoices.map(el => el.DocEntry))];
                 const rows = docEntries.length
-                    ? await this.InvoiceModel.find(
-                        { DocEntry: { $in: docEntries } },
-                        INVOICE_PROJECTION
-                    ).lean()
+                    ? await InvoiceModel.find({ DocEntry: { $in: docEntries } }, INVOICE_PROJECTION).lean()
                     : [];
-                for (const r of rows) {
-                    invoiceMap.set(`${r.DocEntry}_${r.InstlmntID}`, r);
-                }
+                for (const r of rows) invoiceMap.set(`${r.DocEntry}_${r.InstlmntID}`, r);
             } else if (!isUndistributed) {
                 for (const inv of invoicesFromMongo) {
                     invoiceMap.set(`${inv.DocEntry}_${inv.InstlmntID}`, inv);
@@ -253,13 +228,14 @@ class b1HANA {
                 data,
             });
         } catch (e) {
+            console.log(e, ' bu eeee');
             return next(e);
         }
     };
 
     getAnalytics = async (req, res, next) => {
         try {
-            const { startDate: sdRaw, endDate: edRaw, phoneConfiscated } = req.query;
+            const { startDate: sdRaw, endDate: edRaw } = req.query;
 
             if (!sdRaw || !edRaw) {
                 return res.status(400).json({ error: 'startDate and endDate are required' });
@@ -271,7 +247,6 @@ class b1HANA {
 
             const baseMongo = { DueDate: { $gte: startMoment, $lte: endMoment } };
 
-            // -------- 1) Distribution rejimi
             if (isDistribution) {
                 const isUndistributed = String(req.query.slpCode) === String(UNDISTRIBUTED_SLP_CODE);
 
@@ -279,12 +254,12 @@ class b1HANA {
                 let excludeModel  = [];
 
                 if (isUndistributed) {
-                    excludeModel = await this.InvoiceModel
+                    excludeModel = await InvoiceModel
                         .find({ ...baseMongo, SlpCode: { $exists: true } },
                             { DocEntry: 1, InstlmntID: 1, phoneConfiscated: 1, InsTotal: 1 })
                         .lean();
                 } else {
-                    invoicesModel = await this.InvoiceModel
+                    invoicesModel = await InvoiceModel
                         .find({ ...baseMongo, SlpCode: { $in: slpCodes } }, INVOICE_PROJECTION)
                         .sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
 
@@ -299,8 +274,6 @@ class b1HANA {
                     .filter(i => i.phoneConfiscated)
                     .reduce((a, b) => a + Number(b?.InsTotal || 0), 0);
 
-                // Agar barcha undistributed-bo'lmagan yozuvlar confiscated bo'lsa,
-                // SAP'ga tushmasdan javob beramiz.
                 if (!isUndistributed && nonConfiscated.length === 0) {
                     return res.status(200).json({
                         SumApplied: confiscatedTotal,
@@ -309,7 +282,7 @@ class b1HANA {
                     });
                 }
 
-                const query = this.repo.buildAnalyticsQuery({
+                const query = await DataRepositories.buildAnalyticsQuery({
                     startDate, endDate,
                     invoices:        nonConfiscated,
                     excludeInvoices: excludeModel,
@@ -318,34 +291,33 @@ class b1HANA {
 
                 const rows = await this.execute(query);
                 const result = this._reduceAnalytics(rows);
-
                 return res.status(200).json(
                     this._mergeConfiscated(result, confiscatedTotal, isUndistributed)
                 );
             }
 
-            // -------- 2) Umumiy rejim (slpCode yo'q) — confiscatedlarni exclude qilib SAP'dan olamiz
-            const confiscated = await this.InvoiceModel
+            // Umumiy rejim
+            const confiscated = await InvoiceModel
                 .find({ ...baseMongo, phoneConfiscated: true },
                     { DocEntry: 1, InstlmntID: 1, InsTotal: 1 })
                 .lean();
 
             const confiscatedTotal = confiscated.reduce((a, b) => a + Number(b?.InsTotal || 0), 0);
 
-            const query = this.repo.buildAnalyticsQuery({
+            const query = await DataRepositories.buildAnalyticsQuery({
                 startDate, endDate,
-                excludeInvoices: confiscated, // BUG FIX: avval bu yuborilmasdi
+                excludeInvoices: confiscated,
                 isUndistributed: true,
             });
 
             const rows = await this.execute(query);
             const result = this._reduceAnalytics(rows);
 
-            // Umumiy rejimda confiscated'lar "fully paid" deb qaraladi (original logikaga mos)
             return res.status(200).json(
-                this._mergeConfiscated(result, confiscatedTotal, /* isUndistributed */ false)
+                this._mergeConfiscated(result, confiscatedTotal, false)
             );
         } catch (e) {
+            console.log(e);
             return next(e);
         }
     };
@@ -362,7 +334,6 @@ class b1HANA {
     }
 
     _mergeConfiscated(result, confiscatedTotal, isUndistributed) {
-        // Undistributed holatda confiscated qo'shilmaydi (original xatti-harakat).
         const add = isUndistributed ? 0 : confiscatedTotal;
 
         if (result.PaidToDate > result.SumApplied) {
