@@ -24,6 +24,7 @@ const {startSellerBumpNotifyCron} = require("./utils/seller-bump-notify-cron");
 const {startScoringBumpNotifyCron} = require("./utils/scoring-bump-notify.cron");
 const {pbxClient, TRUNK_NAMES} = require("./integrations/pbx");
 const {startRatingSmsCron} = require("./utils/rating-sms.cron");
+const {startReservationExpireCron} = require("./utils/reservation-expire.cron");
 const startMehrliCallJob = require("./utils/mehrli-call-job");
 const tokenService = require('./services/tokenService');
 const RefreshFlag = require('./models/refresh-flag-model');
@@ -137,6 +138,7 @@ startSellerBumpNotifyCron()
 startScoringBumpNotifyCron()
 startRatingSmsCron()
 startMehrliCallJob()
+startReservationExpireCron()
 
 startLeadBumpNotifyCron({
     pbxClient,

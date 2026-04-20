@@ -11,55 +11,49 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
     });
 
     let token = { keyId: null, key: null };
+    // Single-flight: ko'p so'rov bir vaqtda login talab qilsa, faqat bitta /auth.json chaqiruv
+    let pendingLogin = null;
 
-    async function login() {
+    function _doLogin() {
         const body = new URLSearchParams({ auth_key: authKey });
-
-        let resp;
-        try {
-            resp = await axios.post(`${baseURL}/auth.json`, body, {
-                headers: {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                timeout: 30000,
-            });
-        } catch (e) {
+        return axios.post(`${baseURL}/auth.json`, body, {
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            timeout: 30000,
+        }).then((resp) => {
+            let data = resp.data;
+            if (typeof data === 'string') {
+                try { data = JSON.parse(data); } catch { /* ignore */ }
+            }
+            const keyId = data?.data?.key_id || data?.key_id || data?.data?.keyId || data?.keyId;
+            const key = data?.data?.key || data?.key || data?.data?.token || data?.token;
+            if (!keyId || !key) {
+                let preview;
+                try { preview = JSON.stringify(data); } catch { preview = String(data); }
+                if (preview && preview.length > 200) preview = preview.slice(0, 200) + '...';
+                throw new Error(`PBX auth olishda xatolik: key_id/key topilmadi (resp=${preview})`);
+            }
+            token = { keyId, key };
+            return token;
+        }).catch((e) => {
             const detail =
                 e?.response?.data?.comment ||
                 e?.response?.statusText ||
                 e.message;
             throw new Error(`PBX auth olishda xatolik: ${detail}`);
+        });
+    }
+
+    async function login() {
+        if (pendingLogin) return pendingLogin;
+        pendingLogin = _doLogin();
+        try {
+            return await pendingLogin;
+        } finally {
+            pendingLogin = null;
         }
-
-        let data = resp.data;
-
-        // ba'zan string kelishi mumkin
-        if (typeof data === 'string') {
-            try { data = JSON.parse(data); } catch { /* ignore */ }
-        }
-
-        const keyId =
-            data?.data?.key_id ||
-            data?.key_id ||
-            data?.data?.keyId ||
-            data?.keyId;
-
-        const key =
-            data?.data?.key ||
-            data?.key ||
-            data?.data?.token ||
-            data?.token;
-
-        if (!keyId || !key) {
-            let preview;
-            try { preview = JSON.stringify(data); } catch { preview = String(data); }
-            if (preview && preview.length > 200) preview = preview.slice(0, 200) + '...';
-            throw new Error(`PBX auth olishda xatolik: key_id/key topilmadi (resp=${preview})`);
-        }
-
-        token = { keyId, key };
-        return token;
     }
 
     // api2.onlinepbx.ru imzolashni talab qilmaydi:
@@ -133,9 +127,22 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
     const isPureAuthError = (d) =>
         d && d.isNotAuth === true && !isInternalError(d);
 
-    // OnlinePBX server beqaror: ~20% so'rov INTERNAL qaytarishi mumkin.
-    // Shuning uchun 4 qayta urinish (jami 5 ta). Eksponensial backoff.
-    const INTERNAL_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
+    // OnlinePBX server hozir ~50% INTERNAL/tarmoq xatosi qaytaryapti.
+    // 7 qayta urinish (jami 8 urinish): 0.5^8 = 0.4% hard fail.
+    // Jitter ±30% — bir vaqtda fail bo'lgan ko'p so'rov serverni yanada yuklamasligi uchun.
+    const RETRY_DELAYS_MS = [500, 1000, 2000, 3000, 5000, 7000, 10000];
+    const withJitter = (ms) => Math.round(ms * (0.7 + Math.random() * 0.6));
+
+    // Tarmoq xatolari (timeout, ECONNRESET, socket hang up, ...) — response bo'lmaydi
+    const isNetworkError = (err) =>
+        !!err && !err.response && (
+            err.code === 'ECONNRESET' ||
+            err.code === 'ECONNABORTED' ||
+            err.code === 'ETIMEDOUT' ||
+            err.code === 'ENOTFOUND' ||
+            err.code === 'EAI_AGAIN' ||
+            /timeout|socket hang up|network/i.test(err.message || '')
+        );
 
     const previewStr = (v, max = 500) => {
         let s;
@@ -148,65 +155,70 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
     };
 
     const postForm = async (path, paramsObj) => {
-        try {
-            const first = await doPost(path, paramsObj);
-            let data = first.data;
-            let sentBody = first.__sentBody;
+        const MAX_ATTEMPTS = RETRY_DELAYS_MS.length + 1; // 8 ta jami
+        let lastData = null;
+        let lastSentBody = null;
+        let reauthed = false;
 
-            // 1) Toza auth muammosi (isNotAuth:true va INTERNAL emas):
-            // token TTL tugagan. Re-login qilib bir marta retry.
-            if (isPureAuthError(data)) {
-                console.warn(`[OnlinePBX] pure auth failure on ${path}, re-login & retry`);
-                token = { keyId: null, key: null };
-                try {
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                const resp = await doPost(path, paramsObj);
+                lastData = resp.data;
+                lastSentBody = resp.__sentBody;
+
+                // Toza auth xatosi — bir martagina re-login + darhol retry (backoffsiz)
+                if (isPureAuthError(lastData) && !reauthed) {
+                    reauthed = true;
+                    console.warn(`[OnlinePBX] pure auth failure on ${path}, re-login & retry`);
+                    token = { keyId: null, key: null };
                     await login();
-                } catch (loginErr) {
-                    throw new Error(`PBX auth olishda xatolik: ${loginErr.message}`);
+                    continue;
                 }
-                const retry = await doPost(path, paramsObj);
-                data = retry.data;
-                sentBody = retry.__sentBody;
 
-                if (isPureAuthError(data)) {
-                    const comment = data.comment || 'no comment';
-                    const code = data.errorCode || 'N/A';
+                // Re-login'dan keyin ham toza auth xatosi — fatal
+                if (isPureAuthError(lastData)) {
                     throw new Error(
-                        `PBX auth olishda xatolik: yangi auth olindi lekin server avtorizatsiyani qabul qilmadi (${comment}, code=${code})`
+                        `PBX auth rad etildi: ${lastData.comment || 'no comment'} (code=${lastData.errorCode || 'N/A'})`
                     );
                 }
-            }
 
-            // 2) PBX server ichki xatosi (errorCode=INTERNAL): backoff bilan qayta urinish
-            if (isInternalError(data)) {
-                console.warn(
-                    `[OnlinePBX] INTERNAL error on ${path}\n  sent: ${previewStr(sentBody)}\n  resp: ${previewStr(data)}`
-                );
-                for (let i = 0; i < INTERNAL_RETRY_DELAYS_MS.length; i++) {
-                    const delay = INTERNAL_RETRY_DELAYS_MS[i];
+                // INTERNAL — retry qilinadi
+                if (isInternalError(lastData)) {
+                    if (attempt < MAX_ATTEMPTS) {
+                        const base = RETRY_DELAYS_MS[attempt - 1];
+                        const delay = withJitter(base);
+                        console.warn(
+                            `[OnlinePBX] INTERNAL on ${path} (urinish ${attempt}/${MAX_ATTEMPTS}), ${delay}ms kutish`
+                        );
+                        await new Promise((r) => setTimeout(r, delay));
+                        continue;
+                    }
+                    // Urinishlar tugadi
+                    throw new Error(
+                        `PBX server ichki xatoligi (${MAX_ATTEMPTS} urinish): ${lastData.comment || 'no comment'} | sent=${previewStr(lastSentBody, 300)} | resp=${previewStr(lastData, 300)}`
+                    );
+                }
+
+                // Muvaffaqiyat (yoki boshqa javob)
+                return lastData;
+            } catch (err) {
+                // Tarmoq xatosi — retry qilinadi
+                if (isNetworkError(err) && attempt < MAX_ATTEMPTS) {
+                    const base = RETRY_DELAYS_MS[attempt - 1];
+                    const delay = withJitter(base);
                     console.warn(
-                        `[OnlinePBX] INTERNAL error on ${path}, retry ${i + 1}/${INTERNAL_RETRY_DELAYS_MS.length} in ${delay}ms`
+                        `[OnlinePBX] tarmoq xatosi on ${path} (urinish ${attempt}/${MAX_ATTEMPTS}): ${err.code || err.message}, ${delay}ms kutish`
                     );
                     await new Promise((r) => setTimeout(r, delay));
-                    const retry = await doPost(path, paramsObj);
-                    data = retry.data;
-                    sentBody = retry.__sentBody;
-                    if (!isInternalError(data)) break;
+                    continue;
                 }
-
-                if (isInternalError(data)) {
-                    const attempts = INTERNAL_RETRY_DELAYS_MS.length + 1;
-                    const comment = data.comment || 'no comment';
-                    throw new Error(
-                        `PBX server ichki xatoligi (${attempts} marta urinildi): ${comment} | sent=${previewStr(sentBody, 300)} | resp=${previewStr(data, 300)}`
-                    );
-                }
+                console.error(`[OnlinePBX] API Error on ${path}:`, err?.response?.data || err.message);
+                throw err;
             }
-
-            return data;
-        } catch (e) {
-            console.error(`[OnlinePBX] API Error on ${path}:`, e?.response?.data || e.message);
-            throw e;
         }
+
+        // Bu yerga kelmasligi kerak, lekin xavfsizlik uchun
+        return lastData;
     };
 
     // Array'larni to'g'ri separator bilan birlashtiradi:

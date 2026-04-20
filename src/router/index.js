@@ -49,6 +49,7 @@ const {purchasePdfBasicAuth} = require("../middlewares/basic-auth-purchase-pdf")
 const {webLeadBasicAuth} = require("../middlewares/basic-auth-web");
 const verifyCodeController = require("../controllers/verification-controller");
 const forceRefreshController = require("../controllers/forceRefreshController");
+const reservationController = require("../controllers/reservationController");
 
 router.post('/login', b1HANA.login);
 
@@ -232,6 +233,11 @@ router.get('/leads/:id/chat', authMiddleware, b1HANA.getChats);
 router.put('/leads/chat/:chatId', authMiddleware, b1HANA.updateChat);
 router.delete('/leads/chat/:chatId', authMiddleware, b1HANA.deleteChat);
 
+
+router.post('/reservations', authMiddleware, reservationController.createReservation);
+router.delete('/reservations/:id', authMiddleware, reservationController.deleteReservation);
+router.get('/reservations/lead/:leadId', authMiddleware, reservationController.getReservationsByLead);
+router.get('/reservations', authMiddleware, reservationController.listReservations);
 
 router.post('/force-refresh/user', authMiddleware, forceRefreshController.setForUser);
 router.post('/force-refresh/all', authMiddleware, forceRefreshController.setForAll);

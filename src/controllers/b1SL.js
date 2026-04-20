@@ -6,6 +6,7 @@ const moment = require('moment');
 const { getSession, saveSession } = require("../helpers");
 const { api_params, api, db} = require("../config");
 const { execute } = require("../services/dbService");
+const { releaseReservationsForLead } = require('./reservationController');
 
 require('dotenv').config();
 
@@ -475,6 +476,20 @@ ${JSON.stringify(paymentBody,null,4).replace('"DocEntry": 0', '"DocEntry":$1')}
                     }
                 }
             );
+
+            try {
+                await releaseReservationsForLead({
+                    leadId,
+                    reason: 'purchased',
+                    actor: {
+                        id: req.user?.SlpCode ?? req.user?.id ?? null,
+                        name: req.user?.SlpName ?? null,
+                        role: req.user?.U_role ?? null,
+                    },
+                });
+            } catch (relErr) {
+                console.error('releaseReservationsForLead (b1SL.createInvoice) error:', relErr?.message);
+            }
 
             return res.status(201).json({
                 status: true,

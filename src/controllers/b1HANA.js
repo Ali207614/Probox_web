@@ -45,6 +45,7 @@ const { createOnlinePbx } = require('./pbx.client');
 const {fetchLeadPbxChats} = require("../services/lead_pbx_sync.service");
 const axios = require("axios");
 const {sendCouponStatusWebhook} = require("../services/coupon.service");
+const { releaseReservationsForLead } = require('./reservationController');
 
 
 const {
@@ -919,7 +920,8 @@ class b1HANA {
                 callCount2,
                 callCount,
                 rejectionReason,
-                consideringBumped
+                consideringBumped,
+                hasReservation
             } = req.query;
 
             const filter = {};
@@ -1204,6 +1206,16 @@ class b1HANA {
             addRangeFilter('score', scoreMin, scoreMax);
             addRangeFilter('officialSalary', officialSalaryMin, officialSalaryMax);
             addRangeFilter('finalPercentage', finalPercentageMin, finalPercentageMax);
+
+            if (hasReservation === 'yes' || hasReservation === 'no') {
+                const ReservationModel = require('../models/reservation-model');
+                const leadIdsWithActive = await ReservationModel.distinct('leadId', { status: 'active' });
+                if (hasReservation === 'yes') {
+                    addAndCondition(filter, { _id: { $in: leadIdsWithActive } });
+                } else {
+                    addAndCondition(filter, { _id: { $nin: leadIdsWithActive } });
+                }
+            }
 
             const total = await LeadModel.countDocuments(filter);
 
@@ -3110,6 +3122,41 @@ class b1HANA {
 
             if (!updated) {
                 return res.status(404).json({ message: 'Lead not found' });
+            }
+
+            // ✅ Bronni avto-yechish: Purchased / NoPurchase / Closed / Blocked statuslarida
+            try {
+                const RELEASE_STATUS_REASON = {
+                    Purchased: 'purchased',
+                    NoPurchase: 'no_purchase',
+                    Closed: 'closed',
+                    Blocked: 'blocked',
+                };
+
+                const newStatus = updated.status;
+                const statusChanged = prevStatus !== newStatus;
+                const becameBlocked = !existingLead.isBlocked && updated.isBlocked;
+
+                let reason = null;
+                if (statusChanged && RELEASE_STATUS_REASON[newStatus]) {
+                    reason = RELEASE_STATUS_REASON[newStatus];
+                } else if (becameBlocked) {
+                    reason = 'blocked';
+                }
+
+                if (reason) {
+                    await releaseReservationsForLead({
+                        leadId: updated._id,
+                        reason,
+                        actor: {
+                            id: req.user?.SlpCode ?? req.user?.id ?? null,
+                            name: req.user?.SlpName ?? null,
+                            role: req.user?.U_role ?? null,
+                        },
+                    });
+                }
+            } catch (relErr) {
+                console.error('releaseReservationsForLead (updateLead) error:', relErr?.message);
             }
 
             if (prevStatus !== 'VisitedStore' && updated.status === 'VisitedStore') {

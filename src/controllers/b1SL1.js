@@ -11,6 +11,7 @@ const VerificationCodeModel = require('../models/verification-code-model');
 const bot = require("../bot");
 const {writeLeadEvent} = require("../utils/lead-chat-events.util");
 const {sendCouponStatusWebhook} = require("../services/coupon.service");
+const { releaseReservationsForLead } = require('./reservationController');
 const PERSONAL_CHAT_ID = Number(process.env.PERSONAL_CHAT_ID || process.env.PERSONAL_CHATID || 0);
 require('dotenv').config();
 
@@ -649,6 +650,20 @@ class b1SL {
                     },
                 }
             );
+
+            try {
+                await releaseReservationsForLead({
+                    leadId,
+                    reason: 'purchased',
+                    actor: {
+                        id: req.user?.SlpCode ?? req.user?.id ?? null,
+                        name: req.user?.SlpName ?? null,
+                        role: req.user?.U_role ?? null,
+                    },
+                });
+            } catch (relErr) {
+                console.error('releaseReservationsForLead (b1SL1.createInvoice) error:', relErr?.message);
+            }
 
             const firstDevice = Array.isArray(req.body?.selectedDevices) ? req.body.selectedDevices[0] : null;
             const productName = firstDevice?.name || firstDevice?.raw?.ItemName || null;
