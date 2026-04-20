@@ -60,7 +60,7 @@ async function getGeminiClosedAnalysisLine({ pbxClient, trunkNames, leadId, reas
         audio = await downloadRecordingAsBase64({ pbxClient, uuid: lastUuid, maxMb: GEMINI_MAX_AUDIO_MB });
     } catch (err) {
         console.error(`[Gemini Audio Error] Lead: ${leadId}`, err.message);
-        return `🤖 GEMINI: Audio yuklashda texnik xatolik.`;
+        return `🤖 GEMINI: Audio yuklashda xatolik (${escapeHtml(err?.message || 'unknown')})`;
     }
 
     if (!audio || !audio.base64) return `🤖 GEMINI: Audio fayl yaroqsiz.`;

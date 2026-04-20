@@ -360,32 +360,15 @@ class b1HANA {
                 phoneConfiscated: true,
             };
 
-
-
-
-
             const invoiceConfiscated = await InvoiceModel.find(baseFilter, {
                 phoneConfiscated: 1, DocEntry: 1, InstlmntID: 1, SlpCode: 1,
                 images: 1, newDueDate: 1, CardCode: 1, InsTotal: 1,
             }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
 
-            console.log('Confiscated count:', invoiceConfiscated.length);
-            console.log('Confiscated sum:', invoiceConfiscated.reduce((a,b) => a + Number(b?.InsTotal || 0), 0));
-
-            const missing = invoiceConfiscated.filter(i => !i.InsTotal || Number(i.InsTotal) === 0).length;
-            const withValue = invoiceConfiscated.filter(i => Number(i.InsTotal) > 0).length;
-            console.log('InsTotal bo\'sh/0:', missing);
-            console.log('InsTotal qiymatli:', withValue);
 
             const confiscatedTotal = invoiceConfiscated.reduce(
                 (a, b) => a + Number(b?.InsTotal || 0), 0
             );
-
-            console.log('Sample:', invoiceConfiscated.slice(0, 5).map(i => ({
-                DocEntry: i.DocEntry,
-                InstlmntID: i.InstlmntID,
-                InsTotal: i.InsTotal,
-            })));
 
             const query = await DataRepositories.getAnalytics({
                 isUndistributed: true,
