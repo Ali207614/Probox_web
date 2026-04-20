@@ -93,13 +93,7 @@ class b1HANA {
                 return res.status(400).json({ error: 'startDate and endDate are required' });
             }
 
-            const invoiceConfiscated = await InvoiceModel.find(baseFilter, {
-                phoneConfiscated: 1, DocEntry: 1, InstlmntID: 1, SlpCode: 1,
-                images: 1, newDueDate: 1, CardCode: 1, InsTotal: 1,
-            }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
 
-            console.log('Confiscated count:', invoiceConfiscated.length);
-            console.log('Confiscated sum:', invoiceConfiscated.reduce((a,b) => a + Number(b?.InsTotal || 0), 0));
 
             const { startDate, endDate, startMoment, endMoment } = normalizeDateRange(sdRaw, edRaw);
             const slpCodes = parseSlpCodes(req.query.slpCode);
@@ -212,6 +206,8 @@ class b1HANA {
                     invoiceMap.set(`${inv.DocEntry}_${inv.InstlmntID}`, inv);
                 }
             }
+
+
 
             const data = invoices.map(el => {
                 const key = `${el.DocEntry}_${el.InstlmntID}`;
@@ -364,10 +360,17 @@ class b1HANA {
                 phoneConfiscated: true,
             };
 
+
+
+
+
             const invoiceConfiscated = await InvoiceModel.find(baseFilter, {
                 phoneConfiscated: 1, DocEntry: 1, InstlmntID: 1, SlpCode: 1,
                 images: 1, newDueDate: 1, CardCode: 1, InsTotal: 1,
             }).sort({ DueDate: 1 }).hint({ SlpCode: 1, DueDate: 1 }).lean();
+
+            console.log('Confiscated count:', invoiceConfiscated.length);
+            console.log('Confiscated sum:', invoiceConfiscated.reduce((a,b) => a + Number(b?.InsTotal || 0), 0));
 
             const confiscatedTotal = invoiceConfiscated.reduce(
                 (a, b) => a + Number(b?.InsTotal || 0), 0
