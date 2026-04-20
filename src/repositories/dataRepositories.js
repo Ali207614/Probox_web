@@ -906,73 +906,50 @@ ORDER BY
         let includeCondition = '';
         let excludeCondition = '';
 
-        // normal case: invoices (include list) bo‘yicha cheklaymiz
         if (!isUndistributed && invoices.length > 0) {
-
             const condition = invoices
-                .map(item => `(T0."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`)
+                .map(i => `(T0."DocEntry" = '${i.DocEntry}' AND T0."InstlmntID" = '${i.InstlmntID}')`)
                 .join(' OR ');
-
-            includeCondition = `
-      AND EXISTS (
-        SELECT 1 FROM DUMMY
-        WHERE (${condition})
-      )
-    `;
+            includeCondition = `AND (${condition})`;
         }
 
-        // 56 case: excludeInvoices bo‘yicha chiqarib tashlaymiz
         if (isUndistributed && excludeInvoices.length > 0) {
             const condition = excludeInvoices
-                .map(item => `(T0."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`)
+                .map(i => `(T0."DocEntry" = '${i.DocEntry}' AND T0."InstlmntID" = '${i.InstlmntID}')`)
                 .join(' OR ');
-
-            excludeCondition = `
-      AND NOT EXISTS (
-        SELECT 1 FROM DUMMY
-        WHERE (${condition})
-      )
-    `;
+            excludeCondition = `AND NOT (${condition})`;
         }
 
-        // Sizda newEndDate bor edi, lekin ishlatilmayapti — olib tashladim.
-        // Agar kerak bo‘lsa qo‘shamiz.
-
         return `
-SELECT 
-  SUM(T2."SumApplied") as "SumApplied",
-  (
-    SELECT SUM(T0a."InsTotal")
-    FROM ${this.db}.INV6 T0a
-    JOIN ${this.db}.OINV T1a ON T0a."DocEntry" = T1a."DocEntry"
-    WHERE T0a."DueDate" BETWEEN '${startDate}' AND '${endDate}'
-      AND T1a."CANCELED" = 'N'
-      AND T1a."CardCode" NOT IN ('Naqd','Bonus')
-      AND NOT EXISTS (
-        SELECT 1
-        FROM ${this.db}.RIN1 CM1
-        INNER JOIN ${this.db}.ORIN CM0 ON CM0."DocEntry" = CM1."DocEntry"
-        WHERE CM1."BaseType" = 13
-          AND CM1."BaseEntry" = T1a."DocEntry"
-      )
-      ${includeCondition.replace(/T0\./g, 'T0a.')}
-      ${excludeCondition.replace(/T0\./g, 'T0a.')}
-  ) AS "InsTotal",
-  SUM(T0."PaidToDate") as "PaidToDate",
-  SUM(T0."InsTotal") as "InsTotal2"
+SELECT
+    COALESCE(SUM(PAY."SumApplied"), 0)   AS "SumApplied",
+    COALESCE(SUM(T0."InsTotal"), 0)      AS "InsTotal",
+    COALESCE(SUM(T0."PaidToDate"), 0)    AS "PaidToDate"
 FROM ${this.db}.INV6 T0
-INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry"
-LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry" AND T0."InstlmntID" = T2."InstId"
-LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" AND T3."Canceled" = 'N'
+INNER JOIN ${this.db}.OINV T1
+    ON T0."DocEntry" = T1."DocEntry"
+LEFT JOIN (
+    SELECT
+        R2."DocEntry",
+        R2."InstId",
+        SUM(R2."SumApplied") AS "SumApplied"
+    FROM ${this.db}.RCT2 R2
+    INNER JOIN ${this.db}.ORCT RCT
+        ON RCT."DocEntry" = R2."DocNum"
+    WHERE RCT."Canceled" = 'N'
+    GROUP BY R2."DocEntry", R2."InstId"
+) PAY
+    ON PAY."DocEntry" = T0."DocEntry"
+   AND PAY."InstId"   = T0."InstlmntID"
 WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}'
   AND T1."CANCELED" = 'N'
   AND T1."CardCode" NOT IN ('Naqd','Bonus')
   AND NOT EXISTS (
-    SELECT 1
-    FROM ${this.db}.RIN1 CM1
-    INNER JOIN ${this.db}.ORIN CM0 ON CM0."DocEntry" = CM1."DocEntry"
-    WHERE CM1."BaseType" = 13
-      AND CM1."BaseEntry" = T1."DocEntry"
+      SELECT 1
+      FROM ${this.db}.RIN1 CM1
+      INNER JOIN ${this.db}.ORIN CM0 ON CM0."DocEntry" = CM1."DocEntry"
+      WHERE CM1."BaseType"  = 13
+        AND CM1."BaseEntry" = T1."DocEntry"
   )
   ${includeCondition}
   ${excludeCondition}

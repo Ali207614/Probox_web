@@ -4069,15 +4069,13 @@ class b1HANA {
 
                 const data = await this.execute(query);
 
+
                 const result = data.length
-                    ? data.reduce(
-                        (acc, item) => ({
-                            SumApplied: acc.SumApplied + (+item.SumApplied || 0),
-                            InsTotal: acc.InsTotal + (+item.InsTotal2 || 0),
-                            PaidToDate: acc.PaidToDate + (+item.PaidToDate || 0),
-                        }),
-                        { SumApplied: 0, InsTotal: 0, PaidToDate: 0 }
-                    )
+                    ? data.reduce((acc, item) => ({
+                        SumApplied: acc.SumApplied + Number(item.SumApplied || 0),
+                        InsTotal:   acc.InsTotal   + Number(item.InsTotal   || 0),
+                        PaidToDate: acc.PaidToDate + Number(item.PaidToDate || 0),
+                    }), { SumApplied: 0, InsTotal: 0, PaidToDate: 0 })
                     : { SumApplied: 0, InsTotal: 0, PaidToDate: 0 };
 
                 if (result.PaidToDate > result.SumApplied) {
