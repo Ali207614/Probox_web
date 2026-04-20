@@ -181,10 +181,23 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
         }
     };
 
+    // OnlinePBX bir nechta trunk'ni probel bilan ajratilgan qatordan tushunadi:
+    // trunk_names=xxx yyy (array yoki vergul emas)
+    function normalizeTrunks(trunk_names) {
+        const arr = Array.isArray(trunk_names)
+            ? trunk_names
+            : (trunk_names ? String(trunk_names).split(/[\s,]+/) : []);
+        const cleaned = arr.map((s) => String(s).trim()).filter(Boolean);
+        return cleaned.length ? cleaned.join(' ') : undefined;
+    }
+
     return {
         login,
         searchCalls(params) {
-            return postForm('/mongo_history/search.json', params);
+            const { trunk_names, ...rest } = params || {};
+            const normalized = normalizeTrunks(trunk_names);
+            const finalParams = normalized ? { ...rest, trunk_names: normalized } : rest;
+            return postForm('/mongo_history/search.json', finalParams);
         },
         getDownloadUrl(uuid) {
             return postForm('/mongo_history/search.json', { uuid, download: '1' });

@@ -10,7 +10,7 @@ const { createOnlinePbx } = require('../controllers/pbx.client');
 const pbxClient = createOnlinePbx({
     domain: process.env.PBX_DOMAIN,
     authKey: process.env.PBX_AUTH_KEY,
-    apiHost: 'https://api2.onlinepbx.ru',
+    apiHost: process.env.PBX_API_HOST || 'https://api2.onlinepbx.ru',
 });
 
 const pbxAudioHandler = require('./pbx-audio');
