@@ -787,87 +787,111 @@ ORDER BY
 `
     }
 
-   getAnalyticsByDay({ startDate, endDate, invoices = [], phoneConfiscated }) {
-        let salesCondition = '';
-        if (invoices.length > 0) {
-            const condition = invoices.map(item =>
-                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}') `
-            ).join(' OR ');
+    getAnalyticsByDay({ startDate, endDate, invoices = [], phoneConfiscated }) {
+        const sd = safeDate(startDate, 'startDate');
+        const ed = safeDate(endDate, 'endDate');
 
-            salesCondition = `
-                ${phoneConfiscated === 'true' ? 'AND NOT EXISTS' : 'AND EXISTS'} (
-                    SELECT 1 FROM DUMMY
-                    WHERE ${condition}
-                )
-            `;
+        const keys = buildInvoiceKeyList(invoices); // T0."DocEntry"=X AND T0."InstlmntID"=Y OR ...
+
+        let salesCondition = '';
+        if (keys) {
+            salesCondition = phoneConfiscated === 'true'
+                ? `AND NOT (${keys})`
+                : `AND (${keys})`;
         }
 
-        const newEndDate = moment(endDate, 'YYYY.MM.DD')
-            .endOf('month')
-            .add(10, 'days')
-            .format('YYYY.MM.DD');
+        const db = this.db;
 
-
-        let sql = `SELECT 
-            TO_VARCHAR(T0."DueDate", 'YYYY.MM.DD') AS "DueDate",
-            COALESCE(SUM(T2."SumApplied"), 0) AS "SumApplied",
-            SUM(T0."InsTotal") as "InsTotal", 
-            SUM(T0."PaidToDate") as "PaidToDate"
-        FROM 
-        ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
-        LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."DocDate" BETWEEN '${startDate}' and '${newEndDate}' and T3."Canceled" = 'N' 
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N'
-        ${salesCondition}
-        GROUP BY T0."DueDate"
-        ORDER BY T0."DueDate"
-        `
-        return sql
+        return `
+SELECT
+    TO_VARCHAR(T0."DueDate", 'YYYY.MM.DD')   AS "DueDate",
+    COALESCE(SUM(PAY."SumApplied"), 0)       AS "SumApplied",
+    COALESCE(SUM(T0."InsTotal"), 0)          AS "InsTotal",
+    COALESCE(SUM(T0."PaidToDate"), 0)        AS "PaidToDate"
+FROM ${db}.INV6 T0
+INNER JOIN ${db}.OINV T1
+    ON T0."DocEntry" = T1."DocEntry"
+LEFT JOIN (
+    SELECT
+        R2."DocEntry",
+        R2."InstId",
+        SUM(R2."SumApplied") AS "SumApplied"
+    FROM ${db}.RCT2 R2
+    INNER JOIN ${db}.ORCT RCT
+        ON RCT."DocEntry" = R2."DocNum"
+    WHERE RCT."Canceled" = 'N'
+    GROUP BY R2."DocEntry", R2."InstId"
+) PAY
+    ON PAY."DocEntry" = T0."DocEntry"
+   AND PAY."InstId"   = T0."InstlmntID"
+WHERE T0."DueDate" BETWEEN '${sd}' AND '${ed}'
+  AND T1."CANCELED" = 'N'
+  AND T1."CardCode" NOT IN ('Naqd','Bonus')
+  AND NOT EXISTS (
+      SELECT 1
+      FROM ${db}.RIN1 CM1
+      INNER JOIN ${db}.ORIN CM0 ON CM0."DocEntry" = CM1."DocEntry"
+      WHERE CM1."BaseType"  = 13
+        AND CM1."BaseEntry" = T1."DocEntry"
+  )
+  ${salesCondition}
+GROUP BY T0."DueDate"
+ORDER BY T0."DueDate"
+`;
     }
 
     getAnalyticsBySlpCode({ startDate, endDate, invoices = [], phoneConfiscated }) {
+        const sd = safeDate(startDate, 'startDate');
+        const ed = safeDate(endDate, 'endDate');
+
+        const keys = buildInvoiceKeyList(invoices);
+
         let salesCondition = '';
-
-        if (invoices.length > 0) {
-            const condition = invoices.map(item =>
-                `(T1."DocEntry" = '${item.DocEntry}' AND T0."InstlmntID" = '${item.InstlmntID}')`
-            ).join(' OR ');
-
-            salesCondition = `
-                ${phoneConfiscated === 'true' ? 'AND NOT EXISTS' : 'AND EXISTS'} (
-                    SELECT 1 FROM DUMMY
-                    WHERE ${condition}
-                )
-            `;
+        if (keys) {
+            salesCondition = phoneConfiscated === 'true'
+                ? `AND NOT (${keys})`
+                : `AND (${keys})`;
         }
-        const newEndDate = moment(endDate, 'YYYY.MM.DD')
-            .endOf('month')
-            .add(10, 'days')
-            .format('YYYY.MM.DD');
 
-        let sql = `
-        SELECT 
-            T0."DocEntry",
-            T0."InstlmntID",
-            T2."SumApplied",  
-            T0."InsTotal", 
-           T0."PaidToDate"
-        FROM 
-        ${this.db}.INV6 T0  INNER JOIN ${this.db}.OINV T1 ON T0."DocEntry" = T1."DocEntry" 
-        LEFT JOIN ${this.db}.RCT2 T2 ON T2."DocEntry" = T0."DocEntry"  and T0."InstlmntID" = T2."InstId" 
-        LEFT JOIN ${this.db}.ORCT T3 ON T2."DocNum" = T3."DocEntry" and T3."Canceled" = 'N' 
-        WHERE T0."DueDate" BETWEEN '${startDate}' AND '${endDate}' and T1."CANCELED" = 'N' and T1."CardCode" not in ('Naqd','Bonus')
-          AND NOT EXISTS (
-            SELECT 1
-            FROM ${this.db}.RIN1 CM1
-                     INNER JOIN ${this.db}.ORIN CM0
-                                ON CM0."DocEntry" = CM1."DocEntry"
-            WHERE CM1."BaseType" = 13              -- A/R Invoice
-              AND CM1."BaseEntry" = T1."DocEntry"
-        )
-        ${salesCondition}
-        `
-        return sql
+        const db = this.db;
+
+        // Bu query qatorma-qator (DocEntry, InstlmntID) darajasida qaytaradi —
+        // controller keyin SlpCode bo'yicha yig'adi.
+        return `
+SELECT
+    T0."DocEntry",
+    T0."InstlmntID",
+    COALESCE(PAY."SumApplied", 0) AS "SumApplied",
+    T0."InsTotal",
+    T0."PaidToDate"
+FROM ${db}.INV6 T0
+INNER JOIN ${db}.OINV T1
+    ON T0."DocEntry" = T1."DocEntry"
+LEFT JOIN (
+    SELECT
+        R2."DocEntry",
+        R2."InstId",
+        SUM(R2."SumApplied") AS "SumApplied"
+    FROM ${db}.RCT2 R2
+    INNER JOIN ${db}.ORCT RCT
+        ON RCT."DocEntry" = R2."DocNum"
+    WHERE RCT."Canceled" = 'N'
+    GROUP BY R2."DocEntry", R2."InstId"
+) PAY
+    ON PAY."DocEntry" = T0."DocEntry"
+   AND PAY."InstId"   = T0."InstlmntID"
+WHERE T0."DueDate" BETWEEN '${sd}' AND '${ed}'
+  AND T1."CANCELED" = 'N'
+  AND T1."CardCode" NOT IN ('Naqd','Bonus')
+  AND NOT EXISTS (
+      SELECT 1
+      FROM ${db}.RIN1 CM1
+      INNER JOIN ${db}.ORIN CM0 ON CM0."DocEntry" = CM1."DocEntry"
+      WHERE CM1."BaseType"  = 13
+        AND CM1."BaseEntry" = T1."DocEntry"
+  )
+  ${salesCondition}
+`;
     }
 
     getBusinessPartners({ jshshir, passport, phone }) {
