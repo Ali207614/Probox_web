@@ -127,9 +127,11 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
 
     const isInternalError = (d) =>
         d && (d.status === '0' || d.status === 0) && d.errorCode === 'INTERNAL';
-    // isNotAuth:true — errorCode INTERNAL bo'lsa ham auth muammosi deb qaraymiz
-    // (OnlinePBX token TTL tugaganda ko'pincha shu kombinatsiyani qaytaradi).
-    const needsReauth = (d) => d && d.isNotAuth === true;
+    // Faqat toza auth muammosi: isNotAuth:true va INTERNAL emas.
+    // (OnlinePBX ichki xatolarida ham isNotAuth:true qaytaradi — uni auth
+    // muammosi deb talqin qilmaymiz, aks holda har INTERNAL'da ortiqcha re-login bo'ladi.)
+    const isPureAuthError = (d) =>
+        d && d.isNotAuth === true && !isInternalError(d);
 
     // OnlinePBX server beqaror: ~20% so'rov INTERNAL qaytarishi mumkin.
     // Shuning uchun 4 qayta urinish (jami 5 ta). Eksponensial backoff.
@@ -151,12 +153,10 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
             let data = first.data;
             let sentBody = first.__sentBody;
 
-            // 1) isNotAuth:true — errorCode qanday bo'lishidan qat'iy nazar,
-            // token TTL tugagan bo'lishi mumkin. Re-login qilib bir marta retry.
-            if (needsReauth(data)) {
-                console.warn(
-                    `[OnlinePBX] isNotAuth on ${path} (errorCode=${data.errorCode || 'N/A'}), re-login & retry`
-                );
+            // 1) Toza auth muammosi (isNotAuth:true va INTERNAL emas):
+            // token TTL tugagan. Re-login qilib bir marta retry.
+            if (isPureAuthError(data)) {
+                console.warn(`[OnlinePBX] pure auth failure on ${path}, re-login & retry`);
                 token = { keyId: null, key: null };
                 try {
                     await login();
@@ -167,8 +167,7 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
                 data = retry.data;
                 sentBody = retry.__sentBody;
 
-                // Re-login'dan keyin ham isNotAuth va INTERNAL emas — haqiqiy auth rad etilishi
-                if (needsReauth(data) && !isInternalError(data)) {
+                if (isPureAuthError(data)) {
                     const comment = data.comment || 'no comment';
                     const code = data.errorCode || 'N/A';
                     throw new Error(
