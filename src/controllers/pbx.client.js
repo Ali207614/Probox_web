@@ -1,6 +1,5 @@
 // pbx.client.js
 const axios = require('axios');
-const crypto = require('crypto');
 
 function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru' }) {
     const baseURL = `${apiHost}/${domain}`;
@@ -63,50 +62,17 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
         return token;
     }
 
-    // OnlinePBX v2 uchun HMAC-SHA1 imzo:
-    //   signData = METHOD\n{content_md5}\n{content_type}\n{date}\n{fullUrl}\n
-    //   signature = base64(hmac_sha1(signData, key))
-    //   header: x-pbx-authentication: {keyId}:{signature}
-    function buildSignedHeaders(config) {
-        const method = String(config.method || 'post').toUpperCase();
-        const contentType = 'application/x-www-form-urlencoded';
-
-        let bodyStr = '';
-        if (config.data instanceof URLSearchParams) {
-            bodyStr = config.data.toString();
-        } else if (typeof config.data === 'string') {
-            bodyStr = config.data;
-        } else if (config.data && typeof config.data === 'object') {
-            bodyStr = new URLSearchParams(config.data).toString();
-        }
-
-        const contentMd5 = crypto.createHash('md5').update(bodyStr).digest('hex');
-        const date = new Date().toUTCString();
-
-        const path = config.url || '';
-        const base = config.baseURL || '';
-        const fullUrl = /^https?:\/\//i.test(path)
-            ? path
-            : `${base}${path.startsWith('/') ? path : '/' + path}`;
-
-        const signData = `${method}\n${contentMd5}\n${contentType}\n${date}\n${fullUrl}\n`;
-        const signature = crypto
-            .createHmac('sha1', token.key)
-            .update(signData)
-            .digest('base64');
-
-        return {
-            'x-pbx-authentication': `${token.keyId}:${signature}`,
-            'Content-MD5': contentMd5,
-            'Date': date,
-            'Content-Type': contentType,
-        };
+    // api2.onlinepbx.ru imzolashni talab qilmaydi:
+    //   /auth.json qaytargan {key_id, key} ni shunchaki header'ga qo'yamiz.
+    async function getAuthHeader() {
+        if (!token.keyId || !token.key) await login();
+        return `${token.keyId}:${token.key}`;
     }
 
     api.interceptors.request.use(async (config) => {
-        if (!token.keyId || !token.key) await login();
+        const hdr = await getAuthHeader();
         config.headers = config.headers || {};
-        Object.assign(config.headers, buildSignedHeaders(config));
+        config.headers['x-pbx-authentication'] = hdr;
         return config;
     });
 
