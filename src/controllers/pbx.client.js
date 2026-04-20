@@ -99,21 +99,24 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
         }
     );
 
+    // x-www-form-urlencoded body'ni qo'lda quramiz (URLSearchParams probel'ni `+`
+    // qiladi, lekin OnlinePBX ba'zan faqat `%20` ni probel deb tushunadi).
     const buildBody = (paramsObj) => {
-        const body = new URLSearchParams();
+        const parts = [];
         Object.entries(paramsObj || {}).forEach(([k, v]) => {
             if (v === undefined || v === null || v === '') return;
+            const key = encodeURIComponent(k);
             if (Array.isArray(v)) {
                 v.forEach((item) => {
                     if (item !== undefined && item !== null && item !== '') {
-                        body.append(k, String(item));
+                        parts.push(`${key}=${encodeURIComponent(String(item))}`);
                     }
                 });
             } else {
-                body.append(k, String(v));
+                parts.push(`${key}=${encodeURIComponent(String(v))}`);
             }
         });
-        return body;
+        return parts.join('&');
     };
 
     const doPost = (path, paramsObj) =>
