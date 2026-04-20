@@ -204,7 +204,7 @@ LIMIT ${lim} OFFSET ${off};
     /**
      * Muddatida undurilish analytics.
      */
-    buildAnalyticsQuery(params) {
+    getAnalytics(params) {
         const {
             startDate,
             endDate,
