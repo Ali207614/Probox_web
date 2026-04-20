@@ -15,12 +15,21 @@ async function downloadRecordingAsBase64({ pbxClient, uuid, maxMb = 8 }) {
     if (!uuid) throw new Error('uuid is required');
 
     const dl = await pbxClient.getDownloadUrl(uuid);
+
+    // PBX muvaffaqiyatli javob qaytardi lekin yozuv topilmadi (bo'sh data)
+    const isEmpty =
+        dl && (dl.status === '1' || dl.status === 1) &&
+        (Array.isArray(dl.data) ? dl.data.length === 0 : dl.data == null);
+    if (isEmpty) {
+        throw new Error(`PBX'da shu UUID uchun yozuv topilmadi (uuid=${uuid})`);
+    }
+
     const onlineUrl = pickOnlineUrl(dl);
     if (!onlineUrl) {
         let preview;
         try { preview = JSON.stringify(dl); } catch { preview = String(dl); }
         if (preview && preview.length > 300) preview = preview.slice(0, 300) + '...';
-        throw new Error(`Recording url not found (uuid=${uuid}, resp=${preview})`);
+        throw new Error(`Audio URL manzili topilmadi (uuid=${uuid}, resp=${preview})`);
     }
 
     const maxBytes = Number(maxMb) * 1024 * 1024;

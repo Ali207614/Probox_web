@@ -10,9 +10,12 @@ const pbxClient = createOnlinePbx({
     apiHost: process.env.PBX_API_HOST || 'https://api2.onlinepbx.ru',
 });
 
-const PBX_TRUNK_NAME = process.env.PBX_TRUNK_NAME || 'f6813980348e52891f64fa3ce451de69';
+const TRUNK_NAMES = (process.env.PBX_TRUNK_NAMES || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 module.exports = {
     pbxClient,
-    PBX_TRUNK_NAME,
+    TRUNK_NAMES,
 };

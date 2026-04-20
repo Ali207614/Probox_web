@@ -22,16 +22,11 @@ const {startLeadRecallBumpCron} = require("./utils/lead-recall-bump.cron");
 const {startLeadBumpNotifyCron} = require("./utils/lead-bump-notify.cron");
 const {startSellerBumpNotifyCron} = require("./utils/seller-bump-notify-cron");
 const {startScoringBumpNotifyCron} = require("./utils/scoring-bump-notify.cron");
-const {pbxClient} = require("./integrations/pbx");
+const {pbxClient, TRUNK_NAMES} = require("./integrations/pbx");
 const {startRatingSmsCron} = require("./utils/rating-sms.cron");
 const startMehrliCallJob = require("./utils/mehrli-call-job");
 const tokenService = require('./services/tokenService');
 const RefreshFlag = require('./models/refresh-flag-model');
-
-const TRUNK_NAMES = [
-    'f6813980348e52891f64fa3ce451de69',
-    '97b29d03fde1b1d31e5f02bb23d0e537'
-];
 
 //require('./utils/cronBusinessPartners');
 app.use(express.urlencoded({ extended: false }));

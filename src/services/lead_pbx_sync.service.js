@@ -1,11 +1,7 @@
 const LeadModel = require('../models/lead-model');
 const DataRepositories = require('../repositories/dataRepositories');
 const dbService = require('./dbService');
-
-const TRUNK_NAMES = [
-    'f6813980348e52891f64fa3ce451de69',
-    '97b29d03fde1b1d31e5f02bb23d0e537'
-];
+const { TRUNK_NAMES } = require('../integrations/pbx');
 
 function digitsOnly(v = '') {
     return String(v ?? '').replace(/\D/g, '');
