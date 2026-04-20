@@ -15,13 +15,22 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
     async function login() {
         const body = new URLSearchParams({ auth_key: authKey });
 
-        const resp = await axios.post(`${baseURL}/auth.json`, body, {
-            headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            timeout: 30000,
-        });
+        let resp;
+        try {
+            resp = await axios.post(`${baseURL}/auth.json`, body, {
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                timeout: 30000,
+            });
+        } catch (e) {
+            const detail =
+                e?.response?.data?.comment ||
+                e?.response?.statusText ||
+                e.message;
+            throw new Error(`PBX auth olishda xatolik: ${detail}`);
+        }
 
         let data = resp.data;
 
@@ -43,10 +52,10 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
             data?.token;
 
         if (!keyId || !key) {
-            // debug uchun response'ni ham ko'rsatamiz
-            throw new Error(
-                `OnlinePBX auth failed: key_id/key not found. Response: ${JSON.stringify(data)}`
-            );
+            let preview;
+            try { preview = JSON.stringify(data); } catch { preview = String(data); }
+            if (preview && preview.length > 200) preview = preview.slice(0, 200) + '...';
+            throw new Error(`PBX auth olishda xatolik: key_id/key topilmadi (resp=${preview})`);
         }
 
         token = { keyId, key };
@@ -78,7 +87,11 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
             if (looksAuthIssue && !cfg.__pbxRetried) {
                 cfg.__pbxRetried = true;
                 token = { keyId: null, key: null };
-                await login();
+                try {
+                    await login();
+                } catch (loginErr) {
+                    throw new Error(`PBX auth olishda xatolik: ${loginErr.message}`);
+                }
                 return api(cfg);
             }
 
@@ -113,11 +126,23 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
             if (data && data.isNotAuth === true) {
                 console.warn(`[OnlinePBX] body-level auth failure on ${path}, re-login & retry`);
                 token = { keyId: null, key: null };
-                await login();
+                try {
+                    await login();
+                } catch (loginErr) {
+                    throw new Error(`PBX auth olishda xatolik: ${loginErr.message}`);
+                }
                 const retry = await api.post(path, buildBody(paramsObj), {
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 });
                 data = retry.data;
+
+                if (data && data.isNotAuth === true) {
+                    const comment = data.comment || 'no comment';
+                    const code = data.errorCode || 'N/A';
+                    throw new Error(
+                        `PBX auth olishda xatolik: yangi auth olindi lekin server avtorizatsiyani qabul qilmadi (${comment}, code=${code})`
+                    );
+                }
             }
 
             return data;
