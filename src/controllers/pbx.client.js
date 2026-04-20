@@ -99,24 +99,21 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
         }
     );
 
-    // x-www-form-urlencoded body'ni qo'lda quramiz (URLSearchParams probel'ni `+`
-    // qiladi, lekin OnlinePBX ba'zan faqat `%20` ni probel deb tushunadi).
     const buildBody = (paramsObj) => {
-        const parts = [];
+        const body = new URLSearchParams();
         Object.entries(paramsObj || {}).forEach(([k, v]) => {
             if (v === undefined || v === null || v === '') return;
-            const key = encodeURIComponent(k);
             if (Array.isArray(v)) {
                 v.forEach((item) => {
                     if (item !== undefined && item !== null && item !== '') {
-                        parts.push(`${key}=${encodeURIComponent(String(item))}`);
+                        body.append(k, String(item));
                     }
                 });
             } else {
-                parts.push(`${key}=${encodeURIComponent(String(v))}`);
+                body.append(k, String(v));
             }
         });
-        return parts.join('&');
+        return body;
     };
 
     const doPost = (path, paramsObj) => {
@@ -199,43 +196,32 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
         }
     };
 
-    // OnlinePBX /mongo_history/search.json dokumentatsiyasida sort_by/sort_order yo'q
-    // va multi-value trunk_names qo'llab-quvvatlanmaydi. Shuning uchun:
-    //   1) undocumented param'larni stripped qilamiz
-    //   2) bir nechta trunk berilsa — har biri uchun alohida so'rov yuborib,
-    //      natijalarni uuid bo'yicha dedup qilib, start_stamp asc bo'yicha sort qilamiz
-    async function searchCalls(params) {
-        const { trunk_names, sort_by, sort_order, ...rest } = params || {};
-        const trunks = (
-            Array.isArray(trunk_names)
-                ? trunk_names
-                : (trunk_names ? String(trunk_names).split(/[\s,]+/) : [])
-        ).map((s) => String(s).trim()).filter(Boolean);
+    // Array'larni to'g'ri separator bilan birlashtiradi:
+    // - trunk_names: probel (OnlinePBX shu formatni kutadi)
+    // - phone_numbers / sub_phone_numbers / uuid_array: vergul (dokumentatsiya bo'yicha)
+    function normalizeParams(params) {
+        const out = { ...(params || {}) };
+        const joinWithSpace = ['trunk_names'];
+        const joinWithComma = ['phone_numbers', 'sub_phone_numbers', 'uuid_array'];
 
-        if (trunks.length <= 1) {
-            const p = trunks.length === 1 ? { ...rest, trunk_names: trunks[0] } : rest;
-            return postForm('/mongo_history/search.json', p);
-        }
-
-        const seen = new Set();
-        const merged = [];
-        for (const trunk of trunks) {
-            const res = await postForm('/mongo_history/search.json', { ...rest, trunk_names: trunk });
-            const calls = Array.isArray(res?.data) ? res.data : [];
-            for (const c of calls) {
-                const uuid = c?.uuid ? String(c.uuid) : null;
-                if (!uuid || seen.has(uuid)) continue;
-                seen.add(uuid);
-                merged.push(c);
+        for (const k of joinWithSpace) {
+            if (Array.isArray(out[k])) {
+                out[k] = out[k].map((s) => String(s).trim()).filter(Boolean).join(' ');
             }
         }
-        merged.sort((a, b) => Number(a?.start_stamp || 0) - Number(b?.start_stamp || 0));
-        return { status: '1', data: merged };
+        for (const k of joinWithComma) {
+            if (Array.isArray(out[k])) {
+                out[k] = out[k].map((s) => String(s).trim()).filter(Boolean).join(',');
+            }
+        }
+        return out;
     }
 
     return {
         login,
-        searchCalls,
+        searchCalls(params) {
+            return postForm('/mongo_history/search.json', normalizeParams(params));
+        },
         getDownloadUrl(uuid) {
             return postForm('/mongo_history/search.json', { uuid, download: '1' });
         },

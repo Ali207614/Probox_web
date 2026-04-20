@@ -139,7 +139,7 @@ async function fetchLeadPbxChats({ pbxClient, leadId }) {
 
         try {
             const res = await pbxClient.searchCalls({
-                sub_phone_numbers: leadPhones.local || digitsOnly(lead.clientPhone),
+                phone_numbers: [leadPhones.full, leadPhones.local].filter(Boolean),
                 start_stamp_from: cursorFrom,
                 start_stamp_to: chunkTo,
                 user_talk_time_from: 1, // faqat gaplashilgan

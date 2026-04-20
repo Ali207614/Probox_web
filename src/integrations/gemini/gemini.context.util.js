@@ -10,7 +10,7 @@ function normalizeCalls(res) {
     return [];
 }
 
-async function getCallTimeRangeByUuid({ pbxClient, trunkNames, uuid, leadPhoneLocal }) {
+async function getCallTimeRangeByUuid({ pbxClient, trunkNames, uuid, leadPhoneLocal, leadPhoneFull }) {
     if (!pbxClient) throw new Error('pbxClient is required');
     if (!uuid) return { start: null, end: null };
 
@@ -43,7 +43,7 @@ async function getCallTimeRangeByUuid({ pbxClient, trunkNames, uuid, leadPhoneLo
     const from = nowSec - LOOKBACK_DAYS * 24 * 60 * 60;
 
     const res2 = await pbxClient.searchCalls({
-        sub_phone_numbers: String(leadPhoneLocal),
+        phone_numbers: [leadPhoneFull, leadPhoneLocal].filter(Boolean).map(String),
         start_stamp_from: from,
         start_stamp_to: nowSec,
         sort_by: 'start_stamp',
@@ -139,6 +139,7 @@ async function buildClosedContextWindow({
             trunkNames,
             uuid,
             leadPhoneLocal: leadPhones.local || leadPhones.full,
+            leadPhoneFull: leadPhones.full,
         });
         audioStart = range?.start || null;
         audioEnd = range?.end || null;

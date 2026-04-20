@@ -49,6 +49,8 @@ async function getLastTalkedCallUuidForLead({ pbxClient, trunkNames, lead }) {
     const local9 = phones.local || digitsOnly(lead.clientPhone);
     if (!local9) return null;
 
+    const phoneVariants = [phones.full, phones.local].filter(Boolean);
+
     const range = buildLeadPbxRange(lead);
     if (!range) return null;
 
@@ -63,7 +65,7 @@ async function getLastTalkedCallUuidForLead({ pbxClient, trunkNames, lead }) {
         const chunkTo = Math.min(cursorFrom + MAX_RANGE_SEC - 1, finalTo);
 
         const res = await pbxClient.searchCalls({
-            sub_phone_numbers: local9,
+            phone_numbers: phoneVariants,
             start_stamp_from: cursorFrom,
             start_stamp_to: chunkTo,
             user_talk_time_from: 1,
