@@ -119,10 +119,12 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
         return parts.join('&');
     };
 
-    const doPost = (path, paramsObj) =>
-        api.post(path, buildBody(paramsObj), {
+    const doPost = (path, paramsObj) => {
+        const body = buildBody(paramsObj);
+        return api.post(path, body, {
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        });
+        }).then((res) => ({ ...res, __sentBody: body }));
+    };
 
     const isInternalError = (d) =>
         d && (d.status === '0' || d.status === 0) && d.errorCode === 'INTERNAL';
@@ -130,9 +132,18 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
 
     const INTERNAL_RETRY_DELAYS_MS = [2000, 4000];
 
+    const previewStr = (v, max = 500) => {
+        let s;
+        try { s = typeof v === 'string' ? v : JSON.stringify(v); }
+        catch { s = String(v); }
+        return s && s.length > max ? s.slice(0, max) + '...' : s;
+    };
+
     const postForm = async (path, paramsObj) => {
         try {
-            let { data } = await doPost(path, paramsObj);
+            const first = await doPost(path, paramsObj);
+            let data = first.data;
+            let sentBody = first.__sentBody;
 
             // 1) Haqiqiy auth failure: PBX HTTP 200 qaytaradi, isNotAuth:true, INTERNAL emas
             if (isAuthError(data)) {
@@ -157,6 +168,9 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
 
             // 2) PBX server ichki xatosi (errorCode=INTERNAL): backoff bilan qayta urinish
             if (isInternalError(data)) {
+                console.warn(
+                    `[OnlinePBX] INTERNAL error on ${path}\n  sent: ${previewStr(sentBody)}\n  resp: ${previewStr(data)}`
+                );
                 for (let i = 0; i < INTERNAL_RETRY_DELAYS_MS.length; i++) {
                     const delay = INTERNAL_RETRY_DELAYS_MS[i];
                     console.warn(
@@ -165,6 +179,7 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
                     await new Promise((r) => setTimeout(r, delay));
                     const retry = await doPost(path, paramsObj);
                     data = retry.data;
+                    sentBody = retry.__sentBody;
                     if (!isInternalError(data)) break;
                 }
 
@@ -172,7 +187,7 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
                     const attempts = INTERNAL_RETRY_DELAYS_MS.length + 1;
                     const comment = data.comment || 'no comment';
                     throw new Error(
-                        `PBX server ichki xatoligi (${attempts} marta urinildi): ${comment}`
+                        `PBX server ichki xatoligi (${attempts} marta urinildi): ${comment} | sent=${previewStr(sentBody, 300)} | resp=${previewStr(data, 300)}`
                     );
                 }
             }
