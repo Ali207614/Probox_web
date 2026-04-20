@@ -125,14 +125,19 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
 
     const isInternalError = (d) =>
         d && (d.status === '0' || d.status === 0) && d.errorCode === 'INTERNAL';
-    const isAuthError = (d) => d && d.isNotAuth === true && !isInternalError(d);
+    // isNotAuth:true — errorCode INTERNAL bo'lsa ham auth muammosi deb qaraymiz
+    // (OnlinePBX token TTL tugaganda ko'pincha shu kombinatsiyani qaytaradi).
+    const needsReauth = (d) => d && d.isNotAuth === true;
 
     const INTERNAL_RETRY_DELAYS_MS = [2000, 4000];
 
     const previewStr = (v, max = 500) => {
         let s;
-        try { s = typeof v === 'string' ? v : JSON.stringify(v); }
-        catch { s = String(v); }
+        try {
+            if (v instanceof URLSearchParams) s = v.toString();
+            else if (typeof v === 'string') s = v;
+            else s = JSON.stringify(v);
+        } catch { s = String(v); }
         return s && s.length > max ? s.slice(0, max) + '...' : s;
     };
 
@@ -142,9 +147,12 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
             let data = first.data;
             let sentBody = first.__sentBody;
 
-            // 1) Haqiqiy auth failure: PBX HTTP 200 qaytaradi, isNotAuth:true, INTERNAL emas
-            if (isAuthError(data)) {
-                console.warn(`[OnlinePBX] body-level auth failure on ${path}, re-login & retry`);
+            // 1) isNotAuth:true — errorCode qanday bo'lishidan qat'iy nazar,
+            // token TTL tugagan bo'lishi mumkin. Re-login qilib bir marta retry.
+            if (needsReauth(data)) {
+                console.warn(
+                    `[OnlinePBX] isNotAuth on ${path} (errorCode=${data.errorCode || 'N/A'}), re-login & retry`
+                );
                 token = { keyId: null, key: null };
                 try {
                     await login();
@@ -153,8 +161,10 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
                 }
                 const retry = await doPost(path, paramsObj);
                 data = retry.data;
+                sentBody = retry.__sentBody;
 
-                if (isAuthError(data)) {
+                // Re-login'dan keyin ham isNotAuth va INTERNAL emas — haqiqiy auth rad etilishi
+                if (needsReauth(data) && !isInternalError(data)) {
                     const comment = data.comment || 'no comment';
                     const code = data.errorCode || 'N/A';
                     throw new Error(
