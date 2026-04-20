@@ -199,24 +199,43 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
         }
     };
 
-    // OnlinePBX bir nechta trunk'ni probel bilan ajratilgan qatordan tushunadi:
-    // trunk_names=xxx yyy (array yoki vergul emas)
-    function normalizeTrunks(trunk_names) {
-        const arr = Array.isArray(trunk_names)
-            ? trunk_names
-            : (trunk_names ? String(trunk_names).split(/[\s,]+/) : []);
-        const cleaned = arr.map((s) => String(s).trim()).filter(Boolean);
-        return cleaned.length ? cleaned.join(' ') : undefined;
+    // OnlinePBX /mongo_history/search.json dokumentatsiyasida sort_by/sort_order yo'q
+    // va multi-value trunk_names qo'llab-quvvatlanmaydi. Shuning uchun:
+    //   1) undocumented param'larni stripped qilamiz
+    //   2) bir nechta trunk berilsa — har biri uchun alohida so'rov yuborib,
+    //      natijalarni uuid bo'yicha dedup qilib, start_stamp asc bo'yicha sort qilamiz
+    async function searchCalls(params) {
+        const { trunk_names, sort_by, sort_order, ...rest } = params || {};
+        const trunks = (
+            Array.isArray(trunk_names)
+                ? trunk_names
+                : (trunk_names ? String(trunk_names).split(/[\s,]+/) : [])
+        ).map((s) => String(s).trim()).filter(Boolean);
+
+        if (trunks.length <= 1) {
+            const p = trunks.length === 1 ? { ...rest, trunk_names: trunks[0] } : rest;
+            return postForm('/mongo_history/search.json', p);
+        }
+
+        const seen = new Set();
+        const merged = [];
+        for (const trunk of trunks) {
+            const res = await postForm('/mongo_history/search.json', { ...rest, trunk_names: trunk });
+            const calls = Array.isArray(res?.data) ? res.data : [];
+            for (const c of calls) {
+                const uuid = c?.uuid ? String(c.uuid) : null;
+                if (!uuid || seen.has(uuid)) continue;
+                seen.add(uuid);
+                merged.push(c);
+            }
+        }
+        merged.sort((a, b) => Number(a?.start_stamp || 0) - Number(b?.start_stamp || 0));
+        return { status: '1', data: merged };
     }
 
     return {
         login,
-        searchCalls(params) {
-            const { trunk_names, ...rest } = params || {};
-            const normalized = normalizeTrunks(trunk_names);
-            const finalParams = normalized ? { ...rest, trunk_names: normalized } : rest;
-            return postForm('/mongo_history/search.json', finalParams);
-        },
+        searchCalls,
         getDownloadUrl(uuid) {
             return postForm('/mongo_history/search.json', { uuid, download: '1' });
         },
