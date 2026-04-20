@@ -131,7 +131,9 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
     // (OnlinePBX token TTL tugaganda ko'pincha shu kombinatsiyani qaytaradi).
     const needsReauth = (d) => d && d.isNotAuth === true;
 
-    const INTERNAL_RETRY_DELAYS_MS = [2000, 4000];
+    // OnlinePBX server beqaror: ~20% so'rov INTERNAL qaytarishi mumkin.
+    // Shuning uchun 4 qayta urinish (jami 5 ta). Eksponensial backoff.
+    const INTERNAL_RETRY_DELAYS_MS = [1000, 2000, 4000, 8000];
 
     const previewStr = (v, max = 500) => {
         let s;
@@ -235,7 +237,8 @@ function createOnlinePbx({ domain, authKey, apiHost = 'https://api2.onlinepbx.ru
             return postForm('/mongo_history/search.json', normalizeParams(params));
         },
         getDownloadUrl(uuid) {
-            return postForm('/mongo_history/search.json', { uuid, download: '1' });
+            // PBX `uuid_array` ni kutadi, `uuid` emas — aks holda INTERNAL qaytaradi
+            return postForm('/mongo_history/search.json', { uuid_array: uuid, download: '1' });
         },
     };
 }
