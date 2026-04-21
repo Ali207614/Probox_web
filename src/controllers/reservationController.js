@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
 const ReservationModel = require('../models/reservation-model');
 const LeadModel = require('../models/lead-model');
-const { addBusinessDays } = require('../utils/business-days');
+const { addWorkingHours } = require('../utils/business-days');
 const { writeLeadEvent } = require('../utils/lead-chat-events.util');
 
-const RESERVATION_BUSINESS_DAYS = Number(process.env.RESERVATION_BUSINESS_DAYS) || 6;
+const RESERVATION_WORKING_HOURS = Number(process.env.RESERVATION_WORKING_HOURS) || 6;
 
 const CREATE_ROLES = new Set(['Seller', 'SellerM', 'OperatorM', 'Operator1', 'Operator2', 'Manager', 'CEO']);
 const ADMIN_RELEASE_ROLES = new Set(['SellerM', 'Manager', 'CEO']);
@@ -122,7 +122,7 @@ class ReservationController {
             }
 
             const now = new Date();
-            const expiresAt = addBusinessDays(now, RESERVATION_BUSINESS_DAYS);
+            const expiresAt = addWorkingHours(now, RESERVATION_WORKING_HOURS);
 
             const reservation = await ReservationModel.create({
                 leadId,
