@@ -71,6 +71,8 @@ mongoose
     .catch((err) => console.error('❌ MongoDB connection error:', err));
 
 // === SOCKET.IO AUTH ===
+const MULTI_SESSION_ROLES = new Set(['Assistant']);
+
 io.use(async (socket, next) => {
     try {
         const token =
@@ -82,6 +84,11 @@ io.use(async (socket, next) => {
 
         const userData = tokenService.validateAccessToken(token);
         if (!userData) return next();
+
+        if (MULTI_SESSION_ROLES.has(userData.U_role)) {
+            socket.user = userData;
+            return next();
+        }
 
         const slpCode = userData.SlpCode ?? userData.id;
         if (slpCode == null || !userData.jti) return next();

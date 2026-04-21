@@ -883,18 +883,21 @@ class b1HANA {
 
             const { token, jti } = tokenService.generateJwt(payload);
 
-            await SessionToken.findOneAndUpdate(
-                { slpCode: userData.SlpCode },
-                { jti },
-                { upsert: true, new: true }
-            );
+            const MULTI_SESSION_ROLES = new Set(['Assistant']);
+            if (!MULTI_SESSION_ROLES.has(userData.U_role)) {
+                await SessionToken.findOneAndUpdate(
+                    { slpCode: userData.SlpCode },
+                    { jti },
+                    { upsert: true, new: true }
+                );
 
-            try {
-                global.io?.to(`slp:${userData.SlpCode}`).emit('session:terminated', {
-                    reason: 'logged-in-elsewhere',
-                });
-            } catch (err) {
-                console.error('❌ session:terminated emit xatolik:', err.message);
+                try {
+                    global.io?.to(`slp:${userData.SlpCode}`).emit('session:terminated', {
+                        reason: 'logged-in-elsewhere',
+                    });
+                } catch (err) {
+                    console.error('❌ session:terminated emit xatolik:', err.message);
+                }
             }
 
             return res.status(201).json({
