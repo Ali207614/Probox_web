@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const ReservationModel = require('../models/reservation-model');
 const LeadModel = require('../models/lead-model');
 const { addBusinessDays } = require('../utils/business-days');
+const { writeLeadEvent } = require('../utils/lead-chat-events.util');
 
 const RESERVATION_BUSINESS_DAYS = Number(process.env.RESERVATION_BUSINESS_DAYS) || 6;
 
@@ -25,6 +26,11 @@ function canReleaseReservation(user, reservation) {
 async function releaseReservationsForLead({ leadId, reason, actor = null }) {
     if (!leadId) return { modifiedCount: 0 };
 
+    const activeBefore = await ReservationModel.find(
+        { leadId, status: 'active' },
+        { itemCode: 1, itemName: 1, imei: 1 }
+    ).lean();
+
     const update = {
         status: reason === 'purchased' ? 'consumed' : 'released',
         releaseReason: reason,
@@ -41,6 +47,24 @@ async function releaseReservationsForLead({ leadId, reason, actor = null }) {
         { leadId, status: 'active' },
         { $set: update }
     );
+
+    for (const r of activeBefore) {
+        const label = r.itemName ? `${r.itemName} (IMEI: ${r.imei})` : `IMEI: ${r.imei}`;
+        try {
+            await writeLeadEvent({
+                leadId,
+                reqUser: actor
+                    ? { SlpCode: actor.id, U_name: actor.name, U_role: actor.role }
+                    : null,
+                isSystem: !actor,
+                type: 'event',
+                action: 'reservation_released',
+                message: `Bron olib tashlandi: ${label} — sabab: ${reason}`,
+            });
+        } catch (err) {
+            console.error('❌ reservation_released chat event xatolik:', err.message);
+        }
+    }
 
     return { modifiedCount: result.modifiedCount || 0 };
 }
@@ -115,6 +139,21 @@ class ReservationController {
                 status: 'active',
             });
 
+            try {
+                const label = reservation.itemName
+                    ? `${reservation.itemName} (IMEI: ${reservation.imei})`
+                    : `IMEI: ${reservation.imei}`;
+                await writeLeadEvent({
+                    leadId,
+                    reqUser: req.user,
+                    type: 'event',
+                    action: 'reservation_created',
+                    message: `Bron qo'shildi: ${label}`,
+                });
+            } catch (err) {
+                console.error('❌ reservation_created chat event xatolik:', err.message);
+            }
+
             return res.status(201).json({ data: reservation });
         } catch (err) {
             if (err && err.code === 11000) {
@@ -159,6 +198,21 @@ class ReservationController {
             reservation.releasedByName = user.name;
             reservation.releasedByRole = user.role;
             await reservation.save();
+
+            try {
+                const label = reservation.itemName
+                    ? `${reservation.itemName} (IMEI: ${reservation.imei})`
+                    : `IMEI: ${reservation.imei}`;
+                await writeLeadEvent({
+                    leadId: reservation.leadId,
+                    reqUser: req.user,
+                    type: 'event',
+                    action: 'reservation_released',
+                    message: `Bron olib tashlandi: ${label} — sabab: manual`,
+                });
+            } catch (err) {
+                console.error('❌ reservation_released chat event xatolik:', err.message);
+            }
 
             return res.status(200).json({ data: reservation });
         } catch (err) {

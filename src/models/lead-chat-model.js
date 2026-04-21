@@ -48,7 +48,11 @@ const LeadChatSchema = new Schema(
                 'telegram_bot_image_upload_failed',
                 'sms_sent',
                 // ✅ REYTING UCHUN YANGI ACTION QO'SHILDI
-                'rating_added'
+                'rating_added',
+
+                // reservation
+                'reservation_created',
+                'reservation_released',
             ],
             default: null,
             index: true,
