@@ -1,12 +1,15 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 
 class TokenService {
-    generateJwt(arg) {
-        return jwt.sign(
-            arg,
+    generateJwt(payload) {
+        const jti = crypto.randomBytes(16).toString('hex');
+        const token = jwt.sign(
+            payload,
             process.env.secret_key,
-            { expiresIn: '24h' }
-        )
+            { expiresIn: '24h', jwtid: jti }
+        );
+        return { token, jti };
     }
 
     validateAccessToken(token) {
