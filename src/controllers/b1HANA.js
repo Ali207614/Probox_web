@@ -1,4 +1,5 @@
 const { get } = require("lodash");
+const mongoose = require('mongoose');
 const tokenService = require('../services/tokenService');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path')
@@ -612,7 +613,7 @@ class b1HANA {
 
             const groups = (rows || []).map(({ total, ...x }) => x);
 
-            res.json({ total, totalPage: Math.ceil(total / Number(limit || 50)), groups });
+            res.json({ total, totalPage: Math.ceil(totaxl / Number(limit || 50)), groups });
         } catch (e) {
             next(e);
         }
@@ -819,7 +820,26 @@ class b1HANA {
 
             const total = rows[0]?.TotalCount ?? 0;
 
-            const items = rows.map(({ TotalCount, ...rest }) => rest);
+            const rawItems = rows.map(({ TotalCount, ...rest }) => rest);
+
+            const imeis = rawItems
+                .map((x) => (x.IMEI != null ? String(x.IMEI).trim() : ''))
+                .filter(Boolean);
+
+            let bookedSet = new Set();
+            if (imeis.length) {
+                const ReservationModel = require('../models/reservation-model');
+                const booked = await ReservationModel.find(
+                    { imei: { $in: imeis }, status: 'active' },
+                    { imei: 1 }
+                ).lean();
+                bookedSet = new Set(booked.map((b) => b.imei));
+            }
+
+            const items = rawItems.map((item) => ({
+                ...item,
+                isBooked: item.IMEI != null && bookedSet.has(String(item.IMEI).trim()),
+            }));
 
             res.json({ total, items });
         }
@@ -994,6 +1014,18 @@ class b1HANA {
                         // probellarni olib tashlab qidirish yaxshiroq natija beradi (masalan: "AA 123" -> "AA123")
                         { passportId: { $regex: safeSearch.replace(/\s+/g, ''), $options: 'i' } }
                     ];
+                }
+            }
+
+            const idsList = parseArray(req.query.ids);
+            if (idsList?.length) {
+                const validIds = idsList
+                    .filter((v) => mongoose.isValidObjectId(v))
+                    .map((v) => new mongoose.Types.ObjectId(v));
+                if (validIds.length) {
+                    addAndCondition(filter, { _id: { $in: validIds } });
+                } else {
+                    addAndCondition(filter, { _id: { $in: [] } });
                 }
             }
 

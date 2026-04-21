@@ -201,6 +201,7 @@ class ReservationController {
                 reservedBy,
                 branch,
                 search,
+                leadId,
             } = req.query;
 
             const match = {};
@@ -210,6 +211,12 @@ class ReservationController {
             if (imei) match.imei = String(imei).trim();
             if (itemCode) match.itemCode = String(itemCode).trim();
             if (reservedBy) match.reservedBy = Number(reservedBy);
+            if (leadId) {
+                if (!mongoose.isValidObjectId(leadId)) {
+                    return res.status(400).json({ message: 'leadId noto\'g\'ri' });
+                }
+                match.leadId = new mongoose.Types.ObjectId(leadId);
+            }
 
             const pipeline = [
                 { $match: match },
@@ -238,6 +245,8 @@ class ReservationController {
                             { 'lead.clientPhone': { $regex: safe } },
                             { 'lead.clientPhone2': { $regex: safe } },
                             { imei: { $regex: safe } },
+                            { itemName: { $regex: safe, $options: 'i' } },
+                            { itemCode: { $regex: safe, $options: 'i' } },
                         ],
                     },
                 });
