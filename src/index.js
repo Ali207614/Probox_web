@@ -28,7 +28,6 @@ const {startReservationExpireCron} = require("./utils/reservation-expire.cron");
 const startMehrliCallJob = require("./utils/mehrli-call-job");
 const tokenService = require('./services/tokenService');
 const RefreshFlag = require('./models/refresh-flag-model');
-const SessionToken = require('./models/session-token-model');
 
 //require('./utils/cronBusinessPartners');
 app.use(express.urlencoded({ extended: false }));
@@ -71,9 +70,7 @@ mongoose
     .catch((err) => console.error('❌ MongoDB connection error:', err));
 
 // === SOCKET.IO AUTH ===
-const MULTI_SESSION_ROLES = new Set(['Assistant']);
-
-io.use(async (socket, next) => {
+io.use((socket, next) => {
     try {
         const token =
             socket.handshake.auth?.token ||
@@ -84,19 +81,6 @@ io.use(async (socket, next) => {
 
         const userData = tokenService.validateAccessToken(token);
         if (!userData) return next();
-
-        if (MULTI_SESSION_ROLES.has(userData.U_role)) {
-            socket.user = userData;
-            return next();
-        }
-
-        const slpCode = userData.SlpCode ?? userData.id;
-        if (slpCode == null || !userData.jti) return next();
-
-        const session = await SessionToken.findOne({ slpCode }).lean();
-        if (!session || session.jti !== userData.jti) {
-            return next(new Error('session-terminated'));
-        }
 
         socket.user = userData;
         return next();

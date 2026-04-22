@@ -18,7 +18,6 @@ const fsPromises = require('fs/promises');
 const {notIncExecutorRole, ALLOWED_STATUSES} = require("../config");
 const LeadModel = require('../models/lead-model')
 const BranchModel= require('../models/branch-model')
-const SessionToken = require('../models/session-token-model')
 const ffmpeg = require('fluent-ffmpeg');
 const ffprobeStatic = require('ffprobe-static');
 const permissions = require('../utils/lead-permissions')
@@ -881,24 +880,7 @@ class b1HANA {
                 U_branch: userData.U_branch,
             };
 
-            const { token, jti } = tokenService.generateJwt(payload);
-
-            const MULTI_SESSION_ROLES = new Set(['Assistant']);
-            if (!MULTI_SESSION_ROLES.has(userData.U_role)) {
-                await SessionToken.findOneAndUpdate(
-                    { slpCode: userData.SlpCode },
-                    { jti },
-                    { upsert: true, new: true }
-                );
-
-                try {
-                    global.io?.to(`slp:${userData.SlpCode}`).emit('session:terminated', {
-                        reason: 'logged-in-elsewhere',
-                    });
-                } catch (err) {
-                    console.error('❌ session:terminated emit xatolik:', err.message);
-                }
-            }
+            const token = tokenService.generateJwt(payload);
 
             return res.status(201).json({
                 token,
