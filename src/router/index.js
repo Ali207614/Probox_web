@@ -227,7 +227,7 @@ router.get('/analytics/sources', authMiddleware, analyticsController.getSourceDa
 router.get('/analytics/source-distribution', authMiddleware, analyticsController.getSourceStatusDistribution);
 router.get('/analytics/branches', authMiddleware, analyticsController.getBranchPerformance);
 router.get('/analytics/branch-sources', authMiddleware, analyticsController.getBranchSourceStats);
-
+router.get('/analytics/funnel',       authMiddleware,         analyticsController.getFullFunnelAnalytics);
 router.post('/leads/:id/chat', authMiddleware, b1HANA.addChat);
 router.get('/leads/:id/chat', authMiddleware, b1HANA.getChats);
 router.put('/leads/chat/:chatId', authMiddleware, b1HANA.updateChat);
