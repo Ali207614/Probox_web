@@ -230,6 +230,7 @@ router.get('/analytics/source-distribution', authMiddleware, analyticsController
 router.get('/analytics/branches', authMiddleware, analyticsController.getBranchPerformance);
 router.get('/analytics/branch-sources', authMiddleware, analyticsController.getBranchSourceStats);
 router.get('/analytics/funnel',       authMiddleware,         analyticsController.getFullFunnelAnalytics);
+router.get('/analytics/recall-date-stats', authMiddleware, analyticsController.getRecallDateStats);
 
 router.post('/analytics/plan', authMiddleware, roleMiddleware(['CEO', 'Manager']), planController.upsertPlan);
 router.get('/analytics/plan',  authMiddleware, planController.getPlan);

@@ -96,6 +96,7 @@ class AnalyticsController {
         this.getBranchSourceStats = this.getBranchSourceStats.bind(this);
         this.getSourcePerformance = this.getSourcePerformance.bind(this);
         this.getFullFunnelAnalytics = this.getFullFunnelAnalytics.bind(this);
+        this.getRecallDateStats = this.getRecallDateStats.bind(this);
     }
 
     // ============================================================
@@ -987,6 +988,60 @@ class AnalyticsController {
                 totals,
                 stages,
                 summary
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    // ============================================================
+    //  11. RECALL DATE STATS
+    //  -----------------------------------------------------------
+    //  - setToday: bugun recallDate belgilangan (yoki yangilangan)
+    //              leadlar soni (LeadChat event tarixidan)
+    //  - forToday: recallDate qiymati bugunga tushadigan leadlar soni
+    //
+    //  GET /analytics/recall-date-stats?date=25.04.2026
+    //  (date ixtiyoriy — default: bugun, Asia/Tashkent)
+    // ============================================================
+    async getRecallDateStats(req, res, next) {
+        try {
+            const { date } = req.query;
+
+            const day = date
+                ? moment.tz(date, 'DD.MM.YYYY', 'Asia/Tashkent')
+                : moment.tz('Asia/Tashkent');
+
+            if (!day.isValid()) {
+                return res.status(400).json({
+                    status: false,
+                    message: "date format noto'g'ri (DD.MM.YYYY)"
+                });
+            }
+
+            const startOfDay = day.clone().startOf('day').toDate();
+            const endOfDay = day.clone().endOf('day').toDate();
+
+            const [setTodayLeadIds, forToday] = await Promise.all([
+                LeadChat.distinct('leadId', {
+                    createdAt: { $gte: startOfDay, $lte: endOfDay },
+                    changes: {
+                        $elemMatch: {
+                            field: 'recallDate',
+                            to: { $ne: null }
+                        }
+                    }
+                }),
+                Lead.countDocuments({
+                    recallDate: { $gte: startOfDay, $lte: endOfDay }
+                })
+            ]);
+
+            return res.json({
+                status: true,
+                date: day.format('DD.MM.YYYY'),
+                setToday: setTodayLeadIds.length,
+                forToday
             });
         } catch (err) {
             next(err);
