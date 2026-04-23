@@ -232,7 +232,7 @@ router.get('/analytics/branch-sources', authMiddleware, analyticsController.getB
 router.get('/analytics/funnel',       authMiddleware,         analyticsController.getFullFunnelAnalytics);
 
 router.post('/analytics/plan', authMiddleware, roleMiddleware(['CEO', 'Manager']), planController.upsertPlan);
-router.get('/analytics/plan',  authMiddleware, roleMiddleware(['CEO', 'Manager']), planController.getPlan);
+router.get('/analytics/plan',  authMiddleware, planController.getPlan);
 router.post('/leads/:id/chat', authMiddleware, b1HANA.addChat);
 router.get('/leads/:id/chat', authMiddleware, b1HANA.getChats);
 router.put('/leads/chat/:chatId', authMiddleware, b1HANA.updateChat);
