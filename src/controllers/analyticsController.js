@@ -769,12 +769,10 @@ class AnalyticsController {
             const SALES_AMOUNT_FIELD = this.SALES_AMOUNT_FIELD;
 
             const grouped = await Lead.aggregate([
-                // 1) Lead vaqti
+                // 1) Lead vaqti — faqat time (yo'q bo'lsa createdAt fallback)
                 {
                     $addFields: {
-                        actualTime: {
-                            $ifNull: ['$newTime', { $ifNull: ['$time', '$createdAt'] }]
-                        }
+                        actualTime: { $ifNull: ['$time', '$createdAt'] }
                     }
                 },
                 // 2) Davrga tushadigan leadlarni filtrlash
