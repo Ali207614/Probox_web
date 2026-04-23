@@ -1022,26 +1022,77 @@ class AnalyticsController {
             const startOfDay = day.clone().startOf('day').toDate();
             const endOfDay = day.clone().endOf('day').toDate();
 
-            const [setTodayLeadIds, forToday] = await Promise.all([
-                LeadChat.distinct('leadId', {
-                    createdAt: { $gte: startOfDay, $lte: endOfDay },
-                    changes: {
-                        $elemMatch: {
-                            field: 'recallDate',
-                            to: { $ne: null }
+            const [setAgg, forAgg] = await Promise.all([
+                // setToday: distinct leadlar, keyin source bo'yicha guruhlash
+                LeadChat.aggregate([
+                    {
+                        $match: {
+                            createdAt: { $gte: startOfDay, $lte: endOfDay },
+                            changes: {
+                                $elemMatch: {
+                                    field: 'recallDate',
+                                    to: { $ne: null }
+                                }
+                            }
                         }
-                    }
-                }),
-                Lead.countDocuments({
-                    recallDate: { $gte: startOfDay, $lte: endOfDay }
-                })
+                    },
+                    { $group: { _id: '$leadId' } },
+                    {
+                        $lookup: {
+                            from: 'leads',
+                            localField: '_id',
+                            foreignField: '_id',
+                            as: 'lead'
+                        }
+                    },
+                    { $unwind: { path: '$lead', preserveNullAndEmptyArrays: true } },
+                    { $group: { _id: { $ifNull: ['$lead.source', null] }, count: { $sum: 1 } } }
+                ]),
+                // forToday: recallDate qiymati shu kunga tushadigan leadlar, source bo'yicha
+                Lead.aggregate([
+                    { $match: { recallDate: { $gte: startOfDay, $lte: endOfDay } } },
+                    { $group: { _id: { $ifNull: ['$source', null] }, count: { $sum: 1 } } }
+                ])
             ]);
+
+            const buildBreakdown = (agg) => {
+                const map = Object.fromEntries(
+                    agg.map(r => [r._id === null ? "Noma'lum" : r._id, r.count])
+                );
+                const total = agg.reduce((s, r) => s + r.count, 0);
+                const sources = this.sourcesList.map(name => ({
+                    source: name,
+                    count: map[name] || 0,
+                    percentage: percent(map[name] || 0, total)
+                }));
+                // Ro'yxatda yo'q manbalar (noma'lum va boshqalar) — oxiriga qo'shamiz
+                const knownSet = new Set(this.sourcesList);
+                Object.entries(map).forEach(([name, count]) => {
+                    if (!knownSet.has(name)) {
+                        sources.push({
+                            source: name,
+                            count,
+                            percentage: percent(count, total)
+                        });
+                    }
+                });
+                return { total, sources };
+            };
+
+            const setBreakdown = buildBreakdown(setAgg);
+            const forBreakdown = buildBreakdown(forAgg);
 
             return res.json({
                 status: true,
                 date: day.format('DD.MM.YYYY'),
-                setToday: setTodayLeadIds.length,
-                forToday
+                setToday: {
+                    total: setBreakdown.total,
+                    sources: setBreakdown.sources
+                },
+                forToday: {
+                    total: forBreakdown.total,
+                    sources: forBreakdown.sources
+                }
             });
         } catch (err) {
             next(err);
