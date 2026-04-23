@@ -993,39 +993,26 @@ class AnalyticsController {
     }
 
     // ============================================================
-    //  11. RECALL DATE STATS
+    //  11. RECALL DATE STATS (range)
     //  -----------------------------------------------------------
-    //  - setToday: bugun recallDate belgilangan (yoki yangilangan)
-    //              leadlar soni (LeadChat event tarixidan)
-    //  - forToday: recallDate qiymati bugunga tushadigan leadlar soni
+    //  - setInRange: diapazon ichida recallDate belgilangan
+    //                (yoki yangilangan) leadlar soni (LeadChat tarixi)
+    //  - forRange:   recallDate qiymati shu diapazonga tushadigan
+    //                leadlar soni
     //
-    //  GET /analytics/recall-date-stats?date=25.04.2026
-    //  (date ixtiyoriy — default: bugun, Asia/Tashkent)
+    //  GET /analytics/recall-date-stats?start=01.04.2026&end=23.04.2026
     // ============================================================
     async getRecallDateStats(req, res, next) {
         try {
-            const { date } = req.query;
-
-            const day = date
-                ? moment.tz(date, 'DD.MM.YYYY', 'Asia/Tashkent')
-                : moment.tz('Asia/Tashkent');
-
-            if (!day.isValid()) {
-                return res.status(400).json({
-                    status: false,
-                    message: "date format noto'g'ri (DD.MM.YYYY)"
-                });
-            }
-
-            const startOfDay = day.clone().startOf('day').toDate();
-            const endOfDay = day.clone().endOf('day').toDate();
+            const { start, end } = req.query;
+            const { startDate, endDate } = this._parseRange(start, end);
 
             const [setAgg, forAgg] = await Promise.all([
-                // setToday: distinct leadlar, keyin source bo'yicha guruhlash
+                // setInRange: distinct leadlar, keyin source bo'yicha guruhlash
                 LeadChat.aggregate([
                     {
                         $match: {
-                            createdAt: { $gte: startOfDay, $lte: endOfDay },
+                            createdAt: { $gte: startDate, $lte: endDate },
                             changes: {
                                 $elemMatch: {
                                     field: 'recallDate',
@@ -1046,9 +1033,9 @@ class AnalyticsController {
                     { $unwind: { path: '$lead', preserveNullAndEmptyArrays: true } },
                     { $group: { _id: { $ifNull: ['$lead.source', null] }, count: { $sum: 1 } } }
                 ]),
-                // forToday: recallDate qiymati shu kunga tushadigan leadlar, source bo'yicha
+                // forRange: recallDate qiymati diapazonga tushadigan leadlar, source bo'yicha
                 Lead.aggregate([
-                    { $match: { recallDate: { $gte: startOfDay, $lte: endOfDay } } },
+                    { $match: { recallDate: { $gte: startDate, $lte: endDate } } },
                     { $group: { _id: { $ifNull: ['$source', null] }, count: { $sum: 1 } } }
                 ])
             ]);
@@ -1063,7 +1050,6 @@ class AnalyticsController {
                     count: map[name] || 0,
                     percentage: percent(map[name] || 0, total)
                 }));
-                // Ro'yxatda yo'q manbalar (noma'lum va boshqalar) — oxiriga qo'shamiz
                 const knownSet = new Set(this.sourcesList);
                 Object.entries(map).forEach(([name, count]) => {
                     if (!knownSet.has(name)) {
@@ -1082,12 +1068,12 @@ class AnalyticsController {
 
             return res.json({
                 status: true,
-                date: day.format('DD.MM.YYYY'),
-                setToday: {
+                range: { start, end },
+                setInRange: {
                     total: setBreakdown.total,
                     sources: setBreakdown.sources
                 },
-                forToday: {
+                forRange: {
                     total: forBreakdown.total,
                     sources: forBreakdown.sources
                 }
