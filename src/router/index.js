@@ -50,6 +50,8 @@ const {webLeadBasicAuth} = require("../middlewares/basic-auth-web");
 const verifyCodeController = require("../controllers/verification-controller");
 const forceRefreshController = require("../controllers/forceRefreshController");
 const reservationController = require("../controllers/reservationController");
+const planController = require("../controllers/planController");
+const roleMiddleware = require("../middlewares/role-middleware");
 
 router.post('/login', b1HANA.login);
 
@@ -228,6 +230,9 @@ router.get('/analytics/source-distribution', authMiddleware, analyticsController
 router.get('/analytics/branches', authMiddleware, analyticsController.getBranchPerformance);
 router.get('/analytics/branch-sources', authMiddleware, analyticsController.getBranchSourceStats);
 router.get('/analytics/funnel',       authMiddleware,         analyticsController.getFullFunnelAnalytics);
+
+router.post('/analytics/plan', authMiddleware, roleMiddleware(['CEO', 'Manager']), planController.upsertPlan);
+router.get('/analytics/plan',  authMiddleware, roleMiddleware(['CEO', 'Manager']), planController.getPlan);
 router.post('/leads/:id/chat', authMiddleware, b1HANA.addChat);
 router.get('/leads/:id/chat', authMiddleware, b1HANA.getChats);
 router.put('/leads/chat/:chatId', authMiddleware, b1HANA.updateChat);
