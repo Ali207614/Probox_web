@@ -1024,6 +1024,7 @@ class AnalyticsController {
         try {
             const { start, end } = req.query;
             const { startDate, endDate } = this._parseRange(start, end);
+            const recallStatuses = ['FollowUp', 'Considering', 'WillVisitStore', 'WillSendPassport'];
 
             const [setAgg, forAgg] = await Promise.all([
                 // setInRange: distinct leadlar, keyin source bo'yicha guruhlash
@@ -1049,11 +1050,22 @@ class AnalyticsController {
                         }
                     },
                     { $unwind: { path: '$lead', preserveNullAndEmptyArrays: true } },
+                    {
+                        $match: {
+                            'lead.recallDate': { $ne: null },
+                            'lead.status': { $in: recallStatuses }
+                        }
+                    },
                     { $group: { _id: { $ifNull: ['$lead.source', null] }, count: { $sum: 1 } } }
                 ]),
                 // forRange: recallDate qiymati diapazonga tushadigan leadlar, source bo'yicha
                 Lead.aggregate([
-                    { $match: { recallDate: { $gte: startDate, $lte: endDate } } },
+                    {
+                        $match: {
+                            recallDate: { $gte: startDate, $lte: endDate },
+                            status: { $in: recallStatuses }
+                        }
+                    },
                     { $group: { _id: { $ifNull: ['$source', null] }, count: { $sum: 1 } } }
                 ])
             ]);
