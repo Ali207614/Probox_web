@@ -80,7 +80,6 @@ class AnalyticsController {
             { no: 10, key: 'meetingSet',      name: 'Tashrif belgilandi',     prevKey: 'scoringApproved' },
             { no: 11, key: 'willVisitStore',  name: "Do'konga boradi",        prevKey: 'meetingSet' },
             { no: 12, key: 'meetingHappened', name: "Tashrif o'tkazildi",     prevKey: 'meetingSet' },
-            { no: 13, key: 'visitedStore',    name: "Do'konga keldi",         prevKey: 'meetingHappened' },
             { no: 14, key: 'contractSigned',  name: 'Shartnoma oldi',         prevKey: 'meetingHappened' }
         ];
 
@@ -168,7 +167,6 @@ class AnalyticsController {
             meetingSet:      plan.meetingSet      || 0,
             willVisitStore:  plan.willVisitStore  || 0,
             meetingHappened: plan.meetingHappened || 0,
-            visitedStore:    plan.visitedStore    || 0,
             contractSigned:  plan.contractSigned  || 0,
             salesAmount:     plan.salesAmount     || 0,
             averageCheck:    plan.averageCheck    || 0,
@@ -859,9 +857,6 @@ class AnalyticsController {
                                 1, 0
                             ]
                         },
-                        _fVisitedStore: {
-                            $cond: [{ $in: ['VisitedStore', '$allStatuses'] }, 1, 0]
-                        },
                         _fMeetingHappened: {
                             $cond: [
                                 {
@@ -896,7 +891,6 @@ class AnalyticsController {
                         meetingSet:      { $sum: '$_fMeetingSet' },
                         willVisitStore:  { $sum: '$_fWillVisitStore' },
                         meetingHappened: { $sum: '$_fMeetingHappened' },
-                        visitedStore:    { $sum: '$_fVisitedStore' },
                         contractSigned:  { $sum: '$_fPurchased' },
                         salesAmount: {
                             $sum: {
@@ -914,7 +908,7 @@ class AnalyticsController {
             // Totallar
             const KEYS = [
                 'lead', 'qualityLead', 'scoringApproved', 'meetingSet', 'willVisitStore',
-                'meetingHappened', 'visitedStore', 'contractSigned', 'salesAmount'
+                'meetingHappened', 'contractSigned', 'salesAmount'
             ];
             const totals = grouped.reduce((acc, g) => {
                 KEYS.forEach(k => (acc[k] = (acc[k] || 0) + (g[k] || 0)));
