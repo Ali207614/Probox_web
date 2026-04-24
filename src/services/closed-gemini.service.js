@@ -107,7 +107,7 @@ async function getGeminiClosedAnalysisLine({ pbxClient, trunkNames, leadId, reas
             }
 
             // Xatolik xabarini shakllantirish
-            let errorMsg = 'AI tahlilida xatolik yuz berdi.';
+            let errorMsg = 'AI tahlilida xatolik yuz berdi. ' + err.message;
             if (status === 429) errorMsg = 'API limiti tugadi (Rate Limit).';
             else if (status === 503 || status === 504) errorMsg = 'Gemini serveri band yoki vaqtincha ishlamayapti (503/504).';
 
