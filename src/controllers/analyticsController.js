@@ -829,7 +829,16 @@ class AnalyticsController {
                             ]
                         },
                         _fScoringApproved: {
-                            $cond: [{ $in: ['ScoringResult', '$allStatuses'] }, 1, 0]
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $in: ['ScoringResult', '$allStatuses'] },
+                                        { $gt: [{ $ifNull: ['$finalLimit', 0] }, 0] },
+                                        { $gt: [{ $ifNull: ['$finalPercentage', 0] }, 0] }
+                                    ]
+                                },
+                                1, 0
+                            ]
                         },
                         _fWillVisitStore: {
                             $cond: [{ $in: ['WillVisitStore', '$allStatuses'] }, 1, 0]
