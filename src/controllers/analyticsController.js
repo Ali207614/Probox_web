@@ -8,6 +8,8 @@ const Plan = require("../models/plan-model");
 const dbService = require('../services/dbService');
 const DataRepositories = require('../repositories/dataRepositories');
 
+const FINANCIAL_ROLES = new Set(['CEO', 'Manager']);
+
 // ============================================================
 //  Umumiy yordamchilar
 // ============================================================
@@ -767,6 +769,7 @@ class AnalyticsController {
 
             const qualityStatuses = this.qualityLeadStatuses;
             const SALES_AMOUNT_FIELD = this.SALES_AMOUNT_FIELD;
+            const canSeeFinancials = FINANCIAL_ROLES.has(req.user?.U_role);
 
             const grouped = await Lead.aggregate([
                 // 1) Lead vaqti — faqat time (yo'q bo'lsa createdAt fallback)
@@ -923,70 +926,76 @@ class AnalyticsController {
             };
 
             // Stages
-            const stages = this.stageDefs.map(stage => {
-                const fact = totals[stage.key] || 0;
-                const planVal = plan[stage.key] || 0;
-                const prevPlan = stage.prevKey ? (plan[stage.prevKey] || 0) : planVal;
-                const prevFact = stage.prevKey ? (totals[stage.prevKey] || 0) : fact;
+            const stages = this.stageDefs
+                .filter(stage => stage.key !== 'meetingSet')
+                .map(stage => {
+                    const fact = totals[stage.key] || 0;
+                    const planVal = plan[stage.key] || 0;
+                    const prevPlan = stage.prevKey ? (plan[stage.prevKey] || 0) : planVal;
+                    const prevFact = stage.prevKey ? (totals[stage.prevKey] || 0) : fact;
 
-                return {
-                    no: stage.no,
-                    key: stage.key,
-                    name: stage.name,
-                    plan: planVal,
-                    planPercent:        percent(planVal, stage.prevKey ? prevPlan : planVal),
-                    fact,
-                    factPercent:        percent(fact, stage.prevKey ? prevFact : fact),
-                    achievementPercent: percent(fact, planVal),
-                    groups: sorted.map(g => {
-                        const count = g[stage.key] || 0;
-                        return {
-                            id: g._id,
-                            name: labelOf(g._id),
-                            count,
-                            sharePercent: percent(count, fact)
-                        };
-                    })
-                };
-            });
+                    return {
+                        no: stage.no,
+                        key: stage.key,
+                        name: stage.name,
+                        plan: planVal,
+                        planPercent:        percent(planVal, stage.prevKey ? prevPlan : planVal),
+                        fact,
+                        factPercent:        percent(fact, stage.prevKey ? prevFact : fact),
+                        achievementPercent: percent(fact, planVal),
+                        groups: sorted.map(g => {
+                            const count = g[stage.key] || 0;
+                            return {
+                                id: g._id,
+                                name: labelOf(g._id),
+                                count,
+                                sharePercent: percent(count, fact)
+                            };
+                        })
+                    };
+                });
 
-            // Summary
-            const summary = {
-                salesAmount: {
-                    plan: plan.salesAmount || 0,
-                    fact: totals.salesAmount || 0,
-                    achievementPercent: percent(totals.salesAmount, plan.salesAmount),
-                    groups: sorted.map(g => ({
-                        id: g._id,
-                        name: labelOf(g._id),
-                        amount: g.salesAmount || 0,
-                        sharePercent: percent(g.salesAmount, totals.salesAmount)
-                    }))
-                },
-                averageCheck: {
-                    plan: plan.averageCheck || 0,
-                    fact: averageCheckFact,
-                    groups: sorted.map(g => ({
-                        id: g._id,
-                        name: labelOf(g._id),
-                        amount: g.contractSigned > 0
-                            ? +(g.salesAmount / g.contractSigned).toFixed(2)
-                            : 0
-                    }))
-                }
-            };
-
-            return res.json({
+            const response = {
                 status: true,
                 range: { start, end },
                 groupBy,
                 topN,
                 basis: 'history',
                 planSource: plan._periodKey,
-                totals,
-                stages,
-                summary
-            });
+                totals: canSeeFinancials
+                    ? totals
+                    : Object.fromEntries(Object.entries(totals).filter(([key]) => key !== 'salesAmount')),
+                stages
+            };
+
+            if (canSeeFinancials) {
+                response.summary = {
+                    salesAmount: {
+                        plan: plan.salesAmount || 0,
+                        fact: totals.salesAmount || 0,
+                        achievementPercent: percent(totals.salesAmount, plan.salesAmount),
+                        groups: sorted.map(g => ({
+                            id: g._id,
+                            name: labelOf(g._id),
+                            amount: g.salesAmount || 0,
+                            sharePercent: percent(g.salesAmount, totals.salesAmount)
+                        }))
+                    },
+                    averageCheck: {
+                        plan: plan.averageCheck || 0,
+                        fact: averageCheckFact,
+                        groups: sorted.map(g => ({
+                            id: g._id,
+                            name: labelOf(g._id),
+                            amount: g.contractSigned > 0
+                                ? +(g.salesAmount / g.contractSigned).toFixed(2)
+                                : 0
+                        }))
+                    }
+                };
+            }
+
+            return res.json(response);
         } catch (err) {
             next(err);
         }

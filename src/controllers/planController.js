@@ -1,6 +1,9 @@
 const Plan = require('../models/plan-model');
 const ApiError = require('../exceptions/api-error');
 
+const FINANCIAL_ROLES = new Set(['CEO', 'Manager']);
+const FINANCIAL_FIELDS = new Set(['salesAmount', 'averageCheck']);
+
 const NUMERIC_FIELDS = [
     'lead',
     'qualityLead',
@@ -61,6 +64,14 @@ function validateBody(body) {
     return errors;
 }
 
+function sanitizePlan(plan, role) {
+    if (!plan || FINANCIAL_ROLES.has(role)) return plan;
+
+    return Object.fromEntries(
+        Object.entries(plan).filter(([key]) => !FINANCIAL_FIELDS.has(key))
+    );
+}
+
 class PlanController {
     upsertPlan = async (req, res, next) => {
         try {
@@ -84,7 +95,7 @@ class PlanController {
                 { upsert: true, new: true, setDefaultsOnInsert: true }
             ).lean();
 
-            return res.json({ status: true, data: plan });
+            return res.json({ status: true, data: sanitizePlan(plan, req.user?.U_role) });
         } catch (e) {
             next(e);
         }
@@ -103,7 +114,7 @@ class PlanController {
                 return next(ApiError.BadRequest(`'${period}' uchun plan topilmadi`));
             }
 
-            return res.json({ status: true, data: plan });
+            return res.json({ status: true, data: sanitizePlan(plan, req.user?.U_role) });
         } catch (e) {
             next(e);
         }
