@@ -1,5 +1,6 @@
 // controllers/analytics-controller.js
 
+const mongoose = require("mongoose");
 const moment = require("moment-timezone");
 const Lead = require("../models/lead-model");
 const Branch = require("../models/branch-model");
@@ -83,9 +84,6 @@ class AnalyticsController {
             { no: 14, key: 'contractSigned',  name: 'Shartnoma oldi',         prevKey: 'meetingHappened' }
         ];
 
-        // Sotuv summasi uchun qaysi maydondan olish
-        this.SALES_AMOUNT_FIELD = 'finalLimit';
-
         // bind
         this.getLeadsAnalytics = this.getLeadsAnalytics.bind(this);
         this.getLeadsFunnelByOperators = this.getLeadsFunnelByOperators.bind(this);
@@ -148,6 +146,26 @@ class AnalyticsController {
         } catch (err) {
             console.error('[Analytics] SAP Error:', err.message);
             return new Map();
+        }
+    }
+
+    // SAP: diapazon ichidagi CANCELED='N' invoice'larni U_leadId bo'yicha jamlaydi
+    async _getSapSalesInRange(startDate, endDate) {
+        try {
+            const startStr = moment(startDate).tz('Asia/Tashkent').format('YYYY.MM.DD');
+            const endStr   = moment(endDate).tz('Asia/Tashkent').format('YYYY.MM.DD');
+            const sql = `
+                SELECT T0."U_leadId" AS "leadId", SUM(T0."DocTotal") AS "total"
+                FROM ${DataRepositories.db}."OINV" T0
+                WHERE T0."DocDate" BETWEEN '${startStr}' AND '${endStr}'
+                  AND T0."CANCELED" = 'N'
+                GROUP BY T0."U_leadId"
+            `;
+            const rows = await dbService.execute(sql);
+            return Array.isArray(rows) ? rows : [];
+        } catch (err) {
+            console.error('[Analytics] SAP OINV Error:', err.message);
+            return [];
         }
     }
 
@@ -766,7 +784,6 @@ class AnalyticsController {
                 : { source: { $ne: null } };
 
             const qualityStatuses = this.qualityLeadStatuses;
-            const SALES_AMOUNT_FIELD = this.SALES_AMOUNT_FIELD;
             const canSeeFinancials = FINANCIAL_ROLES.has(req.user?.U_role);
 
             const grouped = await Lead.aggregate([
@@ -891,19 +908,47 @@ class AnalyticsController {
                         meetingSet:      { $sum: '$_fMeetingSet' },
                         willVisitStore:  { $sum: '$_fWillVisitStore' },
                         meetingHappened: { $sum: '$_fMeetingHappened' },
-                        contractSigned:  { $sum: '$_fPurchased' },
-                        salesAmount: {
-                            $sum: {
-                                $cond: [
-                                    { $eq: ['$_fPurchased', 1] },
-                                    { $ifNull: [`$${SALES_AMOUNT_FIELD}`, 0] },
-                                    0
-                                ]
-                            }
-                        }
+                        contractSigned:  { $sum: '$_fPurchased' }
                     }
                 }
             ]).allowDiskUse(true);
+
+            // SAP: diapazon ichidagi invoicelar (CANCELED='N') U_leadId bo'yicha
+            const sapRows = await this._getSapSalesInRange(startDate, endDate);
+            let sapTotalSales = 0;
+            const leadIdToSales = new Map();
+            sapRows.forEach(r => {
+                const amt = Number(r.total || 0);
+                sapTotalSales += amt;
+                if (r.leadId) leadIdToSales.set(String(r.leadId), amt);
+            });
+
+            // LeadId'lar orqali Lead'dan source/operator olish
+            const validLeadIds = [...leadIdToSales.keys()]
+                .filter(id => mongoose.Types.ObjectId.isValid(id));
+            const leadInfos = validLeadIds.length
+                ? await Lead.find(
+                    { _id: { $in: validLeadIds } },
+                    { source: 1, operator: 1 }
+                ).lean()
+                : [];
+            const leadInfoMap = new Map(leadInfos.map(l => [String(l._id), l]));
+
+            // Group (source/operator) kesimida sotuv summasi
+            const salesByGroup = new Map();
+            leadIdToSales.forEach((amt, leadId) => {
+                const info = leadInfoMap.get(leadId);
+                if (!info) return;
+                const key = groupBy === 'operator' ? info.operator : info.source;
+                const keyStr = (key === null || key === undefined) ? '' : String(key);
+                salesByGroup.set(keyStr, (salesByGroup.get(keyStr) || 0) + amt);
+            });
+
+            // Grouped resultlarga SAP asosidagi salesAmount'ni biriktirish
+            grouped.forEach(g => {
+                const keyStr = (g._id === null || g._id === undefined) ? '' : String(g._id);
+                g.salesAmount = salesByGroup.get(keyStr) || 0;
+            });
 
             // Totallar
             const KEYS = [
@@ -914,6 +959,10 @@ class AnalyticsController {
                 KEYS.forEach(k => (acc[k] = (acc[k] || 0) + (g[k] || 0)));
                 return acc;
             }, {});
+
+            // salesAmount totalini SAP'dagi diapazon ichidagi BARCHA invoice'lar bilan almashtirish
+            // (U_leadId bog'lanmagan yoki davr tashqarisidagi leadlar uchun ham)
+            totals.salesAmount = sapTotalSales;
 
             const averageCheckFact = totals.contractSigned > 0
                 ? +(totals.salesAmount / totals.contractSigned).toFixed(2)
