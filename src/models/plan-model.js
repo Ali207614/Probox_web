@@ -19,6 +19,7 @@ const PlanSchema = new Schema(
         // Funnel bosqichlari (absolute qiymatlar)
         lead:            { type: Number, default: 0 }, // 1. Lead
         qualityLead:     { type: Number, default: 0 }, // 2. Sifatli lead
+        scoringSent:     { type: Number, default: 0 }, // 8. Skoringga jo'natildi
         scoringApproved: { type: Number, default: 0 }, // 9. Skoringdan tasdiqlandi
         meetingSet:      { type: Number, default: 0 }, // 10. Tashrif belgilandi
         willVisitStore:  { type: Number, default: 0 }, // 11. Do'konga boradi

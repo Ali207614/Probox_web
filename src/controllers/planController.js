@@ -7,6 +7,7 @@ const FINANCIAL_FIELDS = new Set(['salesAmount', 'averageCheck']);
 const NUMERIC_FIELDS = [
     'lead',
     'qualityLead',
+    'scoringSent',
     'scoringApproved',
     'meetingSet',
     'willVisitStore',

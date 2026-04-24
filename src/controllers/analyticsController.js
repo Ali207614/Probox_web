@@ -77,7 +77,8 @@ class AnalyticsController {
         this.stageDefs = [
             { no: 1,  key: 'lead',            name: 'Lead',                   prevKey: null },
             { no: 2,  key: 'qualityLead',     name: 'Sifatli lead',           prevKey: 'lead' },
-            { no: 9,  key: 'scoringApproved', name: 'Skoringdan tasdiqlandi', prevKey: 'qualityLead' },
+            { no: 8,  key: 'scoringSent',     name: "Skoringga jo'natildi",   prevKey: 'qualityLead' },
+            { no: 9,  key: 'scoringApproved', name: 'Skoringdan tasdiqlandi', prevKey: 'scoringSent' },
             { no: 10, key: 'meetingSet',      name: 'Tashrif belgilandi',     prevKey: 'scoringApproved' },
             { no: 11, key: 'willVisitStore',  name: "Do'konga boradi",        prevKey: 'meetingSet' },
             { no: 12, key: 'meetingHappened', name: "Tashrif o'tkazildi",     prevKey: 'meetingSet' },
@@ -173,22 +174,35 @@ class AnalyticsController {
         const rangeKey = `${moment(startDate).format('YYYY-MM-DD')}_${moment(endDate).format('YYYY-MM-DD')}`;
         const monthKey = moment(startDate).format('YYYY-MM');
 
-        const plan =
-            (await Plan.findOne({ period: rangeKey }).lean()) ||
-            (await Plan.findOne({ period: monthKey }).lean()) ||
-            {};
+        const exactMatch = await Plan.findOne({ period: rangeKey }).lean();
+        const monthMatch = exactMatch ? null : await Plan.findOne({ period: monthKey }).lean();
+        const plan = exactMatch || monthMatch || {};
+
+        // Oylik plan ishlatilgan bo'lsa, so'ralgan diapazonga proratsiya qilish
+        let factor = 1;
+        if (!exactMatch && monthMatch) {
+            const daysInMonth = moment(startDate).daysInMonth();
+            const rangeDays = moment(endDate).startOf('day')
+                .diff(moment(startDate).startOf('day'), 'days') + 1;
+            if (daysInMonth > 0 && rangeDays > 0) {
+                factor = rangeDays / daysInMonth;
+            }
+        }
+        const prorate = (v) => Math.round((v || 0) * factor);
 
         return {
-            lead:            plan.lead            || 0,
-            qualityLead:     plan.qualityLead     || 0,
-            scoringApproved: plan.scoringApproved || 0,
-            meetingSet:      plan.meetingSet      || 0,
-            willVisitStore:  plan.willVisitStore  || 0,
-            meetingHappened: plan.meetingHappened || 0,
-            contractSigned:  plan.contractSigned  || 0,
-            salesAmount:     plan.salesAmount     || 0,
-            averageCheck:    plan.averageCheck    || 0,
-            _periodKey:      plan.period          || null
+            lead:            prorate(plan.lead),
+            qualityLead:     prorate(plan.qualityLead),
+            scoringSent:     prorate(plan.scoringSent),
+            scoringApproved: prorate(plan.scoringApproved),
+            meetingSet:      prorate(plan.meetingSet),
+            willVisitStore:  prorate(plan.willVisitStore),
+            meetingHappened: prorate(plan.meetingHappened),
+            contractSigned:  prorate(plan.contractSigned),
+            salesAmount:     prorate(plan.salesAmount),
+            averageCheck:    plan.averageCheck || 0, // o'rtacha — proratsiya qilinmaydi
+            _periodKey:      plan.period       || null,
+            _prorated:       factor !== 1 ? +factor.toFixed(4) : null
         };
     }
 
@@ -780,7 +794,7 @@ class AnalyticsController {
 
             const groupField = groupBy === 'operator' ? '$operator' : '$source';
             const groupMatch = groupBy === 'operator'
-                ? { operator: { $nin: [null, '', 0] } }
+                ? { operator: { $in: [...opMap.keys()] } }
                 : { source: { $ne: null } };
 
             const qualityStatuses = this.qualityLeadStatuses;
@@ -843,6 +857,9 @@ class AnalyticsController {
                                 1, 0
                             ]
                         },
+                        _fScoringSent: {
+                            $cond: [{ $in: ['Scoring', '$allStatuses'] }, 1, 0]
+                        },
                         _fScoringApproved: {
                             $cond: [
                                 {
@@ -904,6 +921,7 @@ class AnalyticsController {
                         _id: groupField,
                         lead:            { $sum: 1 },
                         qualityLead:     { $sum: '$_fQualityLead' },
+                        scoringSent:     { $sum: '$_fScoringSent' },
                         scoringApproved: { $sum: '$_fScoringApproved' },
                         meetingSet:      { $sum: '$_fMeetingSet' },
                         willVisitStore:  { $sum: '$_fWillVisitStore' },
@@ -952,8 +970,8 @@ class AnalyticsController {
 
             // Totallar
             const KEYS = [
-                'lead', 'qualityLead', 'scoringApproved', 'meetingSet', 'willVisitStore',
-                'meetingHappened', 'contractSigned', 'salesAmount'
+                'lead', 'qualityLead', 'scoringSent', 'scoringApproved', 'meetingSet',
+                'willVisitStore', 'meetingHappened', 'contractSigned', 'salesAmount'
             ];
             const totals = grouped.reduce((acc, g) => {
                 KEYS.forEach(k => (acc[k] = (acc[k] || 0) + (g[k] || 0)));
