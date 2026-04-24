@@ -1024,7 +1024,7 @@ class AnalyticsController {
         try {
             const { start, end } = req.query;
             const { startDate, endDate } = this._parseRange(start, end);
-            const recallStatuses = ['FollowUp', 'Considering', 'WillVisitStore', 'WillSendPassport'];
+            const recallStatus = 'VisitedStore';
 
             const [setAgg, forAgg] = await Promise.all([
                 // setInRange: distinct leadlar, keyin source bo'yicha guruhlash
@@ -1053,7 +1053,7 @@ class AnalyticsController {
                     {
                         $match: {
                             'lead.recallDate': { $ne: null },
-                            'lead.status': { $in: recallStatuses }
+                            'lead.status': recallStatus
                         }
                     },
                     { $group: { _id: { $ifNull: ['$lead.source', null] }, count: { $sum: 1 } } }
@@ -1063,7 +1063,7 @@ class AnalyticsController {
                     {
                         $match: {
                             recallDate: { $gte: startDate, $lte: endDate },
-                            status: { $in: recallStatuses }
+                            status: recallStatus
                         }
                     },
                     { $group: { _id: { $ifNull: ['$source', null] }, count: { $sum: 1 } } }
