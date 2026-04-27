@@ -160,6 +160,7 @@ class AnalyticsController {
                 FROM ${DataRepositories.db}."OINV" T0
                 WHERE T0."DocDate" BETWEEN '${startStr}' AND '${endStr}'
                   AND T0."CANCELED" = 'N'
+                  AND T0."CardCode" NOT IN ('Naqd', 'Bonus')
                 GROUP BY T0."U_leadId"
             `;
             const rows = await dbService.execute(sql);
@@ -220,7 +221,7 @@ class AnalyticsController {
                             branches: [
                                 { case: { $eq: ["$status", "Purchased"] }, then: "$purchaseDate" }
                             ],
-                            default: { $ifNull: ["$newTime", { $ifNull: ["$time", "$createdAt"] }] }
+                            default: { $ifNull: ["$statusChangedAt", { $ifNull: ["$time", "$createdAt"] }] }
                         }
                     }
                 }
