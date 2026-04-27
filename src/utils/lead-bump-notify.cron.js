@@ -20,17 +20,21 @@ const {
     QA_GROUP_CHAT_ID,
     QA_TOPIC_SIFATSIZ,
     QA_TOPIC_VAZIFALAR,
+    QA_TOPIC_BOLIM_RAHBARI,
     escapeHtml,
     isWithinWorkingHours,
     buildLeadLink,
     buildMentionTag,
+    buildHeadMentionTag,
 } = require('./lead-bump-notify.helpers');
 
 const { getGeminiClosedAnalysisLine } = require('../services/closed-gemini.service');
 const {Types} = require("mongoose");
 
+// Boshidan jami: notify=10 min, escalate=40 min, head=100 min
 const NOTIFY_DELAY_MS = 10 * 60 * 1000;
-const ESCALATE_DELAY_MS = 10 * 60 * 1000;
+const ESCALATE_DELAY_MS = 30 * 60 * 1000;
+const HEAD_ESCALATE_DELAY_MS = 60 * 60 * 1000;
 
 const NO_PURCHASE_DELAY_MS = Number(process.env.NO_PURCHASE_DELAY_MS || 10 * 60 * 1000);
 const NO_PURCHASE_BATCH_SIZE = Number(process.env.NO_PURCHASE_BATCH_SIZE || 30);
@@ -40,6 +44,7 @@ const CLOSED_BATCH_SIZE = Number(process.env.CLOSED_BATCH_SIZE || 3);
 
 const NOTIFY_BATCH_SIZE = Number(process.env.BUMP_NOTIFY_BATCH_SIZE || 30);
 const ESCALATE_BATCH_SIZE = Number(process.env.BUMP_ESCALATE_BATCH_SIZE || 30);
+const HEAD_ESCALATE_BATCH_SIZE = Number(process.env.BUMP_HEAD_ESCALATE_BATCH_SIZE || 30);
 
 const BUMP_MIN_DATE = new Date(process.env.BUMP_MIN_DATE_NOTIFY || '2026-03-01T00:00:00+05:00');
 
@@ -60,12 +65,14 @@ async function sendTelegramMessage(chatId, text, messageThreadId) {
 function buildNotifyChatEvent(lead, now, stage) {
     const stageLabel =
         stage === 'escalate'
-            ? "Bo'lim boshlig'iga escalation"
-            : stage === 'no_purchase_escalate'
-                ? "Nazoratchiga escalation (Xarid bo'lmadi)"
-                : stage === 'closed_escalate'
-                    ? "Nazoratchiga escalation (Yopilgan)"
-                    : 'Operatorga eslatma';
+            ? 'Menejerga escalation'
+            : stage === 'head_escalate'
+                ? "Bo'lim boshlig'iga escalation"
+                : stage === 'no_purchase_escalate'
+                    ? "Nazoratchiga escalation (Xarid bo'lmadi)"
+                    : stage === 'closed_escalate'
+                        ? "Nazoratchiga escalation (Yopilgan)"
+                        : 'Operatorga eslatma';
 
     const fieldName =
         stage === 'no_purchase_escalate'
@@ -74,7 +81,9 @@ function buildNotifyChatEvent(lead, now, stage) {
                 ? 'closedEscalatedAt'
                 : stage === 'escalate'
                     ? 'bumpEscalatedAt'
-                    : 'bumpNotifiedAt';
+                    : stage === 'head_escalate'
+                        ? 'bumpHeadEscalatedAt'
+                        : 'bumpNotifiedAt';
 
     return {
         leadId: lead._id,
@@ -269,6 +278,81 @@ async function processEscalateStage(now) {
                 $or: [{ bumpEscalatedAt: { $exists: false } }, { bumpEscalatedAt: null }],
             },
             { $set: { bumpEscalatedAt: now, updatedAt: now } }
+        );
+    }
+
+    await insertHistory(chatEvents);
+    return escalated;
+}
+
+// ---- Stage 3: Bo'lim boshlig'iga escalation (boshidan 100 min)
+async function processHeadEscalateStage(now) {
+    if (!QA_GROUP_CHAT_ID) return 0;
+
+    const { slpCodes, opMap } = await getActiveOperatorsCached();
+    if (!slpCodes.length) return 0;
+
+    const cutoff = new Date(now.getTime() - HEAD_ESCALATE_DELAY_MS);
+
+    const filter = {
+        status: { $in: TARGET_STATUSES },
+        consideringBumped: true,
+        consideringBumpedAt: { $gte: BUMP_MIN_DATE },
+        operator: { $in: slpCodes },
+        bumpEscalatedAt: { $ne: null, $lte: cutoff },
+        $or: [{ bumpHeadEscalatedAt: { $exists: false } }, { bumpHeadEscalatedAt: null }],
+    };
+
+    const leads = await LeadModel.find(filter)
+        .sort({ bumpEscalatedAt: -1, _id: -1 })
+        .limit(HEAD_ESCALATE_BATCH_SIZE)
+        .select('_id n status operator clientName clientPhone consideringBumpedAt bumpNotifiedAt bumpEscalatedAt')
+        .lean();
+
+    if (!leads.length) return 0;
+
+    let escalated = 0;
+    const chatEvents = [];
+    const idsToUpdate = [];
+    const headTag = buildHeadMentionTag();
+    const managerTag = buildMentionTag();
+
+    const totalMinutes = (NOTIFY_DELAY_MS + ESCALATE_DELAY_MS + HEAD_ESCALATE_DELAY_MS) / 60000;
+
+    for (const lead of leads) {
+        const operatorUser = opMap.get(Number(lead.operator)) || null;
+        const operatorName = operatorUser?.fullName || `SlpCode: ${lead.operator}`;
+
+        const statusLabel = STATUS_LABELS[lead.status] || lead.status;
+        const link = buildLeadLink(lead._id);
+        const clientInfo = lead.clientName || lead.clientPhone || lead.n || "Noma'lum";
+
+        const text =
+            `🆘 <b>Yuqori darajadagi escalation!</b>\n\n` +
+            `${headTag}, <b>${escapeHtml(statusLabel)}</b> uchun kelgan lead ${totalMinutes} daqiqa ichida ishlanmadi.\n` +
+            `Operator: <b>${escapeHtml(operatorName)}</b>\n` +
+            `Menejer (${managerTag}) ham bu leadga e'tibor bermadi.\n\n` +
+            `👤 Mijoz: <b>${escapeHtml(clientInfo)}</b>\n` +
+            `📋 Lead: <a href="${link}">${escapeHtml(lead.n || lead._id)}</a>\n\n` +
+            `Iltimos, chora ko'ring!`;
+
+        const sent = await sendTelegramMessage(QA_GROUP_CHAT_ID, text, QA_TOPIC_BOLIM_RAHBARI);
+        if (sent) {
+            escalated++;
+            idsToUpdate.push(lead._id);
+            chatEvents.push(buildNotifyChatEvent(lead, now, 'head_escalate'));
+        }
+    }
+
+    if (idsToUpdate.length) {
+        await LeadModel.updateMany(
+            {
+                _id: { $in: idsToUpdate },
+                consideringBumped: true,
+                operator: { $in: slpCodes },
+                $or: [{ bumpHeadEscalatedAt: { $exists: false } }, { bumpHeadEscalatedAt: null }],
+            },
+            { $set: { bumpHeadEscalatedAt: now, updatedAt: now } }
         );
     }
 
@@ -479,11 +563,12 @@ function startLeadBumpNotifyCron({ pbxClient, trunkNames }) {
             try {
                 const notified = await processNotifyStage(now);
                 const escalated = await processEscalateStage(now);
+                const headEscalated = await processHeadEscalateStage(now);
                 const noPurchase = await processNoPurchaseEscalation(now);
                 const closed = await processClosedEscalation(now, { pbxClient, trunkNames });
 
                 console.log(
-                    `[CRON:bump-notify] done | now=${now.toISOString()} notified=${notified} escalated=${escalated} noPurchase=${noPurchase} closed=${closed}`
+                    `[CRON:bump-notify] done | now=${now.toISOString()} notified=${notified} escalated=${escalated} headEscalated=${headEscalated} noPurchase=${noPurchase} closed=${closed}`
                 );
             } catch (err) {
                 console.error('[CRON:bump-notify] error:', err?.message || err);

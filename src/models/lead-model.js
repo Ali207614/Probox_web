@@ -117,6 +117,7 @@ const LeadSchema = new Schema(
         consideringBumpedReason: { type: String, default: null },
         bumpNotifiedAt:  { type: Date, default: null, index: true },
         bumpEscalatedAt: { type: Date, default: null, index: true },
+        bumpHeadEscalatedAt: { type: Date, default: null, index: true },
 
         sellerBumpNotifiedAt: { type: Date, default: null, index: true },
         sellerBumpEscalatedAt: { type: Date, default: null, index: true },
