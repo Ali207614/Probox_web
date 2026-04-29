@@ -9,16 +9,12 @@ const OtpCodeSchema = new Schema(
         slpCode: { type: Number, required: true, index: true },
         purpose: {
             type: String,
-            enum: [
-                'reset_password',
-                'change_login',
-                'change_password',
-                'change_credentials',
-            ],
+            enum: ['register', 'reset_password', 'change_credentials'],
             required: true,
         },
         codeHash: { type: String, required: true },
         attempts: { type: Number, default: 0 },
+        verifiedAt: { type: Date, default: null },
         usedAt: { type: Date, default: null },
         createdAt: { type: Date, default: () => new Date() },
         expiresAt: {

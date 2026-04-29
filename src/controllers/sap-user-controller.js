@@ -6,6 +6,7 @@ const { db } = require('../config');
 
 const ApiError = require('../exceptions/api-error');
 const otpService = require('../services/otp.service');
+const { signRegToken, verifyRegToken } = require('../services/reg-token.service');
 const SalesPersonProfile = require('../models/sales-person-profile-model');
 const UploadService = require('../minio');
 
@@ -429,22 +430,21 @@ class SapUserController {
         }
     };
 
-    // ===== SELF: OTP request (token) =====
+    // ===== SELF: login + parolni birga o'zgartirish uchun OTP (token) =====
     requestCredentialsOtp = async (req, res, next) => {
         try {
             const slpCode = Number(req.user?.SlpCode);
             if (!Number.isFinite(slpCode)) return next(ApiError.UnauthorizedError());
 
-            const { purpose } = req.body || {};
-            if (!['change_login', 'change_password', 'change_credentials'].includes(purpose)) {
-                return next(ApiError.BadRequest("purpose noto'g'ri"));
-            }
-
             const rows = await fetchOslp({ slpCode });
             if (!rows.length) return next(ApiError.UnauthorizedError());
             const phone = rows[0].Mobil || rows[0].Telephone;
 
-            const result = await otpService.sendOtp({ slpCode, phone, purpose });
+            const result = await otpService.sendOtp({
+                slpCode,
+                phone,
+                purpose: 'change_credentials',
+            });
             return res.json({
                 message: "Tasdiqlash kodi Telegram orqali jo'natildi",
                 ...result,
@@ -454,143 +454,53 @@ class SapUserController {
         }
     };
 
-    // ===== SELF: change credentials with OTP (token) =====
-    //   Joriy parol so'ralmaydi — OTP ikkinchi faktor sifatida yetarli.
-    changeCredentials = async (req, res, next) => {
+    // 2-bosqich: OTP'ni tasdiqlash → regToken qaytaradi
+    verifyCredentialsOtp = async (req, res, next) => {
         try {
             const slpCode = Number(req.user?.SlpCode);
             if (!Number.isFinite(slpCode)) return next(ApiError.UnauthorizedError());
 
-            const { purpose, code, newLogin, newPassword, passwordConfirm } = req.body || {};
-
-            if (!['change_login', 'change_password', 'change_credentials'].includes(purpose)) {
-                return next(ApiError.BadRequest("purpose noto'g'ri"));
-            }
+            const { code } = req.body || {};
             if (!code) return next(ApiError.BadRequest('OTP kod majburiy'));
 
-            const wantsLogin =
-                purpose === 'change_login' || (purpose === 'change_credentials' && newLogin);
-            const wantsPassword =
-                purpose === 'change_password' || (purpose === 'change_credentials' && newPassword);
-
-            if (purpose === 'change_login' && !newLogin) {
-                return next(ApiError.BadRequest('newLogin majburiy'));
-            }
-            if (purpose === 'change_password' && !newPassword) {
-                return next(ApiError.BadRequest('newPassword majburiy'));
-            }
-            if (purpose === 'change_credentials' && !wantsLogin && !wantsPassword) {
-                return next(
-                    ApiError.BadRequest('newLogin yoki newPassword (yoki ikkalasi) majburiy')
-                );
-            }
-
-            const rows = await fetchOslp({ slpCode });
-            if (!rows.length) return next(ApiError.UnauthorizedError());
-            const me = rows[0];
-
-            // Validatsiya — OTP'ni iste'mol qilishdan oldin
-            let normalizedLogin = null;
-            if (wantsLogin) {
-                normalizedLogin = normalizeLogin(newLogin);
-                if (!ALLOWED_LOGIN_RE.test(normalizedLogin)) {
-                    return next(
-                        ApiError.BadRequest("newLogin formati noto'g'ri (3-64 belgi)")
-                    );
-                }
-                if (normalizedLogin === me.U_login) {
-                    return next(ApiError.BadRequest('Yangi login eskisi bilan bir xil'));
-                }
-                const dup = await fetchOslp({ login: normalizedLogin });
-                if (dup.some((r) => Number(r.SlpCode) !== slpCode)) {
-                    return next(ApiError.BadRequest('Bu login band'));
-                }
-            }
-
-            if (wantsPassword) {
-                if (typeof newPassword !== 'string' || newPassword.length < 4) {
-                    return next(ApiError.BadRequest('newPassword kamida 4 ta belgi'));
-                }
-                if (typeof passwordConfirm !== 'string' || newPassword !== passwordConfirm) {
-                    return next(ApiError.BadRequest('Parollar mos kelmaydi'));
-                }
-                if (newPassword === me.U_password) {
-                    return next(ApiError.BadRequest('Yangi parol eskisi bilan bir xil'));
-                }
-            }
-
-            await otpService.verifyOtp({ slpCode, purpose, code });
-
-            const body = {};
-            const changed = [];
-            if (wantsLogin) {
-                body.U_login = normalizedLogin;
-                changed.push('login');
-            }
-            if (wantsPassword) {
-                body.U_password = newPassword;
-                changed.push('password');
-            }
-
-            await slPatch(`/SalesPersons(${slpCode})`, body);
-
-            return res.json({ message: 'Muvaffaqiyatli yangilandi', changed });
-        } catch (e) {
-            if (e.status) return next(new ApiError(e.status, e.message));
-            return next(e);
-        }
-    };
-
-    // ===== PUBLIC: forgot/register OTP request (no token) =====
-    requestForgotOtp = async (req, res, next) => {
-        try {
-            const { phone } = req.body || {};
-            const normalized = normalizePhone(phone);
-            if (!normalized) return next(ApiError.BadRequest("phone noto'g'ri formatda"));
-
-            const rows = await fetchOslp({ phone: normalized });
-            if (!rows.length) {
-                return next(ApiError.BadRequest('Bu raqam SAP profilida topilmadi'));
-            }
-            if (rows.length > 1) {
-                return next(
-                    ApiError.BadRequest("Bu raqam bir necha profilga bog'langan. Admin bilan bog'laning.")
-                );
-            }
-            const me = rows[0];
-            const slpCode = Number(me.SlpCode);
-
-            const profile = await SalesPersonProfile.findOne({ slpCode }).lean();
-            if (profile?.isDeleted) {
-                return next(ApiError.BadRequest("Akkaunt o'chirilgan"));
-            }
-            if (profile && profile.isActive === false) {
-                return next(ApiError.BadRequest('Akkaunt aktiv emas'));
-            }
-
-            const result = await otpService.sendOtp({
+            const verified = await otpService.verifyOtp({
                 slpCode,
-                phone: me.Mobil || me.Telephone || normalized,
-                purpose: 'reset_password',
+                purpose: 'change_credentials',
+                code,
             });
-
+            const regToken = signRegToken({
+                otpId: verified.otpId,
+                slpCode,
+                purpose: 'change_credentials',
+            });
             return res.json({
-                message: "Tasdiqlash kodi Telegram orqali jo'natildi",
-                ...result,
+                message: 'Kod tasdiqlandi. Login+parolni regToken bilan PATCH /me/credentials orqali o\'rnating.',
+                verified: true,
+                regToken,
+                expiresAt: verified.expiresAt,
             });
         } catch (e) {
+            if (e instanceof ApiError) return next(e);
             return next(e);
         }
     };
 
-    // ===== PUBLIC: reset password (no token) =====
-    resetPassword = async (req, res, next) => {
+    // 3-bosqich: regToken + login + parol → birga yangilanadi
+    changeCredentials = async (req, res, next) => {
         try {
-            const { phone, code, newPassword, passwordConfirm } = req.body || {};
+            const sessSlp = Number(req.user?.SlpCode);
+            if (!Number.isFinite(sessSlp)) return next(ApiError.UnauthorizedError());
 
-            const normalized = normalizePhone(phone);
-            if (!normalized) return next(ApiError.BadRequest("phone noto'g'ri formatda"));
-            if (!code) return next(ApiError.BadRequest('OTP kod majburiy'));
+            const { regToken, newLogin, newPassword, passwordConfirm } = req.body || {};
+
+            const payload = verifyRegToken(regToken, 'change_credentials');
+            if (Number(payload.slpCode) !== sessSlp) {
+                return next(ApiError.BadRequest('regToken boshqa userga tegishli'));
+            }
+            const slpCode = sessSlp;
+
+            if (!newLogin) return next(ApiError.BadRequest('newLogin majburiy'));
+            if (!newPassword) return next(ApiError.BadRequest('newPassword majburiy'));
             if (typeof newPassword !== 'string' || newPassword.length < 4) {
                 return next(ApiError.BadRequest('newPassword kamida 4 ta belgi'));
             }
@@ -598,27 +508,307 @@ class SapUserController {
                 return next(ApiError.BadRequest('Parollar mos kelmaydi'));
             }
 
-            const rows = await fetchOslp({ phone: normalized });
-            if (!rows.length || rows.length > 1) {
-                return next(ApiError.BadRequest("Profil topilmadi yoki bir necha profil bog'langan"));
-            }
+            const rows = await fetchOslp({ slpCode });
+            if (!rows.length) return next(ApiError.UnauthorizedError());
             const me = rows[0];
-            const slpCode = Number(me.SlpCode);
 
-            if (newPassword === me.U_password) {
-                return next(ApiError.BadRequest('Yangi parol eskisi bilan bir xil'));
+            const normalizedLogin = normalizeLogin(newLogin);
+            if (!ALLOWED_LOGIN_RE.test(normalizedLogin)) {
+                return next(ApiError.BadRequest("newLogin formati noto'g'ri (3-64 belgi)"));
             }
 
-            await otpService.verifyOtp({ slpCode, purpose: 'reset_password', code });
+            const sameLogin = normalizedLogin === me.U_login;
+            const samePassword = newPassword === me.U_password;
+            if (sameLogin && samePassword) {
+                return next(ApiError.BadRequest('Yangi login va parol eskisi bilan bir xil'));
+            }
 
-            await slPatch(`/SalesPersons(${slpCode})`, { U_password: newPassword });
+            if (!sameLogin) {
+                const dup = await fetchOslp({ login: normalizedLogin });
+                if (dup.some((r) => Number(r.SlpCode) !== slpCode)) {
+                    return next(ApiError.BadRequest('Bu login band'));
+                }
+            }
+
+            await otpService.consumeOtp({
+                otpId: payload.otpId,
+                slpCode,
+                purpose: 'change_credentials',
+            });
+
+            await slPatch(`/SalesPersons(${slpCode})`, {
+                U_login: normalizedLogin,
+                U_password: newPassword,
+            });
+
+            return res.json({ message: 'Login va parol yangilandi' });
+        } catch (e) {
+            if (e instanceof ApiError) return next(e);
+            if (e.status) return next(new ApiError(e.status, e.message));
+            return next(e);
+        }
+    };
+
+    // ====================================================================
+    // PUBLIC AUTH FLOWS — phone bo'yicha SAP profil topiladi, OTP yuboriladi
+    // ====================================================================
+
+    // Yordamchi: phone bo'yicha SAP rowni topib, profil holatini tekshirish
+    _resolveByPhone = async (phone) => {
+        const normalized = normalizePhone(phone);
+        if (!normalized) {
+            throw ApiError.BadRequest("phone noto'g'ri formatda");
+        }
+        const rows = await fetchOslp({ phone: normalized });
+        if (!rows.length) {
+            throw ApiError.BadRequest('Bu raqam SAP profilida topilmadi');
+        }
+        if (rows.length > 1) {
+            throw ApiError.BadRequest(
+                "Bu raqam bir necha profilga bog'langan. Admin bilan bog'laning."
+            );
+        }
+        const me = rows[0];
+        const slpCode = Number(me.SlpCode);
+
+        const profile = await SalesPersonProfile.findOne({ slpCode }).lean();
+        if (profile?.isDeleted) throw ApiError.BadRequest("Akkaunt o'chirilgan");
+        if (profile && profile.isActive === false) {
+            throw ApiError.BadRequest('Akkaunt aktiv emas');
+        }
+        return { me, slpCode, normalized };
+    };
+
+    // ===== REGISTER: birinchi marta parol o'rnatish =====
+    //   Shart: SAP'da U_password BO'SH bo'lishi kerak.
+    requestRegisterOtp = async (req, res, next) => {
+        try {
+            const { me, slpCode, normalized } = await this._resolveByPhone(req.body?.phone);
+
+            if (me.U_password && String(me.U_password).trim() !== '') {
+                return next(
+                    ApiError.BadRequest(
+                        "Akkaunt allaqachon ro'yxatdan o'tgan. Parolni unutgan bo'lsangiz /auth/forgot/otp dan foydalaning."
+                    )
+                );
+            }
+            if (!me.U_login || !String(me.U_login).trim()) {
+                return next(
+                    ApiError.BadRequest("Login admin tomonidan o'rnatilmagan. Admin bilan bog'laning.")
+                );
+            }
+
+            const result = await otpService.sendOtp({
+                slpCode,
+                phone: me.Mobil || me.Telephone || normalized,
+                purpose: 'register',
+            });
+            return res.json({
+                message: "Tasdiqlash kodi Telegram orqali jo'natildi",
+                login: me.U_login,
+                ...result,
+            });
+        } catch (e) {
+            if (e instanceof ApiError) return next(e);
+            return next(e);
+        }
+    };
+
+    // 2-bosqich: OTP'ni tasdiqlash → regToken qaytaradi
+    verifyRegisterOtp = async (req, res, next) => {
+        try {
+            const { phone, code } = req.body || {};
+            if (!code) return next(ApiError.BadRequest('OTP kod majburiy'));
+
+            const { me, slpCode } = await this._resolveByPhone(phone);
+            if (me.U_password && String(me.U_password).trim() !== '') {
+                return next(
+                    ApiError.BadRequest(
+                        "Akkaunt allaqachon ro'yxatdan o'tgan. /auth/forgot/otp dan foydalaning."
+                    )
+                );
+            }
+
+            const verified = await otpService.verifyOtp({
+                slpCode,
+                purpose: 'register',
+                code,
+            });
+            const regToken = signRegToken({
+                otpId: verified.otpId,
+                slpCode,
+                purpose: 'register',
+            });
+            return res.json({
+                message: 'Kod tasdiqlandi. Parolni o\'rnatish uchun regTokendan foydalaning.',
+                verified: true,
+                regToken,
+                expiresAt: verified.expiresAt,
+            });
+        } catch (e) {
+            if (e instanceof ApiError) return next(e);
+            return next(e);
+        }
+    };
+
+    // 3-bosqich: regToken + parol → SAP'ga yoziladi
+    register = async (req, res, next) => {
+        try {
+            const { regToken, password, passwordConfirm } = req.body || {};
+
+            const payload = verifyRegToken(regToken, 'register');
+
+            if (typeof password !== 'string' || password.length < 4) {
+                return next(ApiError.BadRequest('password kamida 4 ta belgi'));
+            }
+            if (typeof passwordConfirm !== 'string' || password !== passwordConfirm) {
+                return next(ApiError.BadRequest('Parollar mos kelmaydi'));
+            }
+
+            const slpCode = Number(payload.slpCode);
+            const rows = await fetchOslp({ slpCode });
+            if (!rows.length) return next(ApiError.BadRequest('Foydalanuvchi topilmadi'));
+            const me = rows[0];
+
+            if (me.U_password && String(me.U_password).trim() !== '') {
+                return next(
+                    ApiError.BadRequest(
+                        "Akkaunt allaqachon ro'yxatdan o'tgan. /auth/forgot/otp dan foydalaning."
+                    )
+                );
+            }
+
+            await otpService.consumeOtp({
+                otpId: payload.otpId,
+                slpCode,
+                purpose: 'register',
+            });
+
+            await slPatch(`/SalesPersons(${slpCode})`, { U_password: password });
 
             return res.json({
-                message: "Parol muvaffaqiyatli o'rnatildi. /login orqali kiring.",
+                message: "Parol o'rnatildi. /login orqali kiring.",
                 slpCode,
                 login: me.U_login,
             });
         } catch (e) {
+            if (e instanceof ApiError) return next(e);
+            if (e.status) return next(new ApiError(e.status, e.message));
+            return next(e);
+        }
+    };
+
+    // ===== FORGOT: parolni tiklash =====
+    //   Shart: SAP'da U_password TO'LDIRILGAN bo'lishi kerak.
+    requestForgotOtp = async (req, res, next) => {
+        try {
+            const { me, slpCode, normalized } = await this._resolveByPhone(req.body?.phone);
+
+            if (!me.U_password || String(me.U_password).trim() === '') {
+                return next(
+                    ApiError.BadRequest(
+                        "Akkaunt hali ro'yxatdan o'tmagan. /auth/register/otp dan foydalaning."
+                    )
+                );
+            }
+
+            const result = await otpService.sendOtp({
+                slpCode,
+                phone: me.Mobil || me.Telephone || normalized,
+                purpose: 'reset_password',
+            });
+            return res.json({
+                message: "Tasdiqlash kodi Telegram orqali jo'natildi",
+                ...result,
+            });
+        } catch (e) {
+            if (e instanceof ApiError) return next(e);
+            return next(e);
+        }
+    };
+
+    // 2-bosqich: OTP'ni tasdiqlash → regToken qaytaradi
+    verifyForgotOtp = async (req, res, next) => {
+        try {
+            const { phone, code } = req.body || {};
+            if (!code) return next(ApiError.BadRequest('OTP kod majburiy'));
+
+            const { me, slpCode } = await this._resolveByPhone(phone);
+            if (!me.U_password || String(me.U_password).trim() === '') {
+                return next(
+                    ApiError.BadRequest(
+                        "Akkaunt hali ro'yxatdan o'tmagan. /auth/register/otp dan foydalaning."
+                    )
+                );
+            }
+
+            const verified = await otpService.verifyOtp({
+                slpCode,
+                purpose: 'reset_password',
+                code,
+            });
+            const regToken = signRegToken({
+                otpId: verified.otpId,
+                slpCode,
+                purpose: 'reset_password',
+            });
+            return res.json({
+                message: 'Kod tasdiqlandi. Yangi parolni regToken bilan o\'rnating.',
+                verified: true,
+                regToken,
+                expiresAt: verified.expiresAt,
+            });
+        } catch (e) {
+            if (e instanceof ApiError) return next(e);
+            return next(e);
+        }
+    };
+
+    // 3-bosqich: regToken + yangi parol
+    forgotReset = async (req, res, next) => {
+        try {
+            const { regToken, newPassword, passwordConfirm } = req.body || {};
+
+            const payload = verifyRegToken(regToken, 'reset_password');
+
+            if (typeof newPassword !== 'string' || newPassword.length < 4) {
+                return next(ApiError.BadRequest('newPassword kamida 4 ta belgi'));
+            }
+            if (typeof passwordConfirm !== 'string' || newPassword !== passwordConfirm) {
+                return next(ApiError.BadRequest('Parollar mos kelmaydi'));
+            }
+
+            const slpCode = Number(payload.slpCode);
+            const rows = await fetchOslp({ slpCode });
+            if (!rows.length) return next(ApiError.BadRequest('Foydalanuvchi topilmadi'));
+            const me = rows[0];
+
+            if (!me.U_password || String(me.U_password).trim() === '') {
+                return next(
+                    ApiError.BadRequest(
+                        "Akkaunt hali ro'yxatdan o'tmagan. /auth/register/otp dan foydalaning."
+                    )
+                );
+            }
+            if (newPassword === me.U_password) {
+                return next(ApiError.BadRequest('Yangi parol eskisi bilan bir xil'));
+            }
+
+            await otpService.consumeOtp({
+                otpId: payload.otpId,
+                slpCode,
+                purpose: 'reset_password',
+            });
+
+            await slPatch(`/SalesPersons(${slpCode})`, { U_password: newPassword });
+
+            return res.json({
+                message: "Parol yangilandi. /login orqali kiring.",
+                slpCode,
+                login: me.U_login,
+            });
+        } catch (e) {
+            if (e instanceof ApiError) return next(e);
             if (e.status) return next(new ApiError(e.status, e.message));
             return next(e);
         }

@@ -14,9 +14,8 @@ const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 5);
 const OTP_RESEND_COOLDOWN_MS = Number(process.env.OTP_RESEND_COOLDOWN_MS || 60 * 1000);
 
 const PURPOSE_LABELS = {
-    reset_password: "Parolni tiklash / o'rnatish",
-    change_login: "Login o'zgartirish",
-    change_password: "Parol o'zgartirish",
+    register: "Akkaunt registratsiyasi",
+    reset_password: "Parolni tiklash",
     change_credentials: "Login va parolni o'zgartirish",
 };
 
@@ -122,6 +121,10 @@ async function sendOtp({ slpCode, phone, purpose }) {
     };
 }
 
+/**
+ * 1-bosqich: kodni tekshirib, OTPni "verified" deb belgilaydi (lekin used emas).
+ * Keyin consumeOtp() chaqirilishi kerak.
+ */
 async function verifyOtp({ slpCode, purpose, code }) {
     if (!code || !/^\d+$/.test(String(code))) {
         throw ApiError.BadRequest("Kod noto'g'ri formatda");
@@ -131,6 +134,7 @@ async function verifyOtp({ slpCode, purpose, code }) {
         slpCode,
         purpose,
         usedAt: null,
+        verifiedAt: null,
     }).sort({ createdAt: -1 });
 
     if (!otp) {
@@ -155,6 +159,41 @@ async function verifyOtp({ slpCode, purpose, code }) {
         throw ApiError.BadRequest(`Kod noto'g'ri. Qolgan urinishlar: ${left}`);
     }
 
+    otp.verifiedAt = new Date();
+    await otp.save();
+    return {
+        otpId: String(otp._id),
+        verifiedAt: otp.verifiedAt,
+        expiresAt: otp.expiresAt,
+    };
+}
+
+/**
+ * 2-bosqich: oldin verifyOtp() qilingan OTPni "used" deb belgilaydi.
+ * regToken'dan otpId, slpCode, purpose keladi.
+ */
+async function consumeOtp({ otpId, slpCode, purpose }) {
+    if (!otpId) throw ApiError.BadRequest('otpId majburiy');
+
+    const otp = await OtpCodeModel.findOne({
+        _id: otpId,
+        slpCode,
+        purpose,
+    });
+
+    if (!otp) {
+        throw ApiError.BadRequest('OTP topilmadi');
+    }
+    if (!otp.verifiedAt) {
+        throw ApiError.BadRequest('OTP tasdiqlanmagan');
+    }
+    if (otp.usedAt) {
+        throw ApiError.BadRequest('OTP allaqachon ishlatilgan');
+    }
+    if (otp.expiresAt && otp.expiresAt.getTime() < Date.now()) {
+        throw ApiError.BadRequest("OTP muddati o'tgan. Yangi kod so'rang.");
+    }
+
     otp.usedAt = new Date();
     await otp.save();
     return true;
@@ -163,5 +202,6 @@ async function verifyOtp({ slpCode, purpose, code }) {
 module.exports = {
     sendOtp,
     verifyOtp,
+    consumeOtp,
     findChatIdByPhone,
 };

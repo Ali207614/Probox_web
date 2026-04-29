@@ -997,22 +997,37 @@ class AnalyticsController {
             };
 
             // Stages
+            // Javobdan yashiriladigan bosqichlar — foiz hisoblashda o'tkazib yuboriladi,
+            // shunda foiz har doim ko'rinadigan oldingi bosqichga nisbatan bo'ladi.
+            const HIDDEN_STAGES = new Set(['meetingSet']);
+            const stageByKey = new Map(this.stageDefs.map(s => [s.key, s]));
+
+            const resolveVisiblePrevKey = (stage) => {
+                let cur = stage;
+                while (cur && cur.prevKey) {
+                    if (!HIDDEN_STAGES.has(cur.prevKey)) return cur.prevKey;
+                    cur = stageByKey.get(cur.prevKey);
+                }
+                return null;
+            };
+
             const stages = this.stageDefs
-                .filter(stage => stage.key !== 'meetingSet')
+                .filter(stage => !HIDDEN_STAGES.has(stage.key))
                 .map(stage => {
                     const fact = totals[stage.key] || 0;
                     const planVal = plan[stage.key] || 0;
-                    const prevPlan = stage.prevKey ? (plan[stage.prevKey] || 0) : planVal;
-                    const prevFact = stage.prevKey ? (totals[stage.prevKey] || 0) : fact;
+                    const prevKey = resolveVisiblePrevKey(stage);
+                    const prevPlan = prevKey ? (plan[prevKey] || 0) : planVal;
+                    const prevFact = prevKey ? (totals[prevKey] || 0) : fact;
 
                     return {
                         no: stage.no,
                         key: stage.key,
                         name: stage.name,
                         plan: planVal,
-                        planPercent:        percent(planVal, stage.prevKey ? prevPlan : planVal),
+                        planPercent:        percent(planVal, prevKey ? prevPlan : planVal),
                         fact,
-                        factPercent:        percent(fact, stage.prevKey ? prevFact : fact),
+                        factPercent:        percent(fact, prevKey ? prevFact : fact),
                         achievementPercent: percent(fact, planVal),
                         groups: sorted.map(g => {
                             const count = g[stage.key] || 0;

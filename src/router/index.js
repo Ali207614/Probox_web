@@ -70,9 +70,15 @@ const avatarUpload = multer({
 
 router.post('/login', b1HANA.login);
 
-// === Forgot / set initial password (token shart EMAS) ===
+// === Register: birinchi marta parol o'rnatish (U_password bo'sh bo'lishi shart) ===
+router.post('/auth/register/otp', sapUserController.requestRegisterOtp);
+router.post('/auth/register/verify', sapUserController.verifyRegisterOtp);
+router.post('/auth/register', sapUserController.register);
+
+// === Forgot: parolni tiklash (U_password to'ldirilgan bo'lishi shart) ===
 router.post('/auth/forgot/otp', sapUserController.requestForgotOtp);
-router.post('/auth/forgot/reset', sapUserController.resetPassword);
+router.post('/auth/forgot/verify', sapUserController.verifyForgotOtp);
+router.post('/auth/forgot/reset', sapUserController.forgotReset);
 
 // === SELF (token) ===
 router.get('/me', authMiddleware, sapUserController.me);
@@ -83,6 +89,7 @@ router.post(
     sapUserController.uploadMyAvatar
 );
 router.post('/me/credentials/otp', authMiddleware, sapUserController.requestCredentialsOtp);
+router.post('/me/credentials/verify', authMiddleware, sapUserController.verifyCredentialsOtp);
 router.patch('/me/credentials', authMiddleware, sapUserController.changeCredentials);
 
 // === ADMIN: SAP users (token + role guard) ===

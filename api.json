@@ -16,7 +16,8 @@
     "Avatar, isActive, isDeleted SAP'da emas, MongoDB SalesPersonProfile collection'da saqlanadi.",
     "Role o'zgartirish faqat CEO va Manager qo'lida (Admin user yarata oladi, ammo role'ni o'zgartira olmaydi).",
     "O'chirish (soft delete) va tiklash faqat CEO va Manager qo'lida.",
-    "isDeleted=true yoki isActive=false bo'lgan user /login orqali kira olmaydi."
+    "isDeleted=true yoki isActive=false bo'lgan user /login orqali kira olmaydi.",
+    "OTP oqimlari 3 bosqichli: otp -> verify -> complete. /verify regToken (JWT, TTL 10 min) qaytaradi, /complete shu regToken bilan ishlaydi."
   ],
 
   "endpoints": {
@@ -28,21 +29,54 @@
       "response": { "token": "jwt...", "data": { "SlpCode": 26, "SlpName": "...", "U_role": "OperatorM" } }
     },
 
+    "POST /auth/register/otp": {
+      "auth": "public",
+      "desc": "1-bosqich. Birinchi marta parol o'rnatish uchun OTP yuborish.",
+      "body": { "phone": "998901234567" },
+      "response": { "delivered": true, "chatHint": "99890***67", "login": "ali", "expiresAt": "..." }
+    },
+
+    "POST /auth/register/verify": {
+      "auth": "public",
+      "desc": "2-bosqich. OTP kodini tasdiqlab, regToken qaytaradi (TTL 10 min).",
+      "body": { "phone": "998901234567", "code": "482917" },
+      "response": { "verified": true, "regToken": "eyJ...", "expiresAt": "..." }
+    },
+
+    "POST /auth/register": {
+      "auth": "public",
+      "desc": "3-bosqich. regToken + parol bilan SAP'ga U_password yoziladi.",
+      "body": {
+        "regToken": "eyJ...",
+        "password": "Parol123",
+        "passwordConfirm": "Parol123"
+      },
+      "response": { "message": "Parol o'rnatildi", "slpCode": 90, "login": "ali" }
+    },
+
     "POST /auth/forgot/otp": {
       "auth": "public",
+      "desc": "1-bosqich. Parolni tiklash uchun OTP yuborish.",
       "body": { "phone": "998901234567" },
       "response": { "delivered": true, "chatHint": "99890***67", "expiresAt": "..." }
     },
 
+    "POST /auth/forgot/verify": {
+      "auth": "public",
+      "desc": "2-bosqich. OTP kodini tasdiqlab, regToken qaytaradi.",
+      "body": { "phone": "998901234567", "code": "482917" },
+      "response": { "verified": true, "regToken": "eyJ...", "expiresAt": "..." }
+    },
+
     "POST /auth/forgot/reset": {
       "auth": "public",
+      "desc": "3-bosqich. regToken + yangi parol bilan SAP'ga yoziladi.",
       "body": {
-        "phone": "998901234567",
-        "code": "482917",
-        "newPassword": "Parol123",
-        "passwordConfirm": "Parol123"
+        "regToken": "eyJ...",
+        "newPassword": "YangiParol",
+        "passwordConfirm": "YangiParol"
       },
-      "response": { "message": "Parol o'rnatildi", "slpCode": 26, "login": "ali" }
+      "response": { "message": "Parol yangilandi", "slpCode": 26, "login": "ali" }
     },
 
     "GET /me": {
@@ -58,32 +92,28 @@
 
     "POST /me/credentials/otp": {
       "auth": "self",
-      "body": { "purpose": "change_password" },
-      "purposeOptions": ["change_login", "change_password", "change_credentials"]
+      "desc": "1-bosqich. Login+parolni o'zgartirish uchun OTP yuborish.",
+      "body": null,
+      "response": { "delivered": true, "chatHint": "99890***67", "expiresAt": "..." }
+    },
+
+    "POST /me/credentials/verify": {
+      "auth": "self",
+      "desc": "2-bosqich. OTP'ni tasdiqlab, regToken qaytaradi.",
+      "body": { "code": "482917" },
+      "response": { "verified": true, "regToken": "eyJ...", "expiresAt": "..." }
     },
 
     "PATCH /me/credentials": {
       "auth": "self",
-      "examples": {
-        "changePassword": {
-          "purpose": "change_password",
-          "code": "482917",
-          "newPassword": "Yangi123",
-          "passwordConfirm": "Yangi123"
-        },
-        "changeLogin": {
-          "purpose": "change_login",
-          "code": "482917",
-          "newLogin": "yangi.login"
-        },
-        "changeBoth": {
-          "purpose": "change_credentials",
-          "code": "482917",
-          "newLogin": "yangi.login",
-          "newPassword": "Yangi123",
-          "passwordConfirm": "Yangi123"
-        }
-      }
+      "desc": "3-bosqich. regToken + login + parol birga yangilanadi.",
+      "body": {
+        "regToken": "eyJ...",
+        "newLogin": "yangi.login",
+        "newPassword": "Yangi123",
+        "passwordConfirm": "Yangi123"
+      },
+      "response": { "message": "Login va parol yangilandi" }
     },
 
     "GET /sap-users": {
@@ -169,18 +199,21 @@
       "POST /login (admin) → token",
       "POST /sap-users {fullName, login, role, mobile, branch, ...}"
     ],
-    "2_userSetsPasswordFirstTime": [
-      "POST /auth/forgot/otp {phone}",
-      "POST /auth/forgot/reset {phone, code, newPassword, passwordConfirm}"
+    "2_userRegistersFirstTime": [
+      "POST /auth/register/otp {phone}",
+      "POST /auth/register/verify {phone, code} → regToken",
+      "POST /auth/register {regToken, password, passwordConfirm}"
     ],
     "3_userLogsIn": ["POST /login {login, password}"],
     "4_userForgotPassword": [
       "POST /auth/forgot/otp {phone}",
-      "POST /auth/forgot/reset {phone, code, newPassword, passwordConfirm}"
+      "POST /auth/forgot/verify {phone, code} → regToken",
+      "POST /auth/forgot/reset {regToken, newPassword, passwordConfirm}"
     ],
-    "5_userChangesLoginOrPassword": [
-      "POST /me/credentials/otp {purpose}",
-      "PATCH /me/credentials {purpose, code, newLogin?, newPassword?, passwordConfirm?}"
+    "5_userChangesCredentials": [
+      "POST /me/credentials/otp",
+      "POST /me/credentials/verify {code} → regToken",
+      "PATCH /me/credentials {regToken, newLogin, newPassword, passwordConfirm}"
     ],
     "6_adminUpdatesUser": ["PATCH /sap-users/:slpCode (role faqat CEO/Manager)"],
     "7_deactivateAndReactivate": [

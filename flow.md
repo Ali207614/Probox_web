@@ -71,67 +71,141 @@ User Telegram bot'ga **avval `/start` bosib raqamini yuborgan bo'lishi shart**.
 
 ---
 
-## FLOW 2 — User birinchi marta parol o'rnatadi
+## OTP oqimlari (umumiy struktura)
 
-### 2.1. OTP so'rash
+Hamma OTP-asosli oqim **3 bosqichli**:
+1. **OTP yuborish** — `/otp` (telefon → kod Telegram'ga)
+2. **OTP tasdiqlash** — `/verify` (kod → **regToken** qaytaradi, TTL 10 min)
+3. **Yakuniy amal** — `/register` | `/forgot/reset` | `PATCH /me/credentials` (regToken + parol)
+
+> `regToken` — bir martalik JWT, ichida `{ otpId, slpCode, purpose }`. Frontend uni saqlab qo'yadi va keyingi so'rovda yuboradi.
+
+---
+
+## FLOW 2 — User birinchi marta parol o'rnatadi (REGISTER)
+
+> Faqat **U_password BO'SH** bo'lgan akkauntlar uchun.
+
+### 2.1. OTP yuborish
+`POST /api/auth/register/otp`
+```json
+{ "phone": "998901234567" }
+```
+
+### 2.2. OTP'ni tasdiqlash → regToken
+`POST /api/auth/register/verify`
+```json
+{ "phone": "998901234567", "code": "482917" }
+```
+**Response:**
+```json
+{
+  "verified": true,
+  "regToken": "eyJhbGciOiJIUzI1NiIs...",
+  "expiresAt": "..."
+}
+```
+
+### 2.3. Parolni o'rnatish (regToken bilan)
+`POST /api/auth/register`
+```json
+{
+  "regToken": "eyJhbGciOiJIUzI1NiIs...",
+  "password": "Parol123",
+  "passwordConfirm": "Parol123"
+}
+```
+**Response:**
+```json
+{ "message": "Parol o'rnatildi", "slpCode": 90, "login": "yangi.sotuvchi" }
+```
+
+### 2.4. Login
+`POST /api/login` { login, password }
+
+---
+
+## FLOW 3 — Parolni unutish (FORGOT)
+
+> Faqat **U_password TO'LDIRILGAN** akkauntlar uchun.
+
+### 3.1. OTP yuborish
 `POST /api/auth/forgot/otp`
 ```json
 { "phone": "998901234567" }
 ```
 
-### 2.2. Parol o'rnatish
+### 3.2. OTP'ni tasdiqlash → regToken
+`POST /api/auth/forgot/verify`
+```json
+{ "phone": "998901234567", "code": "482917" }
+```
+**Response:**
+```json
+{ "verified": true, "regToken": "eyJ...", "expiresAt": "..." }
+```
+
+### 3.3. Yangi parolni o'rnatish (regToken bilan)
 `POST /api/auth/forgot/reset`
 ```json
 {
-  "phone": "998901234567",
-  "code": "482917",
-  "newPassword": "Parol123",
-  "passwordConfirm": "Parol123"
+  "regToken": "eyJ...",
+  "newPassword": "YangiParol",
+  "passwordConfirm": "YangiParol"
+}
+```
+**Response:**
+```json
+{ "message": "Parol yangilandi", "slpCode": 26, "login": "ali" }
+```
+
+### 3.4. Yangi parol bilan login
+`POST /api/login`
+
+---
+
+## FLOW 4 — Login va parolni birga o'zgartirish (token, 3 bosqich)
+
+> Login va parol **HAR DOIM birga** yangilanadi.
+> Joriy parol so'ralmaydi — OTP yetarli.
+
+### 4.1. OTP yuborish
+`POST /api/me/credentials/otp` (token)
+
+Body yo'q.
+
+**Response:**
+```json
+{ "delivered": true, "chatHint": "99890***67", "expiresAt": "..." }
+```
+
+### 4.2. OTP'ni tasdiqlash
+`POST /api/me/credentials/verify` (token)
+```json
+{ "code": "482917" }
+```
+**Response:**
+```json
+{ "verified": true, "expiresAt": "..." }
+```
+
+### 4.3. Login va parolni yangilash (kod kerak emas)
+`PATCH /api/me/credentials` (token)
+```json
+{
+  "newLogin": "yangi.login",
+  "newPassword": "YangiParol123",
+  "passwordConfirm": "YangiParol123"
 }
 ```
 
-### 2.3. Login
-`POST /api/login`
+**Response:**
 ```json
-{ "login": "yangi.sotuvchi", "password": "Parol123" }
+{ "message": "Login va parol yangilandi" }
 ```
 
----
-
-## FLOW 3 — Parolni unutish
-
-FLOW 2 bilan bir xil oqim. Faqat eski parol so'ralmaydi, OTP yetarli.
-
----
-
-## FLOW 4 — Login va/yoki parolni o'zgartirish (token bilan)
-
-### 4.1. OTP so'rash
-`POST /api/me/credentials/otp` (token)
-```json
-{ "purpose": "change_credentials" }
-```
-> `purpose`: `change_login` | `change_password` | `change_credentials`
-
-### 4.2. O'zgartirish
-`PATCH /api/me/credentials` (token)
-
-**Faqat parol:**
-```json
-{ "purpose": "change_password", "code": "482917", "newPassword": "Y123", "passwordConfirm": "Y123" }
-```
-
-**Faqat login:**
-```json
-{ "purpose": "change_login", "code": "482917", "newLogin": "yangi.login" }
-```
-
-**Ikkalasi:**
-```json
-{ "purpose": "change_credentials", "code": "482917", "newLogin": "y.login", "newPassword": "Y123", "passwordConfirm": "Y123" }
-```
-
-> Joriy parol so'ralmaydi.
+> Agar yangi login eskisi bilan bir xil bo'lsa, faqat parol yangilanadi (login band tekshiruvi o'tkazilmaydi).
+> Agar ikkalasi ham eskisi bilan bir xil bo'lsa: `400 — "Yangi login va parol eskisi bilan bir xil"`.
 
 ---
 
@@ -144,7 +218,7 @@ FLOW 2 bilan bir xil oqim. Faqat eski parol so'ralmaydi, OTP yetarli.
   "data": {
     "SlpCode": 26, "SlpName": "Ali", "U_login": "ali", "U_role": "OperatorM",
     "Mobil": "998903367448", "isActive": true, "isDeleted": false,
-    "avatar": { "keys": {...}, "urls": {...} }
+    "avatar": { "keys": {}, "urls": {} }
   }
 }
 ```
