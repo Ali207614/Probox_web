@@ -53,7 +53,68 @@ const reservationController = require("../controllers/reservationController");
 const planController = require("../controllers/planController");
 const roleMiddleware = require("../middlewares/role-middleware");
 
+const appUserController = require("../controllers/app-user-controller");
+const roleController = require("../controllers/role-controller");
+const {
+    appAuthMiddleware,
+    appRoleGuard,
+} = require("../middlewares/app-auth-middleware");
+
+const ADMIN_ROLES = ['CEO', 'Manager', 'Admin'];
+
+const avatarUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+            return cb(new Error('Faqat rasm yuklash mumkin (jpg, jpeg, png, webp)'));
+        }
+        cb(null, true);
+    },
+});
+
 router.post('/login', b1HANA.login);
+
+// === App users (SAP'dan mustaqil) ===
+router.post('/auth/app/login', appUserController.login);
+router.post('/auth/app/register/otp', appUserController.requestRegisterOtp);
+router.post('/auth/app/register', appUserController.completeRegister);
+router.post('/auth/app/forgot/otp', appUserController.requestForgotPasswordOtp);
+router.post('/auth/app/forgot/reset', appUserController.resetPassword);
+
+// Self
+router.get('/me', appAuthMiddleware, appUserController.me);
+router.patch('/me', appAuthMiddleware, appUserController.updateMe);
+router.post('/me/avatar', appAuthMiddleware, avatarUpload.single('avatar'), appUserController.uploadMyAvatar);
+router.post('/me/credentials/otp', appAuthMiddleware, appUserController.requestCredentialsOtp);
+router.patch('/me/credentials', appAuthMiddleware, appUserController.changeCredentials);
+
+// Admin: users
+router.get('/users', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), appUserController.list);
+router.get('/users/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), appUserController.getOne);
+router.post(
+    '/users',
+    appAuthMiddleware,
+    appRoleGuard(ADMIN_ROLES),
+    avatarUpload.single('avatar'),
+    appUserController.create
+);
+router.patch('/users/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), appUserController.update);
+router.delete('/users/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), appUserController.remove);
+router.post(
+    '/users/:id/avatar',
+    appAuthMiddleware,
+    appRoleGuard(ADMIN_ROLES),
+    avatarUpload.single('avatar'),
+    appUserController.uploadAvatarForUser
+);
+
+// Admin: roles
+router.get('/roles', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), roleController.list);
+router.get('/roles/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), roleController.getOne);
+router.post('/roles', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), roleController.create);
+router.patch('/roles/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), roleController.update);
+router.delete('/roles/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), roleController.remove);
 
 router.post(
     '/webhooks/onlinepbx',

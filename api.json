@@ -1,0 +1,164 @@
+{
+  "baseUrl": "http://localhost:3019/api",
+  "auth": {
+    "header": "Authorization: Bearer <TOKEN>",
+    "adminRoles": ["CEO", "Manager", "Admin"]
+  },
+
+  "endpoints": {
+
+    "POST /auth/app/login": {
+      "auth": "public",
+      "body": { "login": "ali.v", "password": "Parol123!" },
+      "response": { "token": "jwt...", "data": { "_id": "...", "fullName": "Ali", "role": {} } }
+    },
+
+    "POST /auth/app/register/otp": {
+      "auth": "public",
+      "desc": "Admin yaratgan pending user uchun OTP",
+      "body": { "phone": "998901234567" },
+      "response": { "delivered": true, "chatHint": "99890***67", "expiresAt": "..." }
+    },
+
+    "POST /auth/app/register": {
+      "auth": "public",
+      "body": {
+        "phone": "998901234567",
+        "code": "482917",
+        "login": "ali.v",
+        "password": "Parol123!",
+        "passwordConfirm": "Parol123!"
+      },
+      "response": { "token": "jwt...", "data": {} }
+    },
+
+    "POST /auth/app/forgot/otp": {
+      "auth": "public",
+      "body": { "phone": "998901234567" },
+      "response": { "delivered": true, "expiresAt": "..." }
+    },
+
+    "POST /auth/app/forgot/reset": {
+      "auth": "public",
+      "body": {
+        "phone": "998901234567",
+        "code": "482917",
+        "newPassword": "YangiParol",
+        "passwordConfirm": "YangiParol"
+      },
+      "response": { "token": "jwt...", "data": {} }
+    },
+
+    "GET /me": { "auth": "self" },
+
+    "PATCH /me": {
+      "auth": "self",
+      "body": { "fullName": "Yangi Ism" }
+    },
+
+    "POST /me/avatar": {
+      "auth": "self",
+      "contentType": "multipart/form-data",
+      "body": { "avatar": "<file: jpg/png/webp ≤5MB>" }
+    },
+
+    "POST /me/credentials/otp": {
+      "auth": "self",
+      "body": { "purpose": "change_password" },
+      "purposeOptions": ["change_login", "change_password", "change_credentials"]
+    },
+
+    "PATCH /me/credentials": {
+      "auth": "self",
+      "examples": {
+        "changePassword": {
+          "purpose": "change_password",
+          "code": "482917",
+          "newPassword": "YangiParol",
+          "passwordConfirm": "YangiParol"
+        },
+        "changeLogin": {
+          "purpose": "change_login",
+          "code": "482917",
+          "newLogin": "yangi.login"
+        },
+        "changeBoth": {
+          "purpose": "change_credentials",
+          "code": "482917",
+          "newLogin": "yangi.login",
+          "newPassword": "YangiParol",
+          "passwordConfirm": "YangiParol"
+        }
+      }
+    },
+
+    "GET /users": {
+      "auth": "admin",
+      "query": { "search": "ali", "roleCode": "Operator", "isActive": true, "page": 1, "limit": 20 }
+    },
+
+    "GET /users/:id": { "auth": "admin" },
+
+    "POST /users": {
+      "auth": "admin",
+      "desc": "Login/parol shart emas — user o'zi register qiladi",
+      "body": {
+        "fullName": "Ali Valiyev",
+        "phone": "998901234567",
+        "roleId": "65a1b2c3d4e5f6789abc1234",
+        "slpCode": 42
+      },
+      "multipartExtra": { "avatar": "<file ixtiyoriy>" }
+    },
+
+    "PATCH /users/:id": {
+      "auth": "admin",
+      "desc": "login/password BU YERDA o'zgarmaydi",
+      "body": {
+        "fullName": "...",
+        "phone": "998...",
+        "roleId": "...",
+        "slpCode": 42,
+        "isActive": true
+      }
+    },
+
+    "DELETE /users/:id": { "auth": "admin", "desc": "soft delete (isActive=false)" },
+
+    "POST /users/:id/avatar": {
+      "auth": "admin",
+      "contentType": "multipart/form-data",
+      "body": { "avatar": "<file>" }
+    },
+
+    "GET /roles": { "auth": "admin", "query": { "search": "op", "isActive": true } },
+
+    "GET /roles/:id": { "auth": "admin" },
+
+    "POST /roles": {
+      "auth": "admin",
+      "body": {
+        "code": "Cashier",
+        "name": "Kassir",
+        "description": "Pul qabul qiluvchi",
+        "isActive": true
+      }
+    },
+
+    "PATCH /roles/:id": {
+      "auth": "admin",
+      "body": { "name": "...", "description": "...", "isActive": true, "code": "Cashier" }
+    },
+
+    "DELETE /roles/:id": { "auth": "admin", "desc": "isSystem=true rollar va ishlatilayotgan rollar o'chmaydi" }
+  },
+
+  "errorFormat": { "message": "Xatolik matni", "errors": [] },
+
+  "flows": {
+    "1_adminCreatesUser": ["POST /auth/app/login (admin)", "POST /users {fullName, phone, roleId}"],
+    "2_userRegisters": ["POST /auth/app/register/otp {phone}", "POST /auth/app/register {phone, code, login, password, passwordConfirm}"],
+    "3_userForgotPassword": ["POST /auth/app/forgot/otp {phone}", "POST /auth/app/forgot/reset {phone, code, newPassword, passwordConfirm}"],
+    "4_userChangeLoginOrPassword": ["POST /me/credentials/otp {purpose}", "PATCH /me/credentials {purpose, code, ...}"]
+  }
+}
