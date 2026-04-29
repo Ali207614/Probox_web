@@ -81,7 +81,7 @@ class AnalyticsController {
             { no: 9,  key: 'scoringApproved', name: 'Skoringdan tasdiqlandi', prevKey: 'scoringSent' },
             { no: 10, key: 'meetingSet',      name: 'Tashrif belgilandi',     prevKey: 'scoringApproved' },
             { no: 11, key: 'willVisitStore',  name: "Do'konga boradi",        prevKey: 'meetingSet' },
-            { no: 12, key: 'meetingHappened', name: "Tashrif o'tkazildi",     prevKey: 'meetingSet' },
+            { no: 12, key: 'meetingHappened', name: "Tashrif o'tkazildi",     prevKey: 'willVisitStore' },
             { no: 14, key: 'contractSigned',  name: 'Shartnoma oldi',         prevKey: 'meetingHappened' }
         ];
 
