@@ -53,12 +53,7 @@ const reservationController = require("../controllers/reservationController");
 const planController = require("../controllers/planController");
 const roleMiddleware = require("../middlewares/role-middleware");
 
-const appUserController = require("../controllers/app-user-controller");
-const roleController = require("../controllers/role-controller");
-const {
-    appAuthMiddleware,
-    appRoleGuard,
-} = require("../middlewares/app-auth-middleware");
+const sapUserController = require("../controllers/sap-user-controller");
 
 const ADMIN_ROLES = ['CEO', 'Manager', 'Admin'];
 
@@ -75,46 +70,78 @@ const avatarUpload = multer({
 
 router.post('/login', b1HANA.login);
 
-// === App users (SAP'dan mustaqil) ===
-router.post('/auth/app/login', appUserController.login);
-router.post('/auth/app/register/otp', appUserController.requestRegisterOtp);
-router.post('/auth/app/register', appUserController.completeRegister);
-router.post('/auth/app/forgot/otp', appUserController.requestForgotPasswordOtp);
-router.post('/auth/app/forgot/reset', appUserController.resetPassword);
+// === Forgot / set initial password (token shart EMAS) ===
+router.post('/auth/forgot/otp', sapUserController.requestForgotOtp);
+router.post('/auth/forgot/reset', sapUserController.resetPassword);
 
-// Self
-router.get('/me', appAuthMiddleware, appUserController.me);
-router.patch('/me', appAuthMiddleware, appUserController.updateMe);
-router.post('/me/avatar', appAuthMiddleware, avatarUpload.single('avatar'), appUserController.uploadMyAvatar);
-router.post('/me/credentials/otp', appAuthMiddleware, appUserController.requestCredentialsOtp);
-router.patch('/me/credentials', appAuthMiddleware, appUserController.changeCredentials);
-
-// Admin: users
-router.get('/users', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), appUserController.list);
-router.get('/users/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), appUserController.getOne);
+// === SELF (token) ===
+router.get('/me', authMiddleware, sapUserController.me);
 router.post(
-    '/users',
-    appAuthMiddleware,
-    appRoleGuard(ADMIN_ROLES),
+    '/me/avatar',
+    authMiddleware,
     avatarUpload.single('avatar'),
-    appUserController.create
+    sapUserController.uploadMyAvatar
 );
-router.patch('/users/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), appUserController.update);
-router.delete('/users/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), appUserController.remove);
-router.post(
-    '/users/:id/avatar',
-    appAuthMiddleware,
-    appRoleGuard(ADMIN_ROLES),
-    avatarUpload.single('avatar'),
-    appUserController.uploadAvatarForUser
-);
+router.post('/me/credentials/otp', authMiddleware, sapUserController.requestCredentialsOtp);
+router.patch('/me/credentials', authMiddleware, sapUserController.changeCredentials);
 
-// Admin: roles
-router.get('/roles', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), roleController.list);
-router.get('/roles/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), roleController.getOne);
-router.post('/roles', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), roleController.create);
-router.patch('/roles/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), roleController.update);
-router.delete('/roles/:id', appAuthMiddleware, appRoleGuard(ADMIN_ROLES), roleController.remove);
+// === ADMIN: SAP users (token + role guard) ===
+router.get(
+    '/sap-users',
+    authMiddleware,
+    roleMiddleware(ADMIN_ROLES),
+    sapUserController.list
+);
+router.get(
+    '/sap-users/:slpCode',
+    authMiddleware,
+    roleMiddleware(ADMIN_ROLES),
+    sapUserController.getOne
+);
+router.post(
+    '/sap-users',
+    authMiddleware,
+    roleMiddleware(ADMIN_ROLES),
+    avatarUpload.single('avatar'),
+    sapUserController.create
+);
+router.patch(
+    '/sap-users/:slpCode',
+    authMiddleware,
+    roleMiddleware(ADMIN_ROLES),
+    sapUserController.update
+);
+router.post(
+    '/sap-users/:slpCode/avatar',
+    authMiddleware,
+    roleMiddleware(ADMIN_ROLES),
+    avatarUpload.single('avatar'),
+    sapUserController.uploadAvatarForUser
+);
+router.post(
+    '/sap-users/:slpCode/activate',
+    authMiddleware,
+    roleMiddleware(ADMIN_ROLES),
+    sapUserController.activate
+);
+router.post(
+    '/sap-users/:slpCode/deactivate',
+    authMiddleware,
+    roleMiddleware(ADMIN_ROLES),
+    sapUserController.deactivate
+);
+router.delete(
+    '/sap-users/:slpCode',
+    authMiddleware,
+    roleMiddleware(['CEO', 'Manager']),
+    sapUserController.softDelete
+);
+router.post(
+    '/sap-users/:slpCode/restore',
+    authMiddleware,
+    roleMiddleware(['CEO', 'Manager']),
+    sapUserController.restore
+);
 
 router.post(
     '/webhooks/onlinepbx',

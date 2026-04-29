@@ -1,59 +1,53 @@
 {
   "baseUrl": "http://localhost:3019/api",
   "auth": {
-    "header": "Authorization: Bearer <TOKEN>",
-    "adminRoles": ["CEO", "Manager", "Admin"]
+    "header": "Authorization: <TOKEN>",
+    "tokenSource": "POST /login (mavjud SAP login)",
+    "adminRoles": ["CEO", "Manager", "Admin"],
+    "roleChangeRoles": ["CEO", "Manager"],
+    "deleteRoles": ["CEO", "Manager"]
   },
+
+  "notes": [
+    "User'lar to'liq SAP OSLP jadvalida saqlanadi.",
+    "GET so'rovlar HANA SQL orqali, CREATE/UPDATE Service Layer (B1 SL) orqali.",
+    "Parol plaintext (SAP'da U_password) — bcrypt yo'q.",
+    "Yangi user yaratilganda parol o'rnatilmaydi — user /auth/forgot/otp orqali parol o'rnatadi.",
+    "Avatar, isActive, isDeleted SAP'da emas, MongoDB SalesPersonProfile collection'da saqlanadi.",
+    "Role o'zgartirish faqat CEO va Manager qo'lida (Admin user yarata oladi, ammo role'ni o'zgartira olmaydi).",
+    "O'chirish (soft delete) va tiklash faqat CEO va Manager qo'lida.",
+    "isDeleted=true yoki isActive=false bo'lgan user /login orqali kira olmaydi."
+  ],
 
   "endpoints": {
 
-    "POST /auth/app/login": {
+    "POST /login": {
       "auth": "public",
-      "body": { "login": "ali.v", "password": "Parol123!" },
-      "response": { "token": "jwt...", "data": { "_id": "...", "fullName": "Ali", "role": {} } }
+      "desc": "Mavjud SAP login. isDeleted=true yoki isActive=false bo'lsa rad etadi.",
+      "body": { "login": "ali", "password": "1234" },
+      "response": { "token": "jwt...", "data": { "SlpCode": 26, "SlpName": "...", "U_role": "OperatorM" } }
     },
 
-    "POST /auth/app/register/otp": {
+    "POST /auth/forgot/otp": {
       "auth": "public",
-      "desc": "Admin yaratgan pending user uchun OTP",
       "body": { "phone": "998901234567" },
       "response": { "delivered": true, "chatHint": "99890***67", "expiresAt": "..." }
     },
 
-    "POST /auth/app/register": {
+    "POST /auth/forgot/reset": {
       "auth": "public",
       "body": {
         "phone": "998901234567",
         "code": "482917",
-        "login": "ali.v",
-        "password": "Parol123!",
-        "passwordConfirm": "Parol123!"
+        "newPassword": "Parol123",
+        "passwordConfirm": "Parol123"
       },
-      "response": { "token": "jwt...", "data": {} }
+      "response": { "message": "Parol o'rnatildi", "slpCode": 26, "login": "ali" }
     },
 
-    "POST /auth/app/forgot/otp": {
-      "auth": "public",
-      "body": { "phone": "998901234567" },
-      "response": { "delivered": true, "expiresAt": "..." }
-    },
-
-    "POST /auth/app/forgot/reset": {
-      "auth": "public",
-      "body": {
-        "phone": "998901234567",
-        "code": "482917",
-        "newPassword": "YangiParol",
-        "passwordConfirm": "YangiParol"
-      },
-      "response": { "token": "jwt...", "data": {} }
-    },
-
-    "GET /me": { "auth": "self" },
-
-    "PATCH /me": {
+    "GET /me": {
       "auth": "self",
-      "body": { "fullName": "Yangi Ism" }
+      "response": { "data": { "SlpCode": 26, "SlpName": "...", "U_login": "ali", "U_role": "OperatorM", "Mobil": "...", "isActive": true, "isDeleted": false, "avatar": { "keys": {}, "urls": {} } } }
     },
 
     "POST /me/avatar": {
@@ -74,8 +68,8 @@
         "changePassword": {
           "purpose": "change_password",
           "code": "482917",
-          "newPassword": "YangiParol",
-          "passwordConfirm": "YangiParol"
+          "newPassword": "Yangi123",
+          "passwordConfirm": "Yangi123"
         },
         "changeLogin": {
           "purpose": "change_login",
@@ -86,79 +80,116 @@
           "purpose": "change_credentials",
           "code": "482917",
           "newLogin": "yangi.login",
-          "newPassword": "YangiParol",
-          "passwordConfirm": "YangiParol"
+          "newPassword": "Yangi123",
+          "passwordConfirm": "Yangi123"
         }
       }
     },
 
-    "GET /users": {
+    "GET /sap-users": {
       "auth": "admin",
-      "query": { "search": "ali", "roleCode": "Operator", "isActive": true, "page": 1, "limit": 20 }
+      "query": {
+        "search": "ali",
+        "role": "Operator1",
+        "branch": "1",
+        "isActive": "true | false",
+        "includeDeleted": "true (default false)"
+      }
     },
 
-    "GET /users/:id": { "auth": "admin" },
+    "GET /sap-users/:slpCode": { "auth": "admin" },
 
-    "POST /users": {
+    "POST /sap-users": {
       "auth": "admin",
-      "desc": "Login/parol shart emas — user o'zi register qiladi",
+      "desc": "SAP'da SalesPerson yaratadi. Parolsiz. Profil avtomatik isActive=true bo'ladi.",
       "body": {
         "fullName": "Ali Valiyev",
-        "phone": "998901234567",
-        "roleId": "65a1b2c3d4e5f6789abc1234",
-        "slpCode": 42
+        "login": "ali.v",
+        "role": "Operator1",
+        "branch": "1",
+        "mobile": "998901234567",
+        "telephone": "...",
+        "onlinePbx": "115",
+        "workDay": "1,2,3,4,5",
+        "summa": 3000000
       },
       "multipartExtra": { "avatar": "<file ixtiyoriy>" }
     },
 
-    "PATCH /users/:id": {
+    "PATCH /sap-users/:slpCode": {
       "auth": "admin",
-      "desc": "login/password BU YERDA o'zgarmaydi",
+      "desc": "Login/password BU YERDA o'zgarmaydi. Role faqat CEO/Manager o'zgartira oladi.",
       "body": {
         "fullName": "...",
-        "phone": "998...",
-        "roleId": "...",
-        "slpCode": 42,
-        "isActive": true
+        "role": "Operator2 — faqat CEO/Manager o'zgartira oladi",
+        "branch": "2",
+        "mobile": "998...",
+        "telephone": "...",
+        "onlinePbx": "120",
+        "workDay": "1,2,3",
+        "summa": 4000000
       }
     },
 
-    "DELETE /users/:id": { "auth": "admin", "desc": "soft delete (isActive=false)" },
-
-    "POST /users/:id/avatar": {
+    "POST /sap-users/:slpCode/avatar": {
       "auth": "admin",
       "contentType": "multipart/form-data",
       "body": { "avatar": "<file>" }
     },
 
-    "GET /roles": { "auth": "admin", "query": { "search": "op", "isActive": true } },
-
-    "GET /roles/:id": { "auth": "admin" },
-
-    "POST /roles": {
+    "POST /sap-users/:slpCode/activate": {
       "auth": "admin",
-      "body": {
-        "code": "Cashier",
-        "name": "Kassir",
-        "description": "Pul qabul qiluvchi",
-        "isActive": true
-      }
+      "desc": "isActive=true. O'chirilgan akkauntda ishlamaydi — avval restore qiling.",
+      "body": null
     },
 
-    "PATCH /roles/:id": {
+    "POST /sap-users/:slpCode/deactivate": {
       "auth": "admin",
-      "body": { "name": "...", "description": "...", "isActive": true, "code": "Cashier" }
+      "desc": "isActive=false. User login bo'la olmaydi.",
+      "body": null
     },
 
-    "DELETE /roles/:id": { "auth": "admin", "desc": "isSystem=true rollar va ishlatilayotgan rollar o'chmaydi" }
+    "DELETE /sap-users/:slpCode": {
+      "auth": "ceo_manager",
+      "desc": "Soft delete (isDeleted=true, isActive=false). SAP'dan o'chirilmaydi.",
+      "body": null
+    },
+
+    "POST /sap-users/:slpCode/restore": {
+      "auth": "ceo_manager",
+      "desc": "isDeleted=false, isActive=true.",
+      "body": null
+    }
   },
 
   "errorFormat": { "message": "Xatolik matni", "errors": [] },
 
   "flows": {
-    "1_adminCreatesUser": ["POST /auth/app/login (admin)", "POST /users {fullName, phone, roleId}"],
-    "2_userRegisters": ["POST /auth/app/register/otp {phone}", "POST /auth/app/register {phone, code, login, password, passwordConfirm}"],
-    "3_userForgotPassword": ["POST /auth/app/forgot/otp {phone}", "POST /auth/app/forgot/reset {phone, code, newPassword, passwordConfirm}"],
-    "4_userChangeLoginOrPassword": ["POST /me/credentials/otp {purpose}", "PATCH /me/credentials {purpose, code, ...}"]
+    "1_adminCreatesUser": [
+      "POST /login (admin) → token",
+      "POST /sap-users {fullName, login, role, mobile, branch, ...}"
+    ],
+    "2_userSetsPasswordFirstTime": [
+      "POST /auth/forgot/otp {phone}",
+      "POST /auth/forgot/reset {phone, code, newPassword, passwordConfirm}"
+    ],
+    "3_userLogsIn": ["POST /login {login, password}"],
+    "4_userForgotPassword": [
+      "POST /auth/forgot/otp {phone}",
+      "POST /auth/forgot/reset {phone, code, newPassword, passwordConfirm}"
+    ],
+    "5_userChangesLoginOrPassword": [
+      "POST /me/credentials/otp {purpose}",
+      "PATCH /me/credentials {purpose, code, newLogin?, newPassword?, passwordConfirm?}"
+    ],
+    "6_adminUpdatesUser": ["PATCH /sap-users/:slpCode (role faqat CEO/Manager)"],
+    "7_deactivateAndReactivate": [
+      "POST /sap-users/:slpCode/deactivate (admin)",
+      "POST /sap-users/:slpCode/activate (admin)"
+    ],
+    "8_softDeleteAndRestore": [
+      "DELETE /sap-users/:slpCode (CEO/Manager)",
+      "POST /sap-users/:slpCode/restore (CEO/Manager)"
+    ]
   }
 }

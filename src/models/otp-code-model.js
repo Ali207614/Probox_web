@@ -6,16 +6,10 @@ const OTP_TTL_SECONDS = Number(process.env.OTP_TTL_SECONDS || 300);
 
 const OtpCodeSchema = new Schema(
     {
-        userId: {
-            type: Schema.Types.ObjectId,
-            ref: 'AppUser',
-            required: true,
-            index: true,
-        },
+        slpCode: { type: Number, required: true, index: true },
         purpose: {
             type: String,
             enum: [
-                'register',
                 'reset_password',
                 'change_login',
                 'change_password',
@@ -36,7 +30,7 @@ const OtpCodeSchema = new Schema(
     { versionKey: false }
 );
 
-OtpCodeSchema.index({ userId: 1, purpose: 1, usedAt: 1 });
+OtpCodeSchema.index({ slpCode: 1, purpose: 1, usedAt: 1 });
 
 OtpCodeSchema.statics.TTL_SECONDS = OTP_TTL_SECONDS;
 

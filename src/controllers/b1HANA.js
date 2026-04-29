@@ -868,6 +868,16 @@ class b1HANA {
 
             const userData = user[0];
 
+            // Mongo profil holatini tekshirish (deleted/inactive)
+            const SalesPersonProfile = require('../models/sales-person-profile-model');
+            const profile = await SalesPersonProfile.findOne({ slpCode: Number(userData.SlpCode) }).lean();
+            if (profile?.isDeleted) {
+                return next(ApiError.BadRequest("Akkaunt o'chirilgan. Admin bilan bog'laning."));
+            }
+            if (profile && profile.isActive === false) {
+                return next(ApiError.BadRequest('Akkaunt aktiv emas. Admin bilan bog\'laning.'));
+            }
+
             // ✨ JWT uchun toza va xavfsiz payload (parol kabi ortiqcha narsalar kirmaydi)
             const payload = {
                 id: userData.SlpCode,         // Tizim bo'ylab qulay ishlash uchun 'id' va 'name'

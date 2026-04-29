@@ -14,8 +14,7 @@ const OTP_MAX_ATTEMPTS = Number(process.env.OTP_MAX_ATTEMPTS || 5);
 const OTP_RESEND_COOLDOWN_MS = Number(process.env.OTP_RESEND_COOLDOWN_MS || 60 * 1000);
 
 const PURPOSE_LABELS = {
-    register: "Akkaunt registratsiyasi",
-    reset_password: "Parolni tiklash",
+    reset_password: "Parolni tiklash / o'rnatish",
     change_login: "Login o'zgartirish",
     change_password: "Parol o'zgartirish",
     change_credentials: "Login va parolni o'zgartirish",
@@ -48,22 +47,31 @@ async function findChatIdByPhone(phone) {
     return tgUser?.chat_id || null;
 }
 
-async function sendOtp({ user, purpose }) {
+/**
+ * @param {Object} args
+ * @param {Number} args.slpCode      - SAP SlpCode
+ * @param {String} args.phone        - Mobil yoki Telephone (998XXXXXXXXX)
+ * @param {String} args.purpose      - reset_password | change_login | change_password | change_credentials
+ */
+async function sendOtp({ slpCode, phone, purpose }) {
     if (!PURPOSE_LABELS[purpose]) {
         throw ApiError.BadRequest("Noto'g'ri OTP maqsadi");
     }
-    if (!user?._id) {
-        throw ApiError.BadRequest('User topilmadi');
+    if (!slpCode && slpCode !== 0) {
+        throw ApiError.BadRequest('slpCode majburiy');
+    }
+    if (!phone) {
+        throw ApiError.BadRequest('Telefon raqam SAP profilida topilmadi');
     }
 
-    const chatId = await findChatIdByPhone(user.phone);
+    const chatId = await findChatIdByPhone(phone);
     if (!chatId) {
         throw ApiError.BadRequest(
             "Telegram chat_id topilmadi. Iltimos, avval botga /start bosib, raqamingizni yuboring."
         );
     }
 
-    const last = await OtpCodeModel.findOne({ userId: user._id, purpose, usedAt: null })
+    const last = await OtpCodeModel.findOne({ slpCode, purpose, usedAt: null })
         .sort({ createdAt: -1 })
         .lean();
 
@@ -71,13 +79,11 @@ async function sendOtp({ user, purpose }) {
         const waitSec = Math.ceil(
             (OTP_RESEND_COOLDOWN_MS - (Date.now() - new Date(last.createdAt).getTime())) / 1000
         );
-        throw ApiError.BadRequest(
-            `Yangi kod so'rashdan oldin ${waitSec} soniya kuting`
-        );
+        throw ApiError.BadRequest(`Yangi kod so'rashdan oldin ${waitSec} soniya kuting`);
     }
 
     await OtpCodeModel.updateMany(
-        { userId: user._id, purpose, usedAt: null },
+        { slpCode, purpose, usedAt: null },
         { $set: { usedAt: new Date() } }
     );
 
@@ -86,7 +92,7 @@ async function sendOtp({ user, purpose }) {
     const now = new Date();
 
     await OtpCodeModel.create({
-        userId: user._id,
+        slpCode,
         purpose,
         codeHash,
         createdAt: now,
@@ -104,23 +110,25 @@ async function sendOtp({ user, purpose }) {
         await bot.sendMessage(chatId, text, { parse_mode: 'HTML' });
     } catch (err) {
         console.error(`[OTP] Telegramga jo'natishda xatolik (chat_id=${chatId}):`, err?.message || err);
-        throw ApiError.BadRequest("Telegramga kod jo'natib bo'lmadi. Botda blok qo'ymaganingizni tekshiring.");
+        throw ApiError.BadRequest(
+            "Telegramga kod jo'natib bo'lmadi. Botda blok qo'ymaganingizni tekshiring."
+        );
     }
 
     return {
         delivered: true,
-        chatHint: maskPhone(user.phone),
+        chatHint: maskPhone(phone),
         expiresAt: new Date(now.getTime() + OTP_TTL_MS),
     };
 }
 
-async function verifyOtp({ userId, purpose, code }) {
+async function verifyOtp({ slpCode, purpose, code }) {
     if (!code || !/^\d+$/.test(String(code))) {
         throw ApiError.BadRequest("Kod noto'g'ri formatda");
     }
 
     const otp = await OtpCodeModel.findOne({
-        userId,
+        slpCode,
         purpose,
         usedAt: null,
     }).sort({ createdAt: -1 });
@@ -136,7 +144,7 @@ async function verifyOtp({ userId, purpose, code }) {
     if (otp.attempts >= OTP_MAX_ATTEMPTS) {
         otp.usedAt = new Date();
         await otp.save();
-        throw ApiError.BadRequest('Urinishlar tugadi. Yangi kod so\'rang.');
+        throw ApiError.BadRequest("Urinishlar tugadi. Yangi kod so'rang.");
     }
 
     const ok = await bcrypt.compare(String(code), otp.codeHash);
