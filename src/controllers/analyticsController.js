@@ -775,15 +775,26 @@ class AnalyticsController {
     //  GET /analytics/funnel?start=01.01.2026&end=31.01.2026
     //                        &groupBy=source|operator
     //                        &top=10
+    //                        &type=createdAt|updatedAt
+    //
+    //  type=createdAt — barcha bosqichlar lead `time`'dan filterlanadi
+    //  type=updatedAt — lead, qualityLead `time`'dan; qolganlari `statusChangedAt`'dan
     // ============================================================
     async getFullFunnelAnalytics(req, res, next) {
         try {
-            const { start, end, groupBy = 'source', top = 10 } = req.query;
+            const { start, end, groupBy = 'source', top = 10, type = 'updatedAt' } = req.query;
 
             if (!['source', 'operator'].includes(groupBy)) {
                 return res.status(400).json({
                     status: false,
                     message: "groupBy faqat 'source' yoki 'operator' bo'lishi mumkin"
+                });
+            }
+
+            if (!['createdAt', 'updatedAt'].includes(type)) {
+                return res.status(400).json({
+                    status: false,
+                    message: "type faqat 'createdAt' yoki 'updatedAt' bo'lishi mumkin"
                 });
             }
 
@@ -801,21 +812,52 @@ class AnalyticsController {
             const qualityStatuses = this.qualityLeadStatuses;
             const canSeeFinancials = FINANCIAL_ROLES.has(req.user?.U_role);
 
+            // Vaqt rejimi:
+            //  - createdAt: barcha bosqichlar lead `time` (yoki createdAt fallback) bo'yicha filterlanadi
+            //  - updatedAt: lead va qualityLead — `time` bo'yicha,
+            //               qolgan bosqichlar — `statusChangedAt` bo'yicha
+            const isUpdated = type === 'updatedAt';
+            const inRange = (field) => ({
+                $and: [
+                    { $gte: [`$${field}`, startDate] },
+                    { $lte: [`$${field}`, endDate] }
+                ]
+            });
+
             const grouped = await Lead.aggregate([
-                // 1) Lead vaqti — faqat time (yo'q bo'lsa createdAt fallback)
+                // 1) Vaqt maydonlari
                 {
                     $addFields: {
-                        actualTime: { $ifNull: ['$time', '$createdAt'] }
+                        actualTime: { $ifNull: ['$time', '$createdAt'] },
+                        statusTime: isUpdated
+                            ? { $ifNull: ['$statusChangedAt', { $ifNull: ['$time', '$createdAt'] }] }
+                            : { $ifNull: ['$time', '$createdAt'] }
                     }
                 },
                 // 2) Davrga tushadigan leadlarni filtrlash
+                //    updatedAt'da: ikkala vaqtdan biri davr ichiga tushsa kifoya
                 {
                     $match: {
-                        actualTime: { $gte: startDate, $lte: endDate },
+                        ...(isUpdated
+                            ? {
+                                $or: [
+                                    { actualTime: { $gte: startDate, $lte: endDate } },
+                                    { statusTime: { $gte: startDate, $lte: endDate } }
+                                ]
+                            }
+                            : { actualTime: { $gte: startDate, $lte: endDate } }
+                        ),
                         ...groupMatch
                     }
                 },
-                // 3) LeadChat dan status tarixini olish
+                // 3) Bosqich-darajasidagi davr-ichidalik flaglari
+                {
+                    $addFields: {
+                        _inEarly: inRange('actualTime'),
+                        _inLate:  isUpdated ? inRange('statusTime') : inRange('actualTime')
+                    }
+                },
+                // 4) LeadChat dan status tarixini olish
                 {
                     $lookup: {
                         from: 'leadchats', // Mongoose default pluralization
@@ -833,7 +875,7 @@ class AnalyticsController {
                         as: '_statusHistory'
                     }
                 },
-                // 4) allStatuses = current ∪ history
+                // 5) allStatuses = current ∪ history
                 {
                     $addFields: {
                         allStatuses: {
@@ -849,22 +891,32 @@ class AnalyticsController {
                         }
                     }
                 },
-                // 5) Har bir bosqich uchun flag (0/1)
+                // 6) Har bir bosqich uchun flag (0/1)
                 {
                     $addFields: {
+                        _fLead: { $cond: ['$_inEarly', 1, 0] },
                         _fQualityLead: {
                             $cond: [
-                                { $gt: [{ $size: { $setIntersection: ['$allStatuses', qualityStatuses] } }, 0] },
+                                {
+                                    $and: [
+                                        '$_inEarly',
+                                        { $gt: [{ $size: { $setIntersection: ['$allStatuses', qualityStatuses] } }, 0] }
+                                    ]
+                                },
                                 1, 0
                             ]
                         },
                         _fScoringSent: {
-                            $cond: [{ $in: ['Scoring', '$allStatuses'] }, 1, 0]
+                            $cond: [
+                                { $and: ['$_inLate', { $in: ['Scoring', '$allStatuses'] }] },
+                                1, 0
+                            ]
                         },
                         _fScoringApproved: {
                             $cond: [
                                 {
                                     $and: [
+                                        '$_inLate',
                                         { $in: ['ScoringResult', '$allStatuses'] },
                                         { $gt: [{ $ifNull: ['$finalLimit', 0] }, 0] },
                                         { $gt: [{ $ifNull: ['$finalPercentage', 0] }, 0] }
@@ -874,19 +926,27 @@ class AnalyticsController {
                             ]
                         },
                         _fWillVisitStore: {
-                            $cond: [{ $in: ['WillVisitStore', '$allStatuses'] }, 1, 0]
+                            $cond: [
+                                { $and: ['$_inLate', { $in: ['WillVisitStore', '$allStatuses'] }] },
+                                1, 0
+                            ]
                         },
                         _fMeetingSet: {
                             $cond: [
                                 {
-                                    $or: [
+                                    $and: [
+                                        '$_inLate',
                                         {
-                                            $and: [
-                                                { $ne: ['$meetingDate', null] },
-                                                { $ne: ['$meetingDate', ''] }
+                                            $or: [
+                                                {
+                                                    $and: [
+                                                        { $ne: ['$meetingDate', null] },
+                                                        { $ne: ['$meetingDate', ''] }
+                                                    ]
+                                                },
+                                                { $in: ['WillVisitStore', '$allStatuses'] }
                                             ]
-                                        },
-                                        { $in: ['WillVisitStore', '$allStatuses'] }
+                                        }
                                     ]
                                 },
                                 1, 0
@@ -895,9 +955,14 @@ class AnalyticsController {
                         _fMeetingHappened: {
                             $cond: [
                                 {
-                                    $or: [
-                                        { $eq: ['$meetingHappened', true] },
-                                        { $in: ['VisitedStore', '$allStatuses'] }
+                                    $and: [
+                                        '$_inLate',
+                                        {
+                                            $or: [
+                                                { $eq: ['$meetingHappened', true] },
+                                                { $in: ['VisitedStore', '$allStatuses'] }
+                                            ]
+                                        }
                                     ]
                                 },
                                 1, 0
@@ -906,9 +971,14 @@ class AnalyticsController {
                         _fPurchased: {
                             $cond: [
                                 {
-                                    $or: [
-                                        { $eq: ['$purchase', true] },
-                                        { $in: ['Purchased', '$allStatuses'] }
+                                    $and: [
+                                        '$_inLate',
+                                        {
+                                            $or: [
+                                                { $eq: ['$purchase', true] },
+                                                { $in: ['Purchased', '$allStatuses'] }
+                                            ]
+                                        }
                                     ]
                                 },
                                 1, 0
@@ -916,11 +986,11 @@ class AnalyticsController {
                         }
                     }
                 },
-                // 6) Guruhlash
+                // 7) Guruhlash
                 {
                     $group: {
                         _id: groupField,
-                        lead:            { $sum: 1 },
+                        lead:            { $sum: '$_fLead' },
                         qualityLead:     { $sum: '$_fQualityLead' },
                         scoringSent:     { $sum: '$_fScoringSent' },
                         scoringApproved: { $sum: '$_fScoringApproved' },
@@ -1045,6 +1115,7 @@ class AnalyticsController {
                 status: true,
                 range: { start, end },
                 groupBy,
+                type,
                 topN,
                 basis: 'history',
                 planSource: plan._periodKey,
