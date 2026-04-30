@@ -159,6 +159,9 @@ class SapUserController {
     list = async (req, res, next) => {
         try {
             const { search, role, branch, isActive, includeDeleted } = req.query;
+            const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+            const limit = Math.max(1, Math.min(200, parseInt(req.query.limit, 10) || 20));
+
             const rows = await fetchOslp({ search });
 
             let filtered = rows;
@@ -171,10 +174,23 @@ class SapUserController {
                 includeDeleted: String(includeDeleted) === 'true',
             });
 
-            const isAdminUser = isAdminReq(req);
-            const data = final.map((r) => (isAdminUser ? publicViewKeepPassword(r) : publicView(r)));
+            const total = final.length;
+            const totalPages = Math.max(1, Math.ceil(total / limit));
+            const offset = (page - 1) * limit;
+            const paged = final.slice(offset, offset + limit);
 
-            return res.json({ data, total: data.length });
+            const isAdminUser = isAdminReq(req);
+            const data = paged.map((r) => (isAdminUser ? publicViewKeepPassword(r) : publicView(r)));
+
+            return res.json({
+                data,
+                total,
+                page,
+                limit,
+                totalPages,
+                hasNext: page < totalPages,
+                hasPrev: page > 1,
+            });
         } catch (e) {
             return next(e);
         }

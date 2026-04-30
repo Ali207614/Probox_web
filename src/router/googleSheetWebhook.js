@@ -294,7 +294,7 @@ router.post('/webhook', basicAuth, async (req, res) => {
 
         const nValue = lastLead?.uniqueIdNumeric || 0;
         const nextStart = nValue > 200 ? nValue - 200 : 1;
-        const nextEnd = nextStart + 300;
+        const nextEnd = nextStart + 400;
 
         await tgLog('✅ lastLead topildi', { nValue, nextStart, nextEnd });
 
