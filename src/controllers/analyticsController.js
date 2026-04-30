@@ -782,7 +782,15 @@ class AnalyticsController {
     // ============================================================
     async getFullFunnelAnalytics(req, res, next) {
         try {
-            const { start, end, groupBy = 'source', top = 10, type = 'updatedAt' } = req.query;
+            const {
+                start,
+                end,
+                groupBy = 'source',
+                top = 10,
+                type = 'updatedAt',
+                excluded_statuses,
+                meeting_happened_source = 'VisitedStore'
+            } = req.query;
 
             if (!['source', 'operator'].includes(groupBy)) {
                 return res.status(400).json({
@@ -795,6 +803,29 @@ class AnalyticsController {
                 return res.status(400).json({
                     status: false,
                     message: "type faqat 'createdAt' yoki 'updatedAt' bo'lishi mumkin"
+                });
+            }
+
+            if (!['ScoringResult', 'VisitedStore'].includes(meeting_happened_source)) {
+                return res.status(400).json({
+                    status: false,
+                    message: "meeting_happened_source faqat 'ScoringResult' yoki 'VisitedStore' bo'lishi mumkin"
+                });
+            }
+
+            // Querydan keladigan excluded_statuses — vergul bilan ajratilgan stage key'lar.
+            // Berilgan bosqichlar javobdan olib tashlanadi va foiz keyingi
+            // ko'rinadigan tepa bosqichdan hisoblanadi (resolveVisiblePrevKey).
+            const validStageKeys = new Set(this.stageDefs.map(s => s.key));
+            const excludeKeys = (Array.isArray(excluded_statuses) ? excluded_statuses.join(',') : (excluded_statuses || ''))
+                .split(',')
+                .map(s => s.trim())
+                .filter(Boolean);
+            const invalidExclude = excludeKeys.filter(k => !validStageKeys.has(k));
+            if (invalidExclude.length) {
+                return res.status(400).json({
+                    status: false,
+                    message: `excluded_statuses'da noto'g'ri kalitlar: ${invalidExclude.join(', ')}. Ruxsat etilganlar: ${[...validStageKeys].join(', ')}`
                 });
             }
 
@@ -962,7 +993,12 @@ class AnalyticsController {
                                                 { $eq: ['$meetingHappened', true] },
                                                 { $in: ['VisitedStore', '$allStatuses'] }
                                             ]
-                                        }
+                                        },
+                                        // ScoringResult rejimida — qo'shimcha ravishda lead
+                                        // 'Scoring' statusiga o'tgan bo'lishi shart.
+                                        ...(meeting_happened_source === 'ScoringResult'
+                                            ? [{ $in: ['Scoring', '$allStatuses'] }]
+                                            : [])
                                     ]
                                 },
                                 1, 0
@@ -1069,7 +1105,7 @@ class AnalyticsController {
             // Stages
             // Javobdan yashiriladigan bosqichlar — foiz hisoblashda o'tkazib yuboriladi,
             // shunda foiz har doim ko'rinadigan oldingi bosqichga nisbatan bo'ladi.
-            const HIDDEN_STAGES = new Set(['meetingSet']);
+            const HIDDEN_STAGES = new Set(['meetingSet', ...excludeKeys]);
             const stageByKey = new Map(this.stageDefs.map(s => [s.key, s]));
 
             const resolveVisiblePrevKey = (stage) => {
@@ -1111,6 +1147,16 @@ class AnalyticsController {
                     };
                 });
 
+            // Javobga chiqadigan totals — exclude qilingan bosqichlarni va
+            // financiallar yo'q rolda salesAmount'ni filterlaydi.
+            const visibleTotals = Object.fromEntries(
+                Object.entries(totals).filter(([key]) => {
+                    if (excludeKeys.includes(key)) return false;
+                    if (!canSeeFinancials && key === 'salesAmount') return false;
+                    return true;
+                })
+            );
+
             const response = {
                 status: true,
                 range: { start, end },
@@ -1119,9 +1165,9 @@ class AnalyticsController {
                 topN,
                 basis: 'history',
                 planSource: plan._periodKey,
-                totals: canSeeFinancials
-                    ? totals
-                    : Object.fromEntries(Object.entries(totals).filter(([key]) => key !== 'salesAmount')),
+                excluded: excludeKeys,
+                meetingHappenedSource: meeting_happened_source,
+                totals: visibleTotals,
                 stages
             };
 
